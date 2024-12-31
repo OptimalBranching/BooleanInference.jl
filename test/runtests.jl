@@ -1,10 +1,6 @@
 using BooleanInference
 using Test
 
-@testset "algebra.jl" begin
-    include("algebra.jl")
-end
-
 @testset "interface.jl" begin
     include("interface.jl")
 end
@@ -17,3 +13,19 @@ end
     include("selector.jl")
 end
 
+
+@testset "branch.jl" begin
+    include("branch.jl")
+end
+
+@testset "status.jl" begin
+    include("status.jl")
+end
+
+@testset "tablesolver.jl" begin
+    include("tablesolver.jl")
+end
+
+@testset "stride.jl" begin
+    include("stride.jl")
+end

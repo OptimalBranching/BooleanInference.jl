@@ -20,7 +20,7 @@ end
     push!(circuit.exprs, Assignment([:c],BooleanExpr(true)))
     bip, syms = cir2bip(circuit)
     @test bip.he2v == [[1, 2, 3],[1]]
-    @test bip.tensors == [Tropical.([0.0 0.0; -Inf -Inf;;; 0.0 -Inf; -Inf 0.0]), Tropical.([-Inf, 0.0])]
+    @test bip.tensors == [vec(Tropical.([0.0 0.0; -Inf -Inf;;; 0.0 -Inf; -Inf 0.0])), vec(Tropical.([-Inf, 0.0]))]
     @test bip.literal_num == 3
 end
 

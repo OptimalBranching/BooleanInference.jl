@@ -1,125 +1,105 @@
-struct DeductionReducer <: AbstractReducer end
-
-function OptimalBranchingCore.reduce_problem(p::BooleanInferenceProblem, ::DeductionReducer)
-    he2v = copy(p.he2v)
-	tensors = copy(p.tensors)
-    v2he = copy(p.v2he)
-    data = fill(0, p.literal_num)
-	while true
-        he2v, tensors = remove_zeros!(he2v, tensors)
-        unitedge = findfirst(x -> count(==(Tropical(0.0)),x) == 1 ,tensors)
-        # @show unitedge
-        # @show tensors[unitedge]
-        # @show he2v[unitedge]
-        isnothing(unitedge) && break
-		vs = he2v[unitedge]
-        v_val = findfirst(==(Tropical(0.0)), tensors[unitedge])
-        if v_val isa CartesianIndex
-            v_val = collect(v_val.I)
-        else
-            vs = vs[1]
-        end
-		he2v, tensors, data = decide_literal!(he2v, tensors, vs, v_val, data)
-        # he2v, tensors, data,v2he = decide_literal!(he2v, tensors,v2he, vs, v_val, data)
+struct NoReducer <: AbstractReducer end
+struct RuleReducer <: AbstractReducer # Rules from paper "Fast Exact Algorithms for the SAT Problem with Bounded Occurrences of Variables"
+	rules::Vector{Int}
+end
+function OptimalBranchingCore.reduce_problem(p::BooleanInferenceProblem, bs::AbstractBranchingStatus,reducer::NoReducer)
+	return bs
+end
+function OptimalBranchingCore.reduce_problem(p::BooleanInferenceProblem, bs::AbstractBranchingStatus,reducer::RuleReducer)
+	if 4 ∈ reducer.rules
+		bs = reduction_4(p, bs)
 	end
-	return BooleanInferenceProblem(tensors, he2v,v2he, p.literal_num), BooleanResult(true, 2, data).config
+	return bs
 end
-
-function remove_zeros!(he2v, tensors)
-    allzeros = [all(==(Tropical(0.0)), t) for t in tensors]
-    he2v = he2v[.!allzeros]
-    tensors = tensors[.!allzeros]
-    return he2v, tensors
-end
-
-function remove_literal(vertices::Vector{Int}, p::BooleanInferenceProblem, clause::Clause{N}) where N
-    data = fill(0, p.literal_num)
-    decided_v = Int[]
-    for (k, v) in enumerate(vertices)
-        if readbit(clause.mask, k) == 1 
-            push!(decided_v, v)
-            if readbit(clause.val, k) == 1
-                data[v] = 1
-            end
-        end
-    end
-    p_new = decide_literal(p, decided_v, data)
-    return p_new, BooleanResult(true, 2, data).config
-end
-
-function decide_literal(p::BooleanInferenceProblem, vertices::Vector{Int}, data::Vector{Int})
-    he2v = copy(p.he2v)
-    tensors = copy(p.tensors)
-    for v in vertices
-        he2v, tensors,data = decide_literal!(he2v, tensors, v, data[v]+1,data)
-    end
-    return BooleanInferenceProblem(tensors, he2v, p.literal_num)
-end
-
-# TODO: Decide all literals once
-function decide_literal!(he2v, tensors, v, v_val::Int,data)
-	vedges = findall(x -> v in x, he2v)
-    data[v] = v_val-1
-	for edge_num in vedges
-		v_num = findfirst(==(v), he2v[edge_num])
-		if length(he2v[edge_num]) == 1
-			tensors[edge_num] = [tensors[edge_num][fill(:, v_num - 1)..., v_val, fill(:, length(he2v[edge_num]) - v_num)...]]
-		else
-			tensors[edge_num] = tensors[edge_num][fill(:, v_num - 1)..., v_val, fill(:, length(he2v[edge_num]) - v_num)...]
+function reduction_4(p::BooleanInferenceProblem, bs::AbstractBranchingStatus)
+	# Rule 4: If x is true in all clauses, set x to true.
+	for (i, undecided_literal_num) in enumerate(bs.undecided_literals)
+		if undecided_literal_num == 1
+			edge = p.he2v[i]
+			undecided_literal = findfirst(x -> readbit(bs.decided_mask, x) == 0, edge)
+			bs.decided_mask = bs.decided_mask | LongLongUInt(1) << (undecided_literal - 1)
+			bs.config = bs.config & (~(LongLongUInt(1) << (undecided_literal - 1)))
+			bs.undecided_literals[i] = -1
 		end
-		he2v[edge_num] = setdiff(he2v[edge_num], [v])
 	end
-	return he2v, tensors,data
+	return bs
 end
 
-function decide_literal!(he2v, tensors, dls::Vector{Int}, new_vals::Vector{Int},data::Vector{Int})
-    for i in 1:length(dls)
-		v = dls[i]
-		v_val = new_vals[i]
-        he2v, tensors,data = decide_literal!(he2v, tensors, v, v_val,data)
+function deduction_reduce(p::BooleanInferenceProblem, bs::AbstractBranchingStatus, reducing_queue::Vector{Int})
+	while !isempty(reducing_queue)
+		isempty(reducing_queue) && break
+		edge_num = popfirst!(reducing_queue)
+		(bs.undecided_literals[edge_num] <= 0) && continue
+
+		zerocount, sumpos = check_reduce(p.he2v[edge_num], bs.decided_mask,bs.config, p.tensors[edge_num])
+		(zerocount == 1) || continue
+
+		bs, aedges = decide_literal(bs, p, p.he2v[edge_num], Clause(2^length(p.he2v[edge_num]) - 1, sumpos - 1))
+
+		reducing_queue = reducing_queue ∪ aedges
 	end
-    return he2v, tensors, data
+	return bs
 end
 
-function _vertex_in_edge(he2vi,dls::Vector{Int},new_vals::Vector{Int})
-    pos = Int[]
-    vals = Int[]
-    for i in 1:length(dls)
-        v = dls[i]
-        if v in he2vi
-            push!(pos, findfirst(==(v), he2vi))
-            push!(vals, new_vals[i])
-        end
-    end
-    return pos, vals
-end
-
-function _make_colon_vector(pos,vals,n::Int)
-    return [i ∈ pos ? vals[findfirst(==(i),pos)] : (:) for i in 1:n]
-end
-
-function decide_literal!(he2v, tensors, v2he, dls::Vector{Int}, new_vals::Vector{Int},data::Vector{Int})
-    # @show dls
-    # @show new_vals
-    # @show v2he
-    vedges = reduce(∪, [v2he[v] for v in dls])
-    # @show vedges
-    [v2he[v] = Int[] for v in dls]
-    # @show v2he
-	for edge_num in vedges
-        pos, vals = _vertex_in_edge(he2v[edge_num],dls,new_vals)
-        colon_vec = _make_colon_vector(pos,vals,length(he2v[edge_num]))
-        if length(pos) == length(he2v[edge_num])
-            tensors[edge_num] = [tensors[edge_num][colon_vec...]]
-        else
-            tensors[edge_num] = tensors[edge_num][colon_vec...]
-        end
-		he2v[edge_num] = setdiff(he2v[edge_num], dls)
+function check_reduce(he2vi, mask, config, tensor)
+	count = 0
+	sum = 0
+	decided_literal_num = 0
+	for j in 1:length(he2vi)
+		if readbit(mask, he2vi[j]) == 1
+			sum += Int(readbit(config, he2vi[j])) * (1 << (j - 1))
+			decided_literal_num += 1
+		end
 	end
-    data[dls] = new_vals .- 1
-	return he2v, tensors, data,v2he
+	sumpos = 0
+	for i in 0:2^(length(he2vi)-decided_literal_num)-1
+		sum1 = sum
+		counti = 0
+		for j in 1:length(he2vi)
+			if !(readbit(mask, he2vi[j]) == 1)
+				counti += 1
+				sum1 += (1 << (j - 1)) * readbit(i, counti)
+			end
+		end
+		if tensor[sum1+1] == Tropical(0.0)
+			count += 1
+			sumpos = sum1 + 1
+		end
+	end
+	return count, sumpos
 end
 
-function decide_literal!(he2v, tensors, v2he, dls::Int, new_vals::Int,data::Vector{Int})
-    return decide_literal!(he2v, tensors, v2he, [dls], [new_vals], data)
+function decide_literal(bs::AbstractBranchingStatus{C}, p::BooleanInferenceProblem, vertices::Vector{Int}, clause::Clause{N}) where {N,C}
+	config = copy(bs.config)
+	# mask = copy(bs.decided_mask)
+	dls = Int[]
+	for (k, v) in enumerate(vertices)
+		if readbit(clause.mask, k) == 1 && (readbit(bs.decided_mask, v) == 0)
+			push!(dls, v)
+			# mask = mask | LongLongUInt{C}(1) << (v - 1)
+			if readbit(clause.val, k) == 1
+				config = config | LongLongUInt{C}(1) << (v - 1)
+			end
+		end
+	end
+	mask = bs.decided_mask | vec2lluint(dls, typeof(config))
+	undecided_literals = copy(bs.undecided_literals)
+	aedges = Int[] # Edges that have been changed
+	for edge_num in mapreduce(v -> p.v2he[v], ∪, dls)
+		if bs.undecided_literals[edge_num] > 0
+			zerocount, _ = check_reduce(p.he2v[edge_num], mask, config, p.tensors[edge_num])
+
+			decided_num = count(x -> x in dls, p.he2v[edge_num])
+			# edge_mask = vec2lluint(p.he2v[edge_num], typeof(config))
+			# decided_num = count_ones(edge_mask & mask) - count_ones(edge_mask & bs.decided_mask)
+
+			if (zerocount == 2^(undecided_literals[edge_num] - decided_num))
+				undecided_literals[edge_num] = -1
+			else
+				undecided_literals[edge_num] -= decided_num
+				push!(aedges, edge_num)
+			end
+		end
+	end
+	return BranchingStatus(config, mask, undecided_literals), aedges
 end
