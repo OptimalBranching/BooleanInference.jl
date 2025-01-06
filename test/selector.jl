@@ -1,5 +1,6 @@
 using BooleanInference
 using Test
+using BooleanInference.ProblemReductions
 using BooleanInference.GenericTensorNetworks: ∧, ∨, ¬
 using BooleanInference.OptimalBranchingCore: select_variables,apply_branch,Clause
 
@@ -46,8 +47,25 @@ end
     bip,syms = sat2bip(sat)
     bs = initialize_branching_status(bip)
 
-    subbip = select_variables(bip,bs, BooleanInference.NumOfVertices(),KNeighborSelector(2))
+    subbip = select_variables(bip,bs, BooleanInference.NumOfVertices(),KNeighborSelector(2,1))
     @test subbip.vs == collect(1:7)
     @test subbip.edges == collect(1:4)
     @test subbip.outside_vs_ind == []
+end
+
+@testset "KaHyParSelector" begin
+    fproblem = Factoring(8, 8, 251*249)
+    res = reduceto(CircuitSAT,fproblem)
+    
+    bip,syms = sat2bip(res.circuit)
+    bs = initialize_branching_status(bip)
+    subbip = select_variables(bip,bs, BooleanInference.NumOfVertices(),KaHyParSelector())
+end
+
+@testset "SubBIP" begin
+    @bools a b c d e f g
+    cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c))
+    bip, syms = cnf2bip(cnf)
+    bs = initialize_branching_status(bip)
+    subbip = BooleanInference.SubBIP(bip,bs,[1,2,3,4])
 end

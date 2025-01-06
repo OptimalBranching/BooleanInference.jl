@@ -25,7 +25,7 @@ function clause2tensors(clause::Vector{Int})
     return tensor,literals
 end
 
-function solvecnf(filename::String)
+function solvecnf(filename::String; bsconfig::BranchingStrategy = BranchingStrategy(table_solver = TNContractionSolver(), selector = KNeighborSelector(1,1), measure=NumOfVertices()), reducer=NoReducer())
     p = readcnf(filename)
-    return solvebip(p)
+    return solvebip(p; bsconfig, reducer)
 end

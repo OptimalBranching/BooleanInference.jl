@@ -30,4 +30,7 @@ end
 
 @testset "solvecnf" begin
     solvecnf("datas/test.cnf")
+
+    bs = BranchingStrategy(table_solver = TNContractionSolver(), selector = KNeighborSelector(1, 1), set_cover_solver = BooleanInference.OptimalBranchingCore.GreedyMerge(),measure=NumOfDegrees())
+    solvecnf("datas/1.cnf"; bsconfig = bs)
 end

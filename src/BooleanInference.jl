@@ -11,6 +11,7 @@ using GenericTensorNetworks
 using GenericTensorNetworks.OMEinsum
 import ProblemReductions
 import ProblemReductions: CircuitSAT,Circuit,Factoring,reduceto
+using KaHyPar
 
 # using GenericTensorNetworks: ∧, ∨, ¬
 
@@ -28,7 +29,7 @@ export cnf2bip,cir2bip,sat2bip,solvebip,solve_factoring,solve_sat,solve_factorin
 export NoReducer,decide_literal
 
 # selector
-export KNeighborSelector,neighboring,k_neighboring,subhg,Smallest2NeighborSelector
+export KNeighborSelector,neighboring,k_neighboring,subhg,Smallest2NeighborSelector,KaHyParSelector
 
 # tablesolver
 export TNContractionSolver
