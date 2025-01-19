@@ -18,13 +18,18 @@ struct KNeighborSelector <: AbstractSelector
 end
 
 struct Smallest2NeighborSelector <: AbstractSelector end
-struct KaHyParSelector <: AbstractSelector end
+struct KaHyParSelector <: AbstractSelector 
+    app_domain_size::Int
+end
 
 function OptimalBranchingCore.select_variables(p::BooleanInferenceProblem, bs::AbstractBranchingStatus, m::M, selector::KaHyParSelector) where {M <: AbstractMeasure}
     he2v, edge_list, decided_v = subhg(p, bs)
     h = KaHyPar.HyperGraph(he2v2sparse(he2v))
-    parts = KaHyPar.partition(h, 2; configuration=:edge_cut, imbalance=0.1)
+    imbalance = 1-2*selector.app_domain_size/p.literal_num
+    @show imbalance
+    parts = KaHyPar.partition(h, 2; configuration=:edge_cut, imbalance)
     part0 = findall(iszero,parts)
+    # return SubBIP(p,bs,part0)
     return SubBIP(p,bs,part0)
 end
 
