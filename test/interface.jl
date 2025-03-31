@@ -3,6 +3,7 @@ using BooleanInference.GenericTensorNetworks
 using BooleanInference.GenericTensorNetworks: ∧, ∨, ¬
 using Test
 using BooleanInference.GenericTensorNetworks.ProblemReductions
+using BooleanInference.OptimalBranchingCore: BranchingStrategy
 
 @testset "cnf2bip" begin
     @bools a b c d e f g
@@ -42,4 +43,24 @@ end
 @testset "solve_factoring" begin
     a,b = solve_factoring(5,5,31*29)
     @test a*b == 31*29
+end
+
+@testset "benchmark" begin
+	table_solver = TNContractionSolver()
+	reducer = NoReducer()
+	for selector in [KNeighborSelector(1, 1), KNeighborSelector(2, 1), KNeighborSelector(1, 2), KNeighborSelector(2, 2)]
+		for measure in [NumOfVertices(), NumOfClauses(), NumOfDegrees()]
+            println("$measure,$selector")
+			solve_factoring(8, 8, 1019 * 1021; bsconfig = BranchingStrategy(; table_solver, selector, measure), reducer)
+		end
+	end
+end
+
+@testset "interface" begin
+    solve_factoring(8, 8, 1019 * 1021; bsconfig = BranchingStrategy(; table_solver= TNContractionSolver(), selector=KNeighborSelector(1, 1), measure=NumOfDegrees()), reducer= NoReducer())
+    solve_factoring(5, 5, 899; bsconfig = BranchingStrategy(; table_solver= TNContractionSolver(), selector=KNeighborSelector(1, 1), measure=NumOfDegrees()), reducer= NoReducer())
+	
+	bs = BranchingStrategy(table_solver = TNContractionSolver(), selector = KNeighborSelector(1, 1), set_cover_solver = BooleanInference.OptimalBranchingCore.GreedyMerge(),measure=NumOfDegrees())
+
+	solve_factoring(8, 8, 1019 * 1021; bsconfig = bs, reducer= NoReducer())
 end

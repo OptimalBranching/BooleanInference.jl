@@ -12,7 +12,7 @@ using BooleanInference.OptimalBranchingCore.BitBasis
 	cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c), ∨(¬a))
 	bip, syms = cnf2bip(cnf)
     bs = initialize_branching_status(bip)
-	bsnew = reduce_problem(bip, bs, collect(1:5),DeductionReducer())
+	bsnew = BooleanInference.deduction_reduce(bip, bs, collect(1:5))
 	@test bsnew.decided_mask == 1
     @test bsnew.config == 0
     @test bsnew.undecided_literals == [3,-1,2,2,-1]
@@ -21,7 +21,7 @@ using BooleanInference.OptimalBranchingCore.BitBasis
 	cnf = ∧(∨(x1), ∨(x2, ¬x3), ∨(x4, ¬x1), ∨(¬x3, ¬x4), ∨(x2, x5), ∨(x2, x5, ¬x3))
 	bip, syms = cnf2bip(cnf)
 	bs = initialize_branching_status(bip)
-	bsnew = reduce_problem(bip, bs, collect(1:6),DeductionReducer())
+	bsnew =  BooleanInference.deduction_reduce(bip, bs, collect(1:6))
 	@test bsnew.decided_mask == 13
     @test bsnew.config == 9
     @test bsnew.undecided_literals == [-1,-1,-1,-1,2,-1]
@@ -32,7 +32,7 @@ using BooleanInference.OptimalBranchingCore.BitBasis
 	push!(circuit.exprs, Assignment([:c], BooleanExpr(true)))
 	bip, syms = cir2bip(circuit)
     bs = initialize_branching_status(bip)
-	bsnew = reduce_problem(bip, bs, collect(1:2),DeductionReducer())
+	bsnew =  BooleanInference.deduction_reduce(bip, bs, collect(1:2))
     @test bsnew.decided_mask == 7
     @test bsnew.config == 7
     @test bsnew.undecided_literals == [-1,-1]

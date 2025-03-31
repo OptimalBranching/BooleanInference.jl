@@ -28,8 +28,11 @@ function OptimalBranchingCore.select_variables(p::BooleanInferenceProblem, bs::A
     imbalance = 1-2*selector.app_domain_size/p.literal_num
     @show imbalance
     parts = KaHyPar.partition(h, 2; configuration=:edge_cut, imbalance)
-    part0 = findall(iszero,parts)
-    # return SubBIP(p,bs,part0)
+
+    zero_num = count(x-> x ≈ 0,parts)
+    one_num = length(parts)-zero_num
+
+    part0 = abs(zero_num-selector.app_domain_size) < abs(one_num-selector.app_domain_size) ? findall(iszero,parts) : findall(!iszero,parts)
     return SubBIP(p,bs,part0)
 end
 
