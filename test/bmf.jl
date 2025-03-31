@@ -1,4 +1,6 @@
 using TropicalNumbers
+using Test 
+using BooleanInference
 
 @testset "MEBF" begin
     # This is an approximate algorithm for Boolean matrix factorization (BMF) based on the MBF algorithm.

@@ -3,7 +3,8 @@ using Test
 using BooleanInference.GenericTensorNetworks
 using BooleanInference.GenericTensorNetworks: ∧, ∨, ¬
 using BooleanInference.OptimalBranchingCore: branching_table,select_variables
-
+using BooleanInference.OptimalBranchingCore.BitBasis
+using BooleanInference:SubBIP
 
 @testset "branching_table" begin
     @bools a b c d e f g
@@ -11,7 +12,7 @@ using BooleanInference.OptimalBranchingCore: branching_table,select_variables
     bip,syms = cnf2bip(cnf)
     bs = initialize_branching_status(bip)
 
-    subbip = select_variables(bip,bs, BooleanInference.NumOfVertices(),KNeighborSelector(1))
+    subbip = SubBIP(bip,bs,[1,2,3,4,5])
     tbl = branching_table(bip, bs,BooleanInference.TNContractionSolver(), subbip)
 
     @test subbip.outside_vs_ind == [2,5]
