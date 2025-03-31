@@ -40,6 +40,10 @@ export readcnf,solvecnf
 # tropicalsvd
 export tropical_svd
 
+# inspired by boolean matrix factorization
+export MEBF
+export find_formal_concepts
+
 include("status.jl")
 include("stride.jl")
 include("types.jl")
@@ -50,4 +54,6 @@ include("tablesolver.jl")
 include("branch.jl")
 include("readcnf.jl")
 include("tropicalsvd.jl")
+include("bmf_mebf.jl")
+include("bmf_factor.jl")
 end
