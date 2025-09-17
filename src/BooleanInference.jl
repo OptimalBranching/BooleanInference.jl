@@ -1,7 +1,5 @@
 module BooleanInference
 
-using JuMP
-using HiGHS
 using TropicalNumbers
 using SparseArrays
 using OptimalBranchingCore
@@ -17,13 +15,13 @@ using KaHyPar
 
 # status
 export BranchingStatus, initialize_branching_status
-# stride 
-export tensor2vec,get_tensor_number,slice_tensor, vec2tensor,vec2lluint,lluint2vec
+# stride
+export get_tensor_number,slice_tensor, vec2tensor,vec2lluint,lluint2vec
 # types
 export BooleanInferenceProblem,BooleanResultBranchCount,NumOfVertices,NumOfClauses,NumOfDegrees
 
 # interface
-export cnf2bip,cir2bip,sat2bip,solvebip,solve_factoring,solve_sat,solve_factoring_count
+export cnf2bip,cir2bip,sat2bip,solvebip,solve_factoring,solve_sat
 
 # reducer
 export NoReducer,decide_literal
@@ -34,15 +32,7 @@ export KNeighborSelector,neighboring,k_neighboring,subhg,Smallest2NeighborSelect
 # tablesolver
 export TNContractionSolver
 
-# readcnf
-export readcnf,solvecnf
-
-# tropicalsvd
-export tropical_svd
-
-# inspired by boolean matrix factorization
-export MEBF
-export find_formal_concepts
+# legacy extras moved under legacy/
 
 include("status.jl")
 include("stride.jl")
@@ -52,8 +42,5 @@ include("reducer.jl")
 include("selector.jl")
 include("tablesolver.jl")
 include("branch.jl")
-include("readcnf.jl")
-include("tropicalsvd.jl")
-include("bmf_mebf.jl")
-include("bmf_factor.jl")
+## legacy modules parked under src/legacy; not loaded by default
 end

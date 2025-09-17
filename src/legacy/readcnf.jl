@@ -29,3 +29,7 @@ function solvecnf(filename::String; bsconfig::BranchingStrategy = BranchingStrat
     p = readcnf(filename)
     return solvebip(p; bsconfig, reducer)
 end
+
+
+
+

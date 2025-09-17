@@ -32,3 +32,7 @@ function tropical_svd(C::Matrix{TropicalAndOr},k::Int;solver = IPSolver())
     optimize!(model)
     return  is_solved_and_feasible(model),reshape([TropicalAndOr(v ≈ 1.0) for v in value.(a)],m,k), reshape([TropicalAndOr(v ≈ 1.0) for v in value.(b)],k,n)
 end
+
+
+
+

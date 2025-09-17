@@ -1,3 +1,4 @@
+# The SubBIP struct represents a focused subproblem containing a selected subset of variables along with their associated edges and tensor data.
 struct SubBIP{N}
     vs::Vector{Int}
     edges::Vector{Int}
@@ -23,6 +24,7 @@ struct KaHyParSelector <: AbstractSelector
 end
 
 function OptimalBranchingCore.select_variables(p::BooleanInferenceProblem, bs::AbstractBranchingStatus, m::M, selector::KaHyParSelector) where {M <: AbstractMeasure}
+    # Extract hyperedges with at least one undecided vertex
     he2v, edge_list, decided_v = subhg(p, bs)
     h = KaHyPar.HyperGraph(he2v2sparse(he2v))
     imbalance = 1-2*selector.app_domain_size/p.literal_num
@@ -37,14 +39,19 @@ function OptimalBranchingCore.select_variables(p::BooleanInferenceProblem, bs::A
 end
 
 function OptimalBranchingCore.select_variables(p::BooleanInferenceProblem, bs::AbstractBranchingStatus, m::M, selector::KNeighborSelector) where {M <: AbstractMeasure}
+    # Extract hyperedges with at least one undecided vertex
     he2v, edge_list, decided_v = subhg(p, bs)
-    undecided_literals = setdiff(1:p.literal_num, decided_v)
-
-    v2he = [count(x -> i ∈ x, he2v) for i in undecided_literals]
+    # all undecided variables
+    undecided_variables = setdiff(1:p.literal_num, decided_v)
+    
+    # he2v[i] represents the undecided literals in the i-th clause.
+    v2he = [count(x -> i ∈ x, he2v) for i in undecided_variables]  # i is the index of the undecided literal
+    # least frequent occurrence across clauses
     index = argmin(x -> iszero(v2he[x]) ? Inf : v2he[x], 1:length(v2he))
-    initial_v = undecided_literals[index]
+    initial_v = undecided_variables[index]
     # initial_v = selector.initial_vertex_strategy == 1 ? maximum(undecided_literals) : minimum(undecided_literals)
 
+    # start from that variable
     vs, edges, outside_vs_ind = k_neighboring(he2v, initial_v, selector.k)
 
     return SubBIP{length(vs)}(vs, edge_list[edges], outside_vs_ind, gen_sub_tensor(p, bs, vs, edges, he2v, edge_list))
@@ -87,15 +94,27 @@ function _neighboring(he2v::Vector{Vector{Int}}, vs::Vector{Int})
 end
 
 function subhg(bip::BooleanInferenceProblem, bs::AbstractBranchingStatus)
+    # Extract decided vertices
     decided_v = [i for i in 1:bip.literal_num if readbit(bs.decided_mask, i) == 1]
+    # Iterate over all hyperedges and collect the hyperedges that contain at least one undecided vertex
     return [setdiff(bip.he2v[e], decided_v) for e in 1:length(bip.he2v) if bs.undecided_literals[e] > 0], [e for e in 1:length(bip.he2v) if bs.undecided_literals[e] > 0], decided_v
 end
 
-function gen_sub_tensor(p::BooleanInferenceProblem, bs::AbstractBranchingStatus, vs::Vector{Int}, edges::Vector{Int}, he2v::Vector{Vector{Int}}, edge_list::Vector{Int})
+function gen_sub_tensor(
+    p::BooleanInferenceProblem,
+    bs::AbstractBranchingStatus,
+    vs::Vector{Int},
+    edges::Vector{Int},
+    he2v::Vector{Vector{Int}},
+    edge_list::Vector{Int}
+)
     eincode = EinCode(he2v[edges], vs)
     optcode = optimize_code(eincode, uniformsize(eincode, 2), GreedyMethod())
 
-    sub_tensors = optcode([vec2tensor(slice_tensor(p.tensors[e], bs.decided_mask, bs.config, p.he2v[e])) for e in edge_list[edges]]...)
+    sub_tensors = optcode([vec2tensor(
+        slice_tensor(p.tensors[e], bs.decided_mask, bs.config, p.he2v[e])
+    ) for e in edge_list[edges]]...)
+
     return sub_tensors
 end
 

@@ -1,10 +1,5 @@
 # This is an approximate algorithm for Boolean matrix factorization (BMF) based on the MBF algorithm.
 function MEBF(MATₜ::Matrix{TropicalAndOr}; DIM::Int=1000, Thres::Float64=0.5, P::Float64=0.05)
-    # This function is directly migrated from the R language code provided in the paper.  https://doi.org/10.1609/aaai.v34i04.6072
-    # Source: https://github.com/clwan/MEBF.git
-    # Dim: maximum number of patterns (k)
-    # Thres: between 0 and 1. A smaller t could achieve higher coverage with less number of patterns, while a larger t enables a more sparse decomposition of the input matrix with greater number of patterns.
-    # P: percentage of uncovered 1s
     MAT = getproperty.(MATₜ, :n)
     if min(size(MAT)...) < DIM
         DIM = min(size(MAT)...) - 1
@@ -19,15 +14,14 @@ function MEBF(MATₜ::Matrix{TropicalAndOr}; DIM::Int=1000, Thres::Float64=0.5, 
         if sum(m1) <= P * SUM
             @info "Uncovered percentage is lower than $P. No more growth possible."
             break
-        
         end
 
         C1 = 0
         B1_use = zeros(Int, size(m1, 1))
         B2_use = zeros(Int, size(m1, 2))
 
-        COL = vec(sum(m1, dims=1))  # column sum
-        ROW = vec(sum(m1, dims=2))  # row sum
+        COL = vec(sum(m1, dims=1))
+        ROW = vec(sum(m1, dims=2))
 
         if median(filter(x -> x > 0, COL)) > 1
             TEMP = findall(==(minimum(filter(x -> x >= median(filter(x -> x > 0, COL)), COL))), COL)
@@ -114,3 +108,7 @@ function median(arr)
         return (sorted_arr[n ÷ 2] + sorted_arr[(n ÷ 2) + 1]) / 2
     end
 end
+
+
+
+
