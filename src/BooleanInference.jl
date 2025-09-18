@@ -42,5 +42,7 @@ include("reducer.jl")
 include("selector.jl")
 include("tablesolver.jl")
 include("branch.jl")
+
 ## legacy modules parked under src/legacy; not loaded by default
+
 end

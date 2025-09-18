@@ -40,7 +40,11 @@ function check_stopped(bs::AbstractBranchingStatus)
     return false,false,0
 end
 
- 
+# function OptimalBranchingCore.optimal_branching_rule(table::BranchingTable, variables::Vector, bs::AbstractBranchingStatus,p::BooleanInferenceProblem, m::AbstractMeasure, solver::AbstractSetCoverSolver)
+#     candidates = collect(candidate_clauses(table))
+#     size_reductions = [measure(bs, m) - measure((apply_branch(p,bs, candidate, variables)), m) for candidate in candidates]
+#     return minimize_γ(table, candidates, size_reductions, solver; γ0=2.0)
+# end
 
 function mybranch_and_reduce(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus,config::BranchingStrategy, reducer::AbstractReducer)
     stopped, res = check_stopped(bs)

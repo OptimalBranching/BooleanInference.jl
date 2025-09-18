@@ -1,10 +1,21 @@
+# Julia
 *.jl.*.cov
 *.jl.cov
 *.jl.mem
 /Manifest.toml
-/docs/Manifest.toml
-/docs/build/
+
+# Benchmark data
+benchmark/data/
+benchmark/Manifest.toml
+
+# IDE
 .vscode/
-backup/
-datas/
+.idea/
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
