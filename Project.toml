@@ -12,7 +12,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 TropicalNumbers = "b3a74e9c-7526-4576-a4eb-79c0d4c32334"
 
 [compat]
-GenericTensorNetworks = "3"
+GenericTensorNetworks = "4"
 KaHyPar = "0.3.1"
 OptimalBranchingCore = "0.1"
 SparseArrays = "1.11.0"

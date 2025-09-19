@@ -4,6 +4,9 @@ using Random
 using JSON3
 using BenchmarkTools
 using BooleanInference
+using JuMP
+using ProblemReductions
+
 
 # Core utilities
 include("utils.jl")
@@ -15,12 +18,16 @@ include("abstract_types.jl")
 include("generic_benchmark.jl")
 
 # Problem implementations
-include("factoring_problem.jl")
+include("factoring/factoring_problem.jl")
+include("factoring/factorIP.jl")
 
 # Re-export main interfaces
-export AbstractBenchmarkProblem, AbstractProblemConfig
+export AbstractBenchmarkProblem, AbstractProblemConfig, AbstractSolver
 export generate_instance, solve_instance, problem_id, default_configs, filename_pattern
-export generate_datasets, benchmark_problem, run_full_benchmark
-export FactoringProblem, FactoringConfig
+export available_solvers, default_solver, solver_name
+export generate_datasets, benchmark_problem, run_full_benchmark, benchmark_backend
+export create_configs_from_tuples
+export list_available_solvers, run_solver_comparison
+export FactoringProblem, FactoringConfig, BooleanInferenceSolver, IPSolver
 
 end # module

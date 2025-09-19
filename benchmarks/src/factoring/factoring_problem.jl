@@ -3,7 +3,27 @@ using Primes
 using JSON3
 using SHA: bytes2hex, sha1
 using BooleanInference
-using ..BooleanInferenceBenchmarks: resolve_data_dir
+using JuMP
+using Gurobi
+using ..BooleanInferenceBenchmarks: resolve_data_dir, AbstractSolver
+
+# Define solver types for factoring problems
+"""
+BooleanInference solver - uses the original BooleanInference.solve_factoring method
+"""
+struct BooleanInferenceSolver <: AbstractSolver end
+
+"""
+Integer Programming solver - uses JuMP with Gurobi optimizer
+"""
+struct IPSolver <: AbstractSolver 
+    optimizer::Any
+    env::Any
+    
+    function IPSolver(optimizer=Gurobi.Optimizer, env=nothing)
+        new(optimizer, env)
+    end
+end
 
 # Prime generation utilities
 function random_semiprime(m::Int, n::Int; rng=Random.GLOBAL_RNG, distinct::Bool=false)
@@ -84,14 +104,37 @@ function generate_instance(::Type{FactoringProblem}, config::FactoringConfig;
     return instance
 end
 
-function solve_instance(::Type{FactoringProblem}, instance)
+# Implement solve_instance with different solvers
+function solve_instance(::Type{FactoringProblem}, instance, solver::BooleanInferenceSolver)
     m = instance["m"]
     n = instance["n"]
-    # sN = instance["N"]
-    # N = something(tryparse(Int, sN), parse(BigInt, sN))
-    N = parse(Int, instance["N"])  # Use Int is enough.
+    N = parse(Int, instance["N"])
     return BooleanInference.solve_factoring(m, n, N)
 end
+
+function solve_instance(::Type{FactoringProblem}, instance, solver::IPSolver)
+    m = instance["m"]
+    n = instance["n"]
+    N = parse(Int, instance["N"])
+    return factoring(m, n, N; optimizer=solver.optimizer, env=solver.env)
+end
+
+function run_full_benchmark(::Type{FactoringProblem},
+                           input_configs::Union{Vector{Tuple{Int,Int}}, Nothing}=nothing;
+                           dataset_per_config::Int=50,
+                           solver=nothing)
+    
+    if isnothing(input_configs)
+        configs = default_configs(FactoringProblem)
+    else
+        configs = [config(FactoringProblem, config_item) for config_item in input_configs]
+    end
+        
+    results = benchmark_backend(FactoringProblem, configs; dataset_per_config=dataset_per_config, solver=solver)
+    
+    return results
+end
+
 
 function problem_id(::Type{FactoringProblem}, config::FactoringConfig, N::Integer)
     h = bytes2hex(sha1(string(config.m, "|", config.n, "|", N)))
@@ -99,7 +142,7 @@ function problem_id(::Type{FactoringProblem}, config::FactoringConfig, N::Intege
 end
 
 function default_configs(::Type{FactoringProblem})
-    return [
+    return FactoringConfig[
         FactoringConfig(10, 10),
         FactoringConfig(12, 12),
         FactoringConfig(14, 14),
@@ -107,6 +150,27 @@ function default_configs(::Type{FactoringProblem})
     ]
 end
 
+function config(::Type{FactoringProblem}, params::Tuple{Int,Int})
+    return FactoringConfig(params[1], params[2])
+end
+
 function filename_pattern(::Type{FactoringProblem}, config::FactoringConfig)
     return "numbers_$(config.m)x$(config.n).jsonl"
+end
+
+# Solver interface implementations
+function available_solvers(::Type{FactoringProblem})
+    return [BooleanInferenceSolver(), IPSolver()]
+end
+
+function default_solver(::Type{FactoringProblem})
+    return BooleanInferenceSolver()
+end
+
+function solver_name(::BooleanInferenceSolver)
+    return "BooleanInference"
+end
+
+function solver_name(solver::IPSolver)
+    return "IP-$(solver.optimizer)"
 end

@@ -5,8 +5,8 @@
 /Manifest.toml
 
 # Benchmark data
-benchmark/data/
-benchmark/Manifest.toml
+benchmarks/data/
+benchmarks/Manifest.toml
 
 # IDE
 .vscode/

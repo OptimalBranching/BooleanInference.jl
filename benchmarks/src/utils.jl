@@ -73,8 +73,10 @@ function benchmark_configs(configs; trial_fn, samples_per_config::Int=5)
         @info "Benchmarking config: $cfg"
         times = Float64[]
         for _ in 1:samples_per_config
-            t = @belapsed $trial_fn($cfg)
-            push!(times, t)
+            t = @benchmarkable $trial_fn($cfg)
+            tune!(t)
+            run(t)
+            push!(times, t.times)
         end
         push!(results, Dict(
             "config" => cfg,
