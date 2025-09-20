@@ -1,8 +1,11 @@
 abstract type AbstractBranchingStatus{C} end
 struct BranchingStatus{C} <: AbstractBranchingStatus{C}
+    # The value of each logic variable
     config::LongLongUInt{C}
+    # The mask of already decided variables
     decided_mask::LongLongUInt{C}
-    undecided_literals::Vector{Int} # undecided literals in each clause, 0 means unsatisfiable, -1 means already satisfied
+    # The number of undecided literals in each hyperedge, 0 means unsatisfiable, -1 means already satisfied
+    undecided_literals::Vector{Int}
 end
 
 Base.:+(bs1::BranchingStatus, bs2::BranchingStatus) = BranchingStatus(bs1.config, bs1.decided_mask, bs1.undecided_literals)

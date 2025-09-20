@@ -21,6 +21,7 @@ struct NumOfClauses <: AbstractMeasure end
 OptimalBranchingCore.measure(bs::AbstractBranchingStatus, ::NumOfClauses) = count( >=(0) ,bs.undecided_literals)
 
 function initialize_branching_status(p::BooleanInferenceProblem)
+    # t is the number of bits needed to represent the branching status
     t = (p.literal_num-1) ÷ 64 + 1
     return BranchingStatus{t}(LongLongUInt{t}(0), LongLongUInt{t}(0), length.(p.he2v))
 end
