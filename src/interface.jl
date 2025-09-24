@@ -25,7 +25,7 @@ function solve_factoring(n::Int, m::Int, N::Int; bsconfig::BranchingStrategy=Bra
     # global BRANCHNUMBER = 0
     fproblem = Factoring(m, n, N)
     res = reduceto(CircuitSAT, fproblem)
-    problem = CircuitSAT(res.circuit.circuit; use_constraints=true);
+    problem = CircuitSAT(res.circuit.circuit; use_constraints=true)
     ans, vals = solve_sat_problem(problem; bsconfig, reducer)
     a, b = ProblemReductions.read_solution(fproblem, [vals[res.p]..., vals[res.q]...])
     # @show BRANCHNUMBER
@@ -33,7 +33,7 @@ function solve_factoring(n::Int, m::Int, N::Int; bsconfig::BranchingStrategy=Bra
 end
 
 function solve_sat_with_assignments(sat::ConstraintSatisfactionProblem)
-    res,vals = solve_sat_problem(sat)
+    res, vals = solve_sat_problem(sat)
     return res, Dict(zip(sat.symbols,vals))
 end
 
@@ -43,6 +43,5 @@ function solve_boolean_inference_problem(bip::BooleanInferenceProblem; bsconfig:
     bs = deduction_reduce(bip, bs, collect(1:length(bip.he2v)))
     ns, res, count_num = branch_and_reduce(bip,bs, bsconfig, reducer)
     answer = get_answer(res, bip.literal_num)
-    @show answer
     return ns, answer
 end

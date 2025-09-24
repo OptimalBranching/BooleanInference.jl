@@ -119,6 +119,45 @@ function solve_instance(::Type{FactoringProblem}, instance, solver::IPSolver)
     return factoring(m, n, N; optimizer=solver.optimizer, env=solver.env)
 end
 
+"""
+    verify_solution(::Type{FactoringProblem}, instance, result)
+
+Verify that the factoring result is correct.
+"""
+function verify_solution(::Type{FactoringProblem}, instance, result)
+    try
+        N = parse(Int, instance["N"])
+        
+        # Handle different result formats
+        if result isa Tuple && length(result) == 2
+            p, q = result
+        elseif result isa Dict
+            p = get(result, "p", nothing)
+            q = get(result, "q", nothing)
+            if p === nothing || q === nothing
+                return false
+            end
+        elseif hasfield(typeof(result), :p) && hasfield(typeof(result), :q)
+            p = result.p
+            q = result.q
+        else
+            @warn "Unknown result format: $(typeof(result))"
+            return false
+        end
+        
+        # Verify the factorization
+        if p * q == N
+            return true
+        else
+            @warn "Incorrect factorization: $p × $q = $(p*q) ≠ $N"
+            return false
+        end
+    catch e
+        @warn "Error verifying solution: $e"
+        return false
+    end
+end
+
 function run_full_benchmark(::Type{FactoringProblem},
                            input_configs::Union{Vector{Tuple{Int,Int}}, Nothing}=nothing;
                            dataset_per_config::Int=50,
@@ -146,8 +185,7 @@ function default_configs(::Type{FactoringProblem})
         FactoringConfig(10, 10),
         FactoringConfig(12, 12),
         FactoringConfig(14, 14),
-        FactoringConfig(16, 16)
-    ]
+     ]
 end
 
 function config(::Type{FactoringProblem}, params::Tuple{Int,Int})

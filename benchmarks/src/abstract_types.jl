@@ -83,6 +83,14 @@ Return the default solver for this problem type.
 function default_solver end
 
 """
+    verify_solution(problem_type::Type{<:AbstractBenchmarkProblem}, instance, result)
+
+Verify that the solver result is correct for the given instance.
+Returns true if correct, false otherwise.
+"""
+function verify_solution end
+
+"""
     solver_name(solver::AbstractSolver)
 
 Return human-readable name for the solver.
