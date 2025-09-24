@@ -24,10 +24,15 @@ function vec2tensor(vec::AbstractVector)
     return reshape(vec, fill(2, Int(log2(length(vec))))...)
 end
 
-function vec2lluint(vec::Vector{Int}, ::Type{T}) where T
+"""
+    indices_to_mask(vec::Vector{Int}, ::Type{T})
+
+Convert a vector of indices into a bitmask of type `T`.
+"""
+function indices_to_mask(vec::Vector{Int}, ::Type{T}) where T
     return sum(i->T(1)<<(i-1), vec)
 end
-function lluint2vec(x::LongLongUInt,vals::LongLongUInt, vec::Vector{Int})
+function lluint2vec(x::LongLongUInt, vals::LongLongUInt, vec::Vector{Int})
     pos = Int[]
     pos_vals = Int[]
     for i in vec 
@@ -36,7 +41,7 @@ function lluint2vec(x::LongLongUInt,vals::LongLongUInt, vec::Vector{Int})
             push!(pos_vals, readbit(vals,i))
         end
     end
-    return pos,pos_vals
+    return pos, pos_vals
 end
 
 function _vertex_in_edge(he2vi, dls::Vector{Int})

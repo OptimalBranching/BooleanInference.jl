@@ -27,7 +27,7 @@ end
 
 function solvecnf(filename::String; bsconfig::BranchingStrategy = BranchingStrategy(table_solver = TNContractionSolver(), selector = KNeighborSelector(1,1), measure=NumOfVertices()), reducer=NoReducer())
     p = readcnf(filename)
-    return solvebip(p; bsconfig, reducer)
+    return solve_boolean_inference_problem(p; bsconfig, reducer)
 end
 
 

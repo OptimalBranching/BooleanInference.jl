@@ -8,7 +8,7 @@ using OptimalBranchingCore.BitBasis
 using GenericTensorNetworks
 using GenericTensorNetworks.OMEinsum
 import ProblemReductions
-import ProblemReductions: CircuitSAT,Circuit,Factoring,reduceto
+import ProblemReductions: CircuitSAT, Circuit, Factoring, reduceto, SatisfiabilityHard, Satisfiability
 using KaHyPar
 
 # using GenericTensorNetworks: ∧, ∨, ¬
@@ -16,12 +16,12 @@ using KaHyPar
 # status
 export BranchingStatus, initialize_branching_status
 # stride
-export get_tensor_number,slice_tensor, vec2tensor,vec2lluint,lluint2vec
+export get_tensor_number,slice_tensor, vec2tensor,indices_to_mask,lluint2vec
 # types
 export BooleanInferenceProblem,BooleanResultBranchCount,NumOfVertices,NumOfClauses,NumOfDegrees
 
 # interface
-export cnf2bip,cir2bip,sat2bip,solvebip,solve_factoring,solve_sat
+export convert_cnf_to_bip,convert_circuit_to_bip,convert_sat_to_bip,solve_boolean_inference_problem,solve_factoring,solve_sat_with_assignments
 
 # reducer
 export NoReducer,decide_literal

@@ -9,7 +9,7 @@ using BooleanInference:SubBIP
 @testset "branching_table" begin
     @bools a b c d e f g
     cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c))
-    bip,syms = cnf2bip(cnf)
+    bip,syms = convert_cnf_to_bip(cnf)
     bs = initialize_branching_status(bip)
 
     subbip = SubBIP(bip,bs,[1,2,3,4,5])

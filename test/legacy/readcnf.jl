@@ -7,12 +7,12 @@ using BooleanInference.GenericTensorNetworks.ProblemReductions
 @testset "clause2tensors" begin
     @bools a b c d
 	cnf = ∧(∨(a, b, ¬c))
-	bip, syms = cnf2bip(cnf)
+	bip, syms = convert_cnf_to_bip(cnf)
     tensor,lits = BooleanInference.clause2tensors([1,2,-3])
     @test bip.tensors[1]== tensor
 
     cnf = ∧(∨(¬a, b, ¬c, d))
-	bip, syms = cnf2bip(cnf)
+	bip, syms = convert_cnf_to_bip(cnf)
     tensor,lits = BooleanInference.clause2tensors([-1,2,-3,4])
     @test bip.tensors[1]== tensor
 end
@@ -20,7 +20,7 @@ end
 @testset "readcnf" begin
     @bools a b c d e f
 	cnf = ∧(∨(a, b, c), ∨(d, e), ∨(a,c,¬e), ∨(¬b, c, e,f))
-	bip, syms = cnf2bip(cnf)
+	bip, syms = convert_cnf_to_bip(cnf)
     bip2 = readcnf("datas/test.cnf")
     @test bip.he2v == bip2.he2v
     @test bip.tensors == bip2.tensors
