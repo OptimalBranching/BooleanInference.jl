@@ -54,7 +54,8 @@ function OptimalBranchingCore.branching_table(bip::BooleanInferenceProblem, bs::
 		
 		# Slice by the fixed boundary 
 		# Find all positions where the contracted tensor equals Tropical(0.0) (feasible)
-		in_indies = findall(==(Tropical(0.0)), subbip.sub_tensors[vec...])
+		sub_tensors = @view subbip.sub_tensors[vec...]
+		in_indies = findall(==(Tropical(0.0)), sub_tensors)
 		
 		# Skip this boundary configuration if no feasible internal assignments exist
 		if length(in_indies) == 0
