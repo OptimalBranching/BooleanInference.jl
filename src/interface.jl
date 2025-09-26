@@ -1,5 +1,5 @@
 function convert_cnf_to_bip(cnf::CNF)
-    return convert_sat_to_bip(SatisfiabilityHard(Satisfiability(cnf)))
+    return convert_sat_to_bip(Satisfiability(cnf; use_constraints=true))
 end
 
 function convert_sat_to_bip(sat::ConstraintSatisfactionProblem)
@@ -37,7 +37,7 @@ function solve_sat_with_assignments(sat::ConstraintSatisfactionProblem)
     return res, Dict(zip(sat.symbols,vals))
 end
 
-function solve_boolean_inference_problem(bip::BooleanInferenceProblem; bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=KNeighborSelector(1,1), measure=NumOfVertices()), reducer=NoReducer())
+function solve_boolean_inference_problem(bip::BooleanInferenceProblem; bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=KNeighborSelector(1, 1), measure=NumOfVertices()), reducer=NoReducer())
     # Initialize branching status
     bs = initialize_branching_status(bip)
     bs = deduction_reduce(bip, bs, collect(1:length(bip.he2v)))

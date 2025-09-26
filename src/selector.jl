@@ -41,7 +41,7 @@ end
 function OptimalBranchingCore.select_variables(p::BooleanInferenceProblem, bs::AbstractBranchingStatus, m::M, selector::KNeighborSelector) where {M <: AbstractMeasure}
     # Extract hyperedges with at least one undecided vertex
     he2v, edge_list, decided_v = subhg(p, bs)
-    # all undecided variables
+    # all undecided variables ordered increasingly
     undecided_variables = setdiff(1:p.literal_num, decided_v)
     
     # he2v[i] represents the undecided literals in the i-th clause.
@@ -93,6 +93,11 @@ function _neighboring(he2v::Vector{Vector{Int}}, vs::Vector{Int})
     return vs, edges
 end
 
+"""
+    subhg(bip::BooleanInferenceProblem, bs::AbstractBranchingStatus)
+
+Extract the hyperedges with at least one undecided vertex.
+"""
 function subhg(bip::BooleanInferenceProblem, bs::AbstractBranchingStatus)
     # Extract decided vertices
     decided_v = [i for i in 1:bip.literal_num if readbit(bs.decided_mask, i) == 1]
