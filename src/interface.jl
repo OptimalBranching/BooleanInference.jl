@@ -35,8 +35,8 @@ function solve_factoring(n::Int, m::Int, N::Int; bsconfig::BranchingStrategy=Bra
     problem = CircuitSAT(res.circuit.circuit; use_constraints=true)
     ans, vals, stats = solve_sat_problem(problem; bsconfig, reducer)
     a, b = ProblemReductions.read_solution(fproblem, [vals[res.p]..., vals[res.q]...])
-    println("factoring result: $a × $b = $N")
-    println(stats)
+    # println("factoring result: $a × $b = $N")
+    # println(stats)
     return a, b, stats
 end
 
@@ -59,8 +59,8 @@ function solve_boolean_inference_problem(bip::BooleanInferenceProblem; bsconfig:
     stats = SearchStatistics()
     
     # Start search
-    satisfiable, final_bs, count_num = branch_and_reduce(bip, bs, bsconfig, reducer; stats=stats)
-    assignment = get_answer(final_bs, bip.literal_num)
+    result = branch_and_reduce(bip, bs, bsconfig, reducer; stats=stats)
+    assignment = get_answer(result.status, bip.literal_num)
     
-    return satisfiable, assignment, stats
+    return result.success, assignment, stats
 end

@@ -42,6 +42,7 @@ include("interface.jl")
 include("reducer.jl")
 include("selector.jl")
 include("tablesolver.jl")
+include("twosat.jl")
 include("branch.jl")
 
 end

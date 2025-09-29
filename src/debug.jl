@@ -72,6 +72,15 @@ DebugConfig(level::DebugLevel=DEBUG_OFF) = DebugConfig(level, true, false, false
 const DEBUG_CONFIG = Ref(DebugConfig())
 
 """
+    debug_enabled(level::DebugLevel) -> Bool
+
+Fast check for whether logging at `level` should be emitted.
+"""
+@inline function debug_enabled(level::DebugLevel)
+    return DEBUG_CONFIG[].level >= level
+end
+
+"""
     set_debug_level!(level::DebugLevel; show_depth=true, show_branching_status=false, show_statistics=false)
 
 Configure debug level and options.
@@ -83,24 +92,37 @@ end
 """
     debug_log(level::DebugLevel, message::String, depth::Int=0; prefix="")
 
-Print debug message if current debug level >= level.
+Eager logger variant used by the @dbg macro after level check.
 """
 function debug_log(level::DebugLevel, message::String, depth::Int=0; prefix="")
-    config = DEBUG_CONFIG[]
-    if config.level >= level
-        indent = config.show_depth ? "  "^depth : ""
+    if debug_enabled(level)
+        indent = DEBUG_CONFIG[].show_depth ? "  "^depth : ""
         full_prefix = isempty(prefix) ? "" : "[$prefix] "
-        if full_prefix == "[BRANCH] "
-            printstyled("$(indent)$(full_prefix)", color=:light_blue)
-        elseif full_prefix == "[SUCCESS] "
-            printstyled("$(indent)$(full_prefix)", color=:green)
-        elseif full_prefix == "[STATE] "
-            printstyled("$(indent)$(full_prefix)", color=:red)
-        else
-            printstyled("$(indent)$(full_prefix)", color=:white)
-        end
-        println("$(message)")
+        println("$(indent)$(full_prefix)$(message)")
     end
+end
+
+# """
+#     debug_log(level::DebugLevel, f::Function, depth::Int=0; prefix="")
+
+# Lazy logger version. The function `f` is only evaluated if logging at `level` is enabled.
+# """
+# function debug_log(level::DebugLevel, f::Function, depth::Int=0; prefix="")
+#     if debug_enabled(level)
+#         debug_log(level, f(), depth; prefix=prefix)
+#     end
+# end
+
+"""
+    @dbg level depth prefix msg
+
+Emit a debug log at compile-time guarded level. The `msg` expression
+is only evaluated when the current debug level is >= `level`.
+"""
+macro dbg(level, depth, prefix, msg)
+    return :( if debug_enabled($(esc(level)))
+                  debug_log($(esc(level)), $(esc(msg)), $(esc(depth)); prefix=$(esc(prefix)))
+              end )
 end
 
 """
@@ -116,7 +138,7 @@ function debug_branching_status(bs::AbstractBranchingStatus, problem::BooleanInf
         active_constraints = count(x -> x > 0, bs.undecided_literals)
         satisfied_constraints = count(x -> x == -1, bs.undecided_literals)
 
-        debug_log(DEBUG_DETAILED, "State: decided=$decided_count, undecided=$undecided_count", depth; prefix="STATE")
-        debug_log(DEBUG_DETAILED, "Constraints: active=$active_constraints, satisfied=$satisfied_constraints", depth; prefix="CONSTRAINTS")
+        @dbg DEBUG_DETAILED depth "STATE" "State: decided=$(decided_count), undecided=$(undecided_count)"
+        @dbg DEBUG_DETAILED depth "CONSTRAINTS" "Constraints: active=$(active_constraints), satisfied=$(satisfied_constraints)"
     end
 end
