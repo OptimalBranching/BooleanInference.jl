@@ -18,7 +18,7 @@ function main()
 	list_available_solvers(FactoringProblem)
 	
 	# Configure benchmark parameters
-	configs = [(10,10), (12,12)] 
+	configs = [(10,10), (12,12), (14,14), (16,16)] 
 	dataset_per_config = 5
 	
 	println("\nComparing BooleanInference vs IP Solver...")

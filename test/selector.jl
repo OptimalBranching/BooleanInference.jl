@@ -50,7 +50,7 @@ end
 @testset "KNeighborSelector,neighbor_subbip" begin
     @bools a b c d e f g
     cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c))
-    sat = SatisfiabilityHard(Satisfiability(cnf))
+    sat = Satisfiability(cnf; use_constraints=true)
     bip,syms = convert_sat_to_bip(sat)
     bs = initialize_branching_status(bip)
 

@@ -21,7 +21,7 @@ function solve_sat_problem(sat::ConstraintSatisfactionProblem; bsconfig::Branchi
     return solve_boolean_inference_problem(p; bsconfig, reducer)
 end
 
-function solve_factoring(n::Int, m::Int, N::Int; bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=KNeighborSelector(1,1), measure=NumOfVertices()), reducer=NoReducer())
+function solve_factoring(n::Int, m::Int, N::Int; bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=KNeighborSelector(2,1), measure=WeightedClauseArityMeasure()), reducer=NoReducer())
     # global BRANCHNUMBER = 0
     fproblem = Factoring(m, n, N)
     res = reduceto(CircuitSAT, fproblem)
