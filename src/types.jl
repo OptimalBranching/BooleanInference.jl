@@ -30,21 +30,18 @@ struct NumOfDegrees <: AbstractMeasure end
 OptimalBranchingCore.measure(bs::AbstractBranchingStatus, ::NumOfDegrees) = sum(x -> x > 0 ? x : 0, bs.undecided_literals)
 
 # Weighted measure: sum_i w_i * n_i, where n_i counts edges with i undecided vars.
-# Defaults: w0 = 0, w1 = 0, w2 = 0.596601, w3 = 0.928643, w_{i>=4} = 1
+# Defaults: w0 = 0, w1 = 0, w2 = 0, w3 = 1, w_{i>=4} = 1
 struct WeightedClauseArityMeasure <: AbstractMeasure
     w2::Float64
     w3::Float64
 end
 
-WeightedClauseArityMeasure() = WeightedClauseArityMeasure(0.596601, 0.928643)
+WeightedClauseArityMeasure() = WeightedClauseArityMeasure(0.0, 1.0)
 
 function OptimalBranchingCore.measure(bs::AbstractBranchingStatus, m::WeightedClauseArityMeasure)
     total = 0.0
     for cnt in bs.undecided_literals
-        if cnt <= 0
-            continue
-        elseif cnt == 1
-            # w1 = 0
+        if cnt <= 1
             continue
         elseif cnt == 2
             total += m.w2

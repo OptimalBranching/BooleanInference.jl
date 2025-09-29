@@ -22,13 +22,13 @@ function solve_sat_problem(sat::ConstraintSatisfactionProblem; bsconfig::Branchi
 end
 
 function solve_factoring(n::Int, m::Int, N::Int; bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=KNeighborSelector(2,1), measure=WeightedClauseArityMeasure()), reducer=NoReducer())
-    # global BRANCHNUMBER = 0
+    global BRANCHNUMBER = 0
     fproblem = Factoring(m, n, N)
     res = reduceto(CircuitSAT, fproblem)
     problem = CircuitSAT(res.circuit.circuit; use_constraints=true)
     ans, vals = solve_sat_problem(problem; bsconfig, reducer)
     a, b = ProblemReductions.read_solution(fproblem, [vals[res.p]..., vals[res.q]...])
-    # @show BRANCHNUMBER
+    @show BRANCHNUMBER
     return a,b
 end
 

@@ -15,3 +15,12 @@ using BooleanInference.OptimalBranchingCore: apply_branch, branch_and_reduce, Cl
 	@test bs.config == 4
 	@test bs.decided_mask == 6
 end
+
+@testset "num_of_2sat_clauses" begin
+	@bools a b c d e f g
+	cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c), ∨(¬a))
+	bip, syms = convert_cnf_to_bip(cnf)
+	bs = initialize_branching_status(bip)
+	@test BooleanInference.num_of_2sat_clauses(bs) == 2
+	@test BooleanInference.OptimalBranchingCore.measure(bs, WeightedClauseArityMeasure()) == 2
+end

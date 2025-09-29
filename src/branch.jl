@@ -14,7 +14,7 @@ function _add_implication!(g::Vector{Vector{Int}}, gr::Vector{Vector{Int}}, u::I
 end
 
 # Build 2-CNF from edges with ≤2 undecided vars and solve by SCC. If satisfiable, apply solution.
-function _try_2sat(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus)
+function _try_2sat(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, m::AbstractMeasure)
     # Only proceed if every active edge has ≤ 2 undecided variables
     for cnt in bs.undecided_literals
         if cnt > 2
@@ -143,7 +143,7 @@ function _try_2sat(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus
         end
     end
     # Final consistency check
-    stopped, res, _ = check_stopped(bs_new)
+    stopped, res, _ = check_stopped(bs_new, m)
     if stopped && res
         return true, bs_new, 1
     else
@@ -151,8 +151,12 @@ function _try_2sat(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus
     end
 end
 
+function num_of_2sat_clauses(bs::AbstractBranchingStatus)
+    return count(x -> x == 2, bs.undecided_literals)
+end
+
 # Try to finish by enumerating assignments for up to 2 undecided variables
-function _finish_with_up_to_two(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus)
+function _finish_with_up_to_two(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, m::AbstractMeasure)
     undecided_vars = [i for i in 1:problem.literal_num if readbit(bs.decided_mask, i) == 0]
     n = length(undecided_vars)
     if n == 0
@@ -162,7 +166,7 @@ function _finish_with_up_to_two(problem::BooleanInferenceProblem, bs::AbstractBr
     mask = (Int(1) << n) - 1
     for val in 0:(1 << n) - 1
         bs_try = OptimalBranchingCore.apply_branch(problem, bs, Clause(mask, val), undecided_vars)
-        stopped, res, _ = check_stopped(bs_try)
+        stopped, res, _ = check_stopped(bs_try, m)
         if stopped && res
             return true, bs_try, 1
         end
@@ -172,18 +176,18 @@ end
 
 function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, config::BranchingStrategy, reducer::AbstractReducer; depth::Int=0)
     # Determines if search should terminate
-    stopped, res, count_num = check_stopped(bs)
+    stopped, res, count_num = check_stopped(bs, config.measure)
     stopped && return res, bs, count_num
 
     # If there are at most two undecided variables globally, finish by enumeration (equivalent to reducing to 2-SAT)
-    done2, bs2, cnt2 = _finish_with_up_to_two(problem, bs)
+    done2, bs2, cnt2 = _finish_with_up_to_two(problem, bs, config.measure)
     if cnt2 > 0
         count_num += cnt2
     end
     done2 && return true, bs2, count_num
 
     # If every active edge has ≤ 2 undecided variables, reduce to 2-SAT and solve
-    done2sat, bs2sat, cnt2sat = _try_2sat(problem, bs)
+    done2sat, bs2sat, cnt2sat = _try_2sat(problem, bs, config.measure)
     if cnt2sat > 0
         count_num += cnt2sat
     end
@@ -198,7 +202,8 @@ function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem
 
     result = optimal_branching_rule(tbl, subbip.vs, bs, problem, config.measure, config.set_cover_solver)  # compute the optimal branching rule
     for branch in OptimalBranchingCore.get_clauses(result)
-        res, bs_new, count_num1 = branch_and_reduce(problem, apply_branch(problem, bs, branch, subbip.vs), config, reducer; depth=depth+1)
+        bs_new = apply_branch(problem, bs, branch, subbip.vs)
+        res, bs_new, count_num1 = branch_and_reduce(problem, bs_new, config, reducer; depth=depth+1)
         count_num += count_num1
         if res
             return res, bs_new, count_num
@@ -207,15 +212,15 @@ function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem
     return false, bs, count_num
 end
 
-function check_stopped(bs::AbstractBranchingStatus)
-    # global BRANCHNUMBER
+function check_stopped(bs::AbstractBranchingStatus, m::AbstractMeasure)
+    global BRANCHNUMBER
     # if there is no clause, then the problem is solved.
     if all(bs.undecided_literals .== -1)
-        # BRANCHNUMBER += 1
+        BRANCHNUMBER += 1
         return true, true, 1
     end
     if any(bs.undecided_literals .== 0)
-        # BRANCHNUMBER += 1
+        BRANCHNUMBER += 1
         return true, false, 1
     end
     return false, false, 0
