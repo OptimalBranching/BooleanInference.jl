@@ -18,30 +18,49 @@ end
 
 function solve_sat_problem(sat::ConstraintSatisfactionProblem; bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=KNeighborSelector(1,1), measure=NumOfVertices()), reducer=NoReducer())
     p, syms = convert_sat_to_bip(sat)
-    return solve_boolean_inference_problem(p; bsconfig, reducer)
+    satisfiable, assignment, stats = solve_boolean_inference_problem(p; bsconfig, reducer)
+    return satisfiable, assignment, stats
 end
 
+"""
+    solve_factoring(n::Int, m::Int, N::Int; bsconfig, reducer)
+
+Solve an integer factoring instance.
+
+Returns `(a, b, stats)` where `a * b = N`.
+"""
 function solve_factoring(n::Int, m::Int, N::Int; bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=KNeighborSelector(2,1), measure=WeightedClauseArityMeasure()), reducer=NoReducer())
-    global BRANCHNUMBER = 0
     fproblem = Factoring(m, n, N)
     res = reduceto(CircuitSAT, fproblem)
     problem = CircuitSAT(res.circuit.circuit; use_constraints=true)
-    ans, vals = solve_sat_problem(problem; bsconfig, reducer)
+    ans, vals, stats = solve_sat_problem(problem; bsconfig, reducer)
     a, b = ProblemReductions.read_solution(fproblem, [vals[res.p]..., vals[res.q]...])
-    @show BRANCHNUMBER
-    return a,b
+    println("factoring result: $a × $b = $N")
+    println(stats)
+    return a, b, stats
 end
 
 function solve_sat_with_assignments(sat::ConstraintSatisfactionProblem)
-    res, vals = solve_sat_problem(sat)
-    return res, Dict(zip(sat.symbols,vals))
+    satisfiable, assignment, stats = solve_sat_problem(sat)
+    return satisfiable, Dict(zip(sat.symbols, assignment)), stats
 end
 
+"""
+    solve_boolean_inference_problem(bip::BooleanInferenceProblem; bsconfig, reducer)
+
+Solve a Boolean inference problem.
+
+Returns `(satisfiable::Bool, assignment::Vector{Int}, stats::SearchStatistics)`.
+"""
 function solve_boolean_inference_problem(bip::BooleanInferenceProblem; bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=KNeighborSelector(1, 1), measure=NumOfVertices()), reducer=NoReducer())
-    # Initialize branching status
+    # Initialize branching status and statistics
     bs = initialize_branching_status(bip)
     bs = deduction_reduce(bip, bs, collect(1:length(bip.he2v)))
-    ns, res, count_num = branch_and_reduce(bip,bs, bsconfig, reducer)
-    answer = get_answer(res, bip.literal_num)
-    return ns, answer
+    stats = SearchStatistics()
+    
+    # Start search
+    satisfiable, final_bs, count_num = branch_and_reduce(bip, bs, bsconfig, reducer; stats=stats)
+    assignment = get_answer(final_bs, bip.literal_num)
+    
+    return satisfiable, assignment, stats
 end

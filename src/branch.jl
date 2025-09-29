@@ -14,7 +14,7 @@ function _add_implication!(g::Vector{Vector{Int}}, gr::Vector{Vector{Int}}, u::I
 end
 
 # Build 2-CNF from edges with ≤2 undecided vars and solve by SCC. If satisfiable, apply solution.
-function _try_2sat(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, m::AbstractMeasure)
+function _try_2sat(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, measure::AbstractMeasure, stats::SearchStatistics)
     # Only proceed if every active edge has ≤ 2 undecided variables
     for cnt in bs.undecided_literals
         if cnt > 2
@@ -142,8 +142,11 @@ function _try_2sat(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus
             bs_new = OptimalBranchingCore.apply_branch(problem, bs_new, Clause(1, bit), [v])
         end
     end
+    # Track successful 2-SAT application
+    increment_two_sat!(stats)
+    
     # Final consistency check
-    stopped, res, _ = check_stopped(bs_new, m)
+    stopped, res = check_stopped(bs_new, measure, stats)
     if stopped && res
         return true, bs_new, 1
     else
@@ -156,7 +159,7 @@ function num_of_2sat_clauses(bs::AbstractBranchingStatus)
 end
 
 # Try to finish by enumerating assignments for up to 2 undecided variables
-function _finish_with_up_to_two(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, m::AbstractMeasure)
+function _finish_with_up_to_two(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, m::AbstractMeasure, stats::SearchStatistics)
     undecided_vars = [i for i in 1:problem.literal_num if readbit(bs.decided_mask, i) == 0]
     n = length(undecided_vars)
     if n == 0
@@ -166,7 +169,7 @@ function _finish_with_up_to_two(problem::BooleanInferenceProblem, bs::AbstractBr
     mask = (Int(1) << n) - 1
     for val in 0:(1 << n) - 1
         bs_try = OptimalBranchingCore.apply_branch(problem, bs, Clause(mask, val), undecided_vars)
-        stopped, res, _ = check_stopped(bs_try, m)
+        stopped, res = check_stopped(bs_try, m, stats)
         if stopped && res
             return true, bs_try, 1
         end
@@ -174,56 +177,98 @@ function _finish_with_up_to_two(problem::BooleanInferenceProblem, bs::AbstractBr
     return false, bs, 1
 end
 
-function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, config::BranchingStrategy, reducer::AbstractReducer; depth::Int=0)
+function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, config::BranchingStrategy, reducer::AbstractReducer; depth::Int=0, stats::SearchStatistics=SearchStatistics())
+    # Track search depth
+    update_max_depth!(stats, depth)
+    increment_nodes!(stats)
+    
+    # Debug logging
+    debug_log(DEBUG_BASIC, "enter branch_and_reduce (depth: $depth)", depth; prefix="BRANCH")
+    debug_branching_status(bs, problem, depth)
+    
     # Determines if search should terminate
-    stopped, res, count_num = check_stopped(bs, config.measure)
-    stopped && return res, bs, count_num
-
-    # If there are at most two undecided variables globally, finish by enumeration (equivalent to reducing to 2-SAT)
-    done2, bs2, cnt2 = _finish_with_up_to_two(problem, bs, config.measure)
-    if cnt2 > 0
-        count_num += cnt2
+    stopped, res = check_stopped(bs, config.measure, stats)
+    if stopped 
+        debug_log(DEBUG_BASIC, "search stop: $(res ? "sat" : "unsat")", depth; prefix="RESULT")
+        return res, bs, 1
     end
-    done2 && return true, bs2, count_num
+
+    # If there are at most two undecided variables globally, finish by enumeration
+    debug_log(DEBUG_DETAILED, "try enumeration (≤2 vars)", depth; prefix="ENUM")
+    done2, bs2, cnt2 = _finish_with_up_to_two(problem, bs, config.measure, stats)
+    if done2 
+        debug_log(DEBUG_BASIC, "enumeration success", depth; prefix="ENUM")
+        return true, bs2, cnt2
+    end
 
     # If every active edge has ≤ 2 undecided variables, reduce to 2-SAT and solve
-    done2sat, bs2sat, cnt2sat = _try_2sat(problem, bs, config.measure)
-    if cnt2sat > 0
-        count_num += cnt2sat
+    debug_log(DEBUG_DETAILED, "try 2-SAT reduction", depth; prefix="2SAT")
+    done2sat, bs2sat, cnt2sat = _try_2sat(problem, bs, config.measure, stats)
+    if done2sat 
+        debug_log(DEBUG_BASIC, "2-SAT reduction success", depth; prefix="2SAT")
+        return true, bs2sat, cnt2sat
     end
-    done2sat && return true, bs2sat, count_num
 
-    # branch the problem
-    # select a subset of variables
+    # Branch the problem
+    debug_log(DEBUG_DETAILED, "start branching", depth; prefix="BRANCH")
+    
+    # Select a subset of variables
     subbip = select_variables(problem, bs, config.measure, config.selector)
-    # compute the BranchingTable
+    debug_log(DEBUG_VERBOSE, "selected vars: $(subbip.vs)", depth; prefix="VARS")
+    
+    # Compute the BranchingTable
     tbl = branching_table(problem, bs, config.table_solver, subbip)
-    iszero(tbl.bit_length) && return false, bs, 1
+    if iszero(tbl.bit_length)
+        debug_log(DEBUG_DETAILED, "empty branching table, backtrack", depth; prefix="BACKTRACK")
+        return false, bs, 1
+    end
 
-    result = optimal_branching_rule(tbl, subbip.vs, bs, problem, config.measure, config.set_cover_solver)  # compute the optimal branching rule
-    for branch in OptimalBranchingCore.get_clauses(result)
+    # Compute the optimal branching rule
+    result = optimal_branching_rule(tbl, subbip.vs, bs, problem, config.measure, config.set_cover_solver)
+    branches = OptimalBranchingCore.get_clauses(result)
+    debug_log(DEBUG_DETAILED, "generated $(length(branches)) branches", depth; prefix="BRANCH")
+    
+    total_count = 0
+    for (i, branch) in enumerate(branches)
+        increment_branches!(stats)
+        debug_log(DEBUG_VERBOSE, "try branch $i/$(length(branches)): $branch", depth; prefix="TRY")
         bs_new = apply_branch(problem, bs, branch, subbip.vs)
-        res, bs_new, count_num1 = branch_and_reduce(problem, bs_new, config, reducer; depth=depth+1)
-        count_num += count_num1
+        
+        res, bs_new, count_num1 = branch_and_reduce(problem, bs_new, config, reducer; depth=depth+1, stats=stats)
+        total_count += count_num1
+        
         if res
-            return res, bs_new, count_num
+            debug_log(DEBUG_BASIC, "branch $i leads to solution", depth; prefix="SUCCESS")
+            return res, bs_new, total_count
+        else
+            debug_log(DEBUG_VERBOSE, "branch $i failed", depth; prefix="FAIL")
         end
     end
-    return false, bs, count_num
+    
+    debug_log(DEBUG_BASIC, "all branches failed, backtrack", depth; prefix="BACKTRACK")
+    return false, bs, total_count
 end
 
-function check_stopped(bs::AbstractBranchingStatus, m::AbstractMeasure)
-    global BRANCHNUMBER
-    # if there is no clause, then the problem is solved.
+"""
+    check_stopped(bs::AbstractBranchingStatus, m::AbstractMeasure, stats::SearchStatistics)
+
+Check whether the search should stop.
+
+Returns (stopped::Bool, result::Bool) where result is true for satisfiable.
+"""
+function check_stopped(bs::AbstractBranchingStatus, m::AbstractMeasure, stats::SearchStatistics)
+    # all constraints satisfied
     if all(bs.undecided_literals .== -1)
-        BRANCHNUMBER += 1
-        return true, true, 1
+        increment_satisfiable!(stats)
+        return true, true
     end
+    # some constraint unsatisfied
     if any(bs.undecided_literals .== 0)
-        BRANCHNUMBER += 1
-        return true, false, 1
+        increment_unsatisfiable!(stats)
+        return true, false
     end
-    return false, false, 0
+    # continue
+    return false, false
 end
 
 
