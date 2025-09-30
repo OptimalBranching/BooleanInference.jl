@@ -15,12 +15,12 @@ function slice_tensor(tensor::AbstractVector, pos::Vector{Int}, pos_vals::Vector
 end
 
 function slice_tensor(tensor::AbstractVector, mask::LongLongUInt, config::LongLongUInt, he2vi::Vector{Int})
-	decided_v, decided_vals = lluint2vec(mask, config, he2vi)
+	decided_v, decided_vals = longlonguint_to_vec(mask, config, he2vi)
 	return slice_tensor(tensor, _vertex_in_edge(he2vi, decided_v), decided_vals .+ 1, length(he2vi))
 end
 
 
-function vec2tensor(vec::AbstractVector)
+function vec_to_tensor(vec::AbstractVector)
     return reshape(vec, fill(2, Int(log2(length(vec))))...)
 end
 
@@ -32,7 +32,7 @@ Convert a vector of indices into a bitmask of type `T`.
 function indices_to_mask(vec::Vector{Int}, ::Type{T}) where T
     return sum(i->T(1)<<(i-1), vec)
 end
-function lluint2vec(x::LongLongUInt, vals::LongLongUInt, vec::Vector{Int})
+function longlonguint_to_vec(x::LongLongUInt, vals::LongLongUInt, vec::Vector{Int})
     pos = Int[]
     pos_vals = Int[]
     for i in vec 

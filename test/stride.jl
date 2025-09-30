@@ -1,10 +1,10 @@
 using BooleanInference
 using Test
 
-@testset "vec2tensor" begin
+@testset "vec_to_tensor" begin
     a = rand(2,2,2,2)
     b = vec(a)
-    c = vec2tensor(b)
+    c = vec_to_tensor(b)
     @test a == c
 end
 
@@ -29,11 +29,11 @@ end
 @testset "indices_to_mask" begin
     a = LongLongUInt{1}(11)
     avals = LongLongUInt{1}(10)
-    b,bvals = lluint2vec(a,avals, [2,3,4])
+    b,bvals = longlonguint_to_vec(a,avals, [2,3,4])
     @test b == [2,4]
     @test bvals == [1,1]
 
-    c,cvals = lluint2vec(a,avals, [1,2,3,4,5])
+    c,cvals = longlonguint_to_vec(a,avals, [1,2,3,4,5])
     @test a == indices_to_mask(c, typeof(a))
     @test cvals == [0,1,1]
 end

@@ -17,8 +17,8 @@ function reduction_4(p::BooleanInferenceProblem, bs::AbstractBranchingStatus)
 		if undecided_literal_num == 1
 			edge = p.he2v[i]
 			undecided_literal = findfirst(x -> readbit(bs.decided_mask, x) == 0, edge)
-			bs.decided_mask = bs.decided_mask | LongLongUInt(1) << (undecided_literal - 1)
-			bs.config = bs.config & (~(LongLongUInt(1) << (undecided_literal - 1)))
+            bs.decided_mask = bs.decided_mask | LongLongUInt(1) << (undecided_literal - 1)
+            bs.config = bs.config & (~(LongLongUInt(1) << (undecided_literal - 1)))
 			bs.undecided_literals[i] = -1
 		end
 	end
@@ -35,7 +35,7 @@ function deduction_reduce(p::BooleanInferenceProblem, bs::AbstractBranchingStatu
 		isempty(reducing_queue) && break
 		# take the first edge from the reducing_queue
 		edge_idx = popfirst!(reducing_queue)
-		# if the edge is already satisfied, skip
+		# if the edge is already decided, skip
 		(bs.undecided_literals[edge_idx] <= 0) && continue
 		# check if the edge can be reduced
 		zerocount, sumpos = check_reduce(p.he2v[edge_idx], bs.decided_mask, bs.config, p.tensors[edge_idx])

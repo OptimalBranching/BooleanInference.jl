@@ -26,7 +26,7 @@ end
 function OptimalBranchingCore.select_variables(p::BooleanInferenceProblem, bs::AbstractBranchingStatus, m::M, selector::KaHyParSelector) where {M <: AbstractMeasure}
     # Extract hyperedges with at least one undecided vertex
     he2v, edge_list, decided_v = subhg(p, bs)
-    h = KaHyPar.HyperGraph(he2v2sparse(he2v))
+    h = KaHyPar.HyperGraph(hyperedge_to_sparse(he2v))
     imbalance = 1-2*selector.app_domain_size/p.literal_num
     @show imbalance
     parts = KaHyPar.partition(h, 2; configuration=:edge_cut, imbalance)
@@ -76,20 +76,41 @@ function OptimalBranchingCore.select_variables(p::BooleanInferenceProblem, bs::A
     return SubBIP{length(min_vs)}(min_vs, edge_list[min_edges], min_outside_vs_ind, gen_sub_tensor(p, bs, min_vs, min_edges, he2v, edge_list))
 end
 
-
 function k_neighboring(he2v::Vector{Vector{Int}}, vs, k::Int)
+    # Expand k-1 layers (only vertices needed)
     for _ in 1:k-1
         vs = first(_neighboring(he2v, vs))
     end
+    # Final expansion: get both vertices and edges
     vs, edges = _neighboring(he2v, vs)
 
-    outside_vs_ind = [ind for ind in 1:length(vs) if any([vs[ind] ∈ v for v in he2v[setdiff(1:length(he2v), edges)]])]
+    # Find boundary vertices: vertices in vs that also appear in hyperedges outside the selected edges
+    # Optimization: build a set of all vertices in outside hyperedges
+    edges_set = Set(edges)
+    outside_vertices = Set{Int}()
+    for (i, hyperedge) in enumerate(he2v)
+        if !(i in edges_set)
+            union!(outside_vertices, hyperedge)
+        end
+    end
+    
+    # Find indices of vs that are in outside_vertices
+    outside_vs_ind = [ind for ind in 1:length(vs) if vs[ind] in outside_vertices]
+    
     return vs, edges, outside_vs_ind
 end
+
 _neighboring(he2v::Vector{Vector{Int}}, vs::Int) = _neighboring(he2v, [vs])
+
 function _neighboring(he2v::Vector{Vector{Int}}, vs::Vector{Int})
-    edges = sort([i for i in 1:length(he2v) if !isempty(he2v[i] ∩ vs)])
-    vs = sort(reduce(∪, he2v[edges]))
+    vs_set = Set(vs)
+    edges = [i for i in 1:length(he2v) if !isempty(he2v[i] ∩ vs_set)]
+    # Collect all vertices from selected edges
+    new_vs = Set{Int}()
+    for e in edges
+        union!(new_vs, he2v[e])
+    end
+    vs = sort!(collect(new_vs))
     return vs, edges
 end
 
@@ -116,14 +137,14 @@ function gen_sub_tensor(
     eincode = EinCode(he2v[edges], vs)
     optcode = optimize_code(eincode, uniformsize(eincode, 2), GreedyMethod())
 
-    sub_tensors = optcode([vec2tensor(
+    sub_tensors = optcode([vec_to_tensor(
         slice_tensor(p.tensors[e], bs.decided_mask, bs.config, p.he2v[e])
     ) for e in edge_list[edges]]...)
 
     return sub_tensors
 end
 
-function he2v2sparse(he2v::Vector{Vector{Int}})
+function hyperedge_to_sparse(he2v::Vector{Vector{Int}})
     I = Int[]
     J = Int[]
     for i in 1:length(he2v)

@@ -16,7 +16,7 @@ using KaHyPar
 # status
 export BranchingStatus, initialize_branching_status
 # stride
-export get_tensor_number, slice_tensor, vec2tensor, indices_to_mask, lluint2vec
+export get_tensor_number, slice_tensor, vec_to_tensor, indices_to_mask, longlonguint_to_vec
 # types
 export BooleanInferenceProblem, BooleanResultBranchCount, NumOfVertices, NumOfClauses, NumOfDegrees, WeightedClauseArityMeasure
 # debug
