@@ -8,18 +8,18 @@ function _finish_with_up_to_two(problem::BooleanInferenceProblem, bs::AbstractBr
     undecided_vars = [i for i in 1:problem.literal_num if readbit(bs.decided_mask, i) == 0]
     n = length(undecided_vars)
     if n == 0
-        return BranchResult(true, bs, COUNT_UNIT)
+        return BranchResult(true, bs)
     end
-    n > 2 && return BranchResult(false, bs, COUNT_NONE)
+    n > 2 && return BranchResult(false, bs)
     mask = (Int(1) << n) - 1
     for val in 0:(1 << n) - 1
         bs_try = OptimalBranchingCore.apply_branch(problem, bs, Clause(mask, val), undecided_vars)
         stopped, res = check_stopped(bs_try, m, stats)
         if stopped && res
-            return BranchResult(true, bs_try, COUNT_UNIT)
+            return BranchResult(true, bs_try)
         end
     end
-    return BranchResult(false, bs, COUNT_UNIT)
+    return BranchResult(false, bs)
 end
 
 function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, config::BranchingStrategy, reducer::AbstractReducer; depth::Int=0, stats::SearchStatistics=SearchStatistics())
@@ -35,7 +35,7 @@ function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem
     stopped, res = check_stopped(bs, config.measure, stats)
     if stopped 
         @dbg DEBUG_BASIC depth "RESULT" (res ? "search stop: sat" : "search stop: unsat")
-        return BranchResult(res, bs, COUNT_UNIT)
+        return BranchResult(res, bs)
     end
 
     # If there are at most two undecided variables globally, finish by enumeration
@@ -63,7 +63,7 @@ function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem
     tbl = branching_table(problem, bs, config.table_solver, subbip)
     if iszero(tbl.bit_length)
         @dbg DEBUG_DETAILED depth "BACKTRACK" "empty branching table, backtrack"
-        return BranchResult(false, bs, COUNT_UNIT)
+        return BranchResult(false, bs)
     end
 
     # Compute the optimal branching rule
@@ -71,25 +71,23 @@ function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem
     branches = OptimalBranchingCore.get_clauses(result)
     @dbg DEBUG_DETAILED depth "BRANCH" "generated $(length(branches)) branches"
     
-    total_count = 0
     for (i, branch) in enumerate(branches)
         increment_branches!(stats)
         @dbg DEBUG_VERBOSE depth "TRY" "try branch $(i)/$(length(branches)): $(branch)"
         bs_new = apply_branch(problem, bs, branch, subbip.vs)
         
         branch_result = branch_and_reduce(problem, bs_new, config, reducer; depth=depth+1, stats=stats)
-        total_count += branch_result.count
         
         if branch_result.success
             @dbg DEBUG_BASIC depth "SUCCESS" "branch $(i) leads to solution"
-            return BranchResult(true, branch_result.status, total_count)
+            return branch_result
         else
             @dbg DEBUG_VERBOSE depth "FAIL" "branch $(i) failed"
         end
     end
     
     @dbg DEBUG_BASIC depth "BACKTRACK" "all branches failed, backtrack"
-    return BranchResult(false, bs, total_count)
+    return BranchResult(false, bs)
 end
 
 """

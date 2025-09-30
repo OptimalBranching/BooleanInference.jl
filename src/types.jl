@@ -28,31 +28,22 @@ BooleanInferenceProblem(tensor::Vector{Vector{Tropical{Float64}}}, he2v::Vector{
 Base.copy(problem::BooleanInferenceProblem) = BooleanInferenceProblem(copy(problem.tensors), copy(problem.he2v), copy(problem.v2he), problem.literal_num)
 
 """
-Named small-count constants used in return tuples for readability.
-"""
-const COUNT_NONE = 0
-const COUNT_UNIT = 1
-
-"""
     BranchResult
 
 Lightweight immutable container for branch-and-reduce function returns.
-Replaces (success::Bool, status::AbstractBranchingStatus, count::Int) tuples.
+Replaces (success::Bool, status::AbstractBranchingStatus) tuples.
 
 Fields:
 - `success::Bool`: whether the branch succeeded (satisfiable)
 - `status::AbstractBranchingStatus`: updated branching status
-- `count::Int`: step count for complexity analysis
 """
 struct BranchResult{T<:AbstractBranchingStatus}
     success::Bool
     status::T
-    count::Int
 end
 
 # Convenience constructors
-BranchResult(success::Bool, status::AbstractBranchingStatus) = BranchResult(success, status, COUNT_UNIT)
-BranchResult(status::AbstractBranchingStatus, count::Int) = BranchResult(true, status, count)
+BranchResult(status::AbstractBranchingStatus) = BranchResult(true, status)
 
 """
     NumOfVertices <: AbstractMeasure

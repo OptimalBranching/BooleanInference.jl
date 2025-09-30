@@ -13,7 +13,7 @@ function _try_2sat(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus
     # Only proceed if every active edge has ≤ 2 undecided variables
     for cnt in bs.undecided_literals
         if cnt > 2
-            return BranchResult(false, bs, COUNT_NONE)
+            return BranchResult(false, bs)
         end
     end
 
@@ -124,7 +124,7 @@ function _try_2sat(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus
         t = _lit_index(v, true)
         f = t ⊻ 1
         if comp[t] == comp[f]
-            return BranchResult(false, bs, COUNT_UNIT)  # unsat under 2-SAT abstraction
+            return BranchResult(false, bs)  # unsat under 2-SAT abstraction
         end
         assign[v] = (comp[t] > comp[f]) ? 1 : 0
     end
@@ -143,9 +143,9 @@ function _try_2sat(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus
     # Final consistency check
     stopped, res = check_stopped(bs_new, measure, stats)
     if stopped && res
-        return BranchResult(true, bs_new, COUNT_UNIT)
+        return BranchResult(true, bs_new)
     else
-        return BranchResult(false, bs, COUNT_UNIT)
+        return BranchResult(false, bs)
     end
 end
 
