@@ -118,12 +118,38 @@ end
     subhg(bip::BooleanInferenceProblem, bs::AbstractBranchingStatus)
 
 Extract the hyperedges with at least one undecided vertex.
+
+Returns:
+- `he2v_undecided`: Vector of hyperedges with decided vertices removed
+- `edge_list`: Indices of hyperedges with at least one undecided vertex
+- `decided_v`: List of decided vertices
 """
 function subhg(bip::BooleanInferenceProblem, bs::AbstractBranchingStatus)
-    # Extract decided vertices
-    decided_v = [i for i in 1:bip.literal_num if readbit(bs.decided_mask, i) == 1]
-    # Iterate over all hyperedges and collect the hyperedges that contain at least one undecided vertex
-    return [setdiff(bip.he2v[e], decided_v) for e in 1:length(bip.he2v) if bs.undecided_literals[e] > 0], [e for e in 1:length(bip.he2v) if bs.undecided_literals[e] > 0], decided_v
+    # Build decided vertices set for O(1) lookup
+    decided_set = Set{Int}()
+    for i in 1:bip.literal_num
+        if readbit(bs.decided_mask, i) == 1
+            push!(decided_set, i)
+        end
+    end
+    
+    # Single pass: collect undecided hyperedges and their indices
+    n_edges = length(bip.he2v)
+    he2v_undecided = Vector{Vector{Int}}()
+    edge_list = Vector{Int}()
+    
+    sizehint!(he2v_undecided, n_edges)  # Pre-allocate to reduce resizing
+    sizehint!(edge_list, n_edges)
+    
+    for e in 1:n_edges
+        if bs.undecided_literals[e] > 0
+            # Filter out decided vertices from this hyperedge
+            undecided_vertices = [v for v in bip.he2v[e] if v ∉ decided_set]
+            push!(he2v_undecided, undecided_vertices)
+            push!(edge_list, e)
+        end
+    end
+    return he2v_undecided, edge_list, collect(decided_set)
 end
 
 function gen_sub_tensor(

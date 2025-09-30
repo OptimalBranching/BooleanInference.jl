@@ -65,6 +65,7 @@ function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem
         @dbg DEBUG_DETAILED depth "BACKTRACK" "empty branching table, backtrack"
         return BranchResult(false, bs)
     end
+    @dbg DEBUG_DETAILED depth "TABLE" "region: $(length(subbip.vs)) vars, $(length(subbip.edges)) edges, $(length(subbip.outside_vs_ind)) boundary vars | table: 2^$(tbl.bit_length) = $(2^tbl.bit_length) configs"
 
     # Compute the optimal branching rule
     result = optimal_branching_rule(tbl, subbip.vs, bs, problem, config.measure, config.set_cover_solver)
@@ -73,8 +74,14 @@ function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem
     
     for (i, branch) in enumerate(branches)
         increment_branches!(stats)
-        @dbg DEBUG_VERBOSE depth "TRY" "try branch $(i)/$(length(branches)): $(branch)"
+        
+        # Apply branch and measure propagation
+        current_decided = count_ones(bs.decided_mask)
         bs_new = apply_branch(problem, bs, branch, subbip.vs)
+        propagated = count_ones(bs_new.decided_mask) - current_decided
+        active_after = count(x -> x > 0, bs_new.undecided_literals)
+        
+        @dbg DEBUG_VERBOSE depth "TRY" "branch $(i)/$(length(branches)): mask=$(count_ones(branch.mask)) vars → propagated $(propagated) total, $(active_after) constraints remain"
         
         branch_result = branch_and_reduce(problem, bs_new, config, reducer; depth=depth+1, stats=stats)
         
@@ -82,7 +89,7 @@ function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem
             @dbg DEBUG_BASIC depth "SUCCESS" "branch $(i) leads to solution"
             return branch_result
         else
-            @dbg DEBUG_VERBOSE depth "FAIL" "branch $(i) failed"
+            @dbg DEBUG_VERBOSE depth "FAIL" "branch $(i) failed, backtrack"
         end
     end
     

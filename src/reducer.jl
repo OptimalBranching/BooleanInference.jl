@@ -44,7 +44,7 @@ function deduction_reduce(p::BooleanInferenceProblem, bs::AbstractBranchingStatu
 		# using this unique way to make the edge satisfiable
 		bs, aedges = decide_literal(bs, p, p.he2v[edge_idx], Clause(2^length(p.he2v[edge_idx]) - 1, sumpos - 1))
 		# add the edges that have been changed to the reducing_queue again
-		reducing_queue = reducing_queue ∪ aedges
+		reducing_queue = append!(reducing_queue, aedges)
 	end
 	return bs
 end
