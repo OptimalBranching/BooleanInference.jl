@@ -32,7 +32,7 @@ The function uses the following key concepts:
 - **Internal variables**: Variables that only appear in clauses within the current subproblem  
 - **Tensor contraction**: Efficiently computes the feasibility of variable assignments using tropical arithmetic
 """
-function OptimalBranchingCore.branching_table(bip::BooleanInferenceProblem, bs::AbstractBranchingStatus, solver::TNContractionSolver, subbip::SubBIP)
+function branching_table(bip::BooleanInferenceProblem, bs::AbstractBranchingStatus, solver::TNContractionSolver, subbip::SubBIP)
 	out_vs_num = length(subbip.outside_vs_ind)
 	vs_num = length(subbip.vs)
 	

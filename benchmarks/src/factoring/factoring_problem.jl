@@ -129,17 +129,8 @@ function verify_solution(::Type{FactoringProblem}, instance, result)
         N = parse(Int, instance["N"])
         
         # Handle different result formats
-        if result isa Tuple && length(result) == 2
-            p, q = result
-        elseif result isa Dict
-            p = get(result, "p", nothing)
-            q = get(result, "q", nothing)
-            if p === nothing || q === nothing
-                return false
-            end
-        elseif hasfield(typeof(result), :p) && hasfield(typeof(result), :q)
-            p = result.p
-            q = result.q
+        if result isa Tuple && length(result) == 3
+            p, q, stats = result
         else
             @warn "Unknown result format: $(typeof(result))"
             return false

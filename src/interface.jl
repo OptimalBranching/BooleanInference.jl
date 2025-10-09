@@ -52,12 +52,12 @@ Solve a Boolean inference problem.
 
 Returns `(satisfiable::Bool, assignment::Vector{Int}, stats::SearchStatistics)`.
 """
-function solve_boolean_inference_problem(bip::BooleanInferenceProblem; bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=KNeighborSelector(1, 1), measure=NumOfVertices()), reducer=NoReducer())
+function solve_boolean_inference_problem(bip::BooleanInferenceProblem; bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=KNeighborSelector(2,1), measure=NumOfVertices()), reducer=NoReducer())
     # Initialize branching status and statistics
     bs = initialize_branching_status(bip)
     bs = deduction_reduce(bip, bs, collect(1:length(bip.he2v)))
     stats = SearchStatistics()
-    
+    @dbg DEBUG_BASIC 0 "INIT" "$(bip.literal_num) variables -> $(count_ones(bs.decided_mask)) decided"
     # Start search
     result = branch_and_reduce(bip, bs, bsconfig, reducer; stats=stats)
     assignment = get_answer(result.status, bip.literal_num)

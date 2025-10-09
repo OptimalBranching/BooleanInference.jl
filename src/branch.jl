@@ -1,4 +1,4 @@
-function OptimalBranchingCore.apply_branch(p::BooleanInferenceProblem, bs::AbstractBranchingStatus, clause::Clause{INT}, vertices::Vector{T}) where {INT<:Integer,T<:Integer}
+function apply_branch(p::BooleanInferenceProblem, bs::AbstractBranchingStatus, clause::Clause{INT}, vertices::Vector{T}) where {INT<:Integer,T<:Integer}
     bs_new, aedges = decide_literal(bs, p, vertices, clause)
     return deduction_reduce(p, bs_new, aedges)
 end
@@ -13,7 +13,7 @@ function _finish_with_up_to_two(problem::BooleanInferenceProblem, bs::AbstractBr
     n > 2 && return BranchResult(false, bs)
     mask = (Int(1) << n) - 1
     for val in 0:(1 << n) - 1
-        bs_try = OptimalBranchingCore.apply_branch(problem, bs, Clause(mask, val), undecided_vars)
+        bs_try = apply_branch(problem, bs, Clause(mask, val), undecided_vars)
         stopped, res = check_stopped(bs_try, m, stats)
         if stopped && res
             return BranchResult(true, bs_try)
@@ -22,7 +22,7 @@ function _finish_with_up_to_two(problem::BooleanInferenceProblem, bs::AbstractBr
     return BranchResult(false, bs)
 end
 
-function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, config::BranchingStrategy, reducer::AbstractReducer; depth::Int=0, stats::SearchStatistics=SearchStatistics())
+function branch_and_reduce(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, config::BranchingStrategy, reducer::AbstractReducer; depth::Int=0, stats::SearchStatistics=SearchStatistics())
     # Track search depth
     update_max_depth!(stats, depth)
     increment_nodes!(stats)
@@ -81,7 +81,7 @@ function OptimalBranchingCore.branch_and_reduce(problem::BooleanInferenceProblem
         propagated = count_ones(bs_new.decided_mask) - current_decided
         active_after = count(x -> x > 0, bs_new.undecided_literals)
         
-        @dbg DEBUG_VERBOSE depth "TRY" "branch $(i)/$(length(branches)): mask=$(count_ones(branch.mask)) vars → propagated $(propagated) total, $(active_after) constraints remain"
+        @dbg DEBUG_VERBOSE depth "TRY" "branch $(i)/$(length(branches)): mask=$(count_ones(branch.mask)) vars → propagated $(propagated) total, $(active_after) remain"
         
         branch_result = branch_and_reduce(problem, bs_new, config, reducer; depth=depth+1, stats=stats)
         
@@ -120,9 +120,9 @@ function check_stopped(bs::AbstractBranchingStatus, m::AbstractMeasure, stats::S
 end
 
 
-function OptimalBranchingCore.optimal_branching_rule(table::BranchingTable, variables::Vector, bs::AbstractBranchingStatus, p::BooleanInferenceProblem, m::AbstractMeasure, solver::AbstractSetCoverSolver)
+function optimal_branching_rule(table::BranchingTable, variables::Vector, bs::AbstractBranchingStatus, p::BooleanInferenceProblem, m::AbstractMeasure, solver::AbstractSetCoverSolver)
     candidates = OptimalBranchingCore.bit_clauses(table)
-    return OptimalBranchingCore.greedymerge(candidates, p, bs, variables, m)
+    return greedymerge(candidates, p, bs, variables, m)
 end
 
 """
@@ -152,7 +152,7 @@ and checking if the merged clause provides better complexity reduction.
 5. Accept the merge if it improves the overall complexity measure
 6. Update active clauses and continue until no more beneficial merges exist
 """
-function OptimalBranchingCore.greedymerge(cls::Vector{Vector{Clause{INT}}}, problem::AbstractProblem, bs::AbstractBranchingStatus, variables::Vector, m::AbstractMeasure) where {INT}
+function greedymerge(cls::Vector{Vector{Clause{INT}}}, problem::AbstractProblem, bs::AbstractBranchingStatus, variables::Vector, m::AbstractMeasure) where {INT}
     # Initialize active clause indices (all clauses start as active)
     active_set = Set{Int}(1:length(cls))
     cls = copy(cls)  # Create a copy to avoid modifying the original
@@ -234,6 +234,6 @@ function OptimalBranchingCore.greedymerge(cls::Vector{Vector{Clause{INT}}}, prob
     return [cls[k][1] for k in sort!(collect(active_set))]
 end
 
-function OptimalBranchingCore.size_reduction(p::AbstractProblem, m::AbstractMeasure, bs::AbstractBranchingStatus, cl::Clause{INT}, variables::Vector) where {INT}
+function size_reduction(p::AbstractProblem, m::AbstractMeasure, bs::AbstractBranchingStatus, cl::Clause{INT}, variables::Vector) where {INT}
     return measure(bs, m) - measure(apply_branch(p, bs, cl, variables), m)
 end

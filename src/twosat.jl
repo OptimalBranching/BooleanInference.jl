@@ -134,7 +134,7 @@ function _try_2sat(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus
     for v in 1:n
         if readbit(bs_new.decided_mask, v) == 0
             bit = assign[v]
-            bs_new = OptimalBranchingCore.apply_branch(problem, bs_new, Clause(1, bit), [v])
+            bs_new = apply_branch(problem, bs_new, Clause(1, bit), [v])
         end
     end
     # Track successful 2-SAT application

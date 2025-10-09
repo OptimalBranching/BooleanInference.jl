@@ -3,7 +3,7 @@ module BooleanInference
 using TropicalNumbers
 using SparseArrays
 using OptimalBranchingCore
-using OptimalBranchingCore: AbstractProblem, select_variables, apply_branch, reduce_problem, _vec2int, optimal_branching_rule, candidate_clauses
+using OptimalBranchingCore: AbstractProblem, select_variables, reduce_problem, _vec2int, candidate_clauses
 using OptimalBranchingCore.BitBasis
 using GenericTensorNetworks
 using GenericTensorNetworks.OMEinsum
@@ -29,7 +29,7 @@ export convert_cnf_to_bip, convert_circuit_to_bip, convert_sat_to_bip, solve_boo
 export NoReducer, decide_literal
 
 # selector
-export KNeighborSelector, neighboring, k_neighboring, subhg, Smallest2NeighborSelector, KaHyParSelector
+export KNeighborSelector, MultiStartKNeighborSelector, AdaptiveBoundarySelector, neighboring, k_neighboring, subhg, Smallest2NeighborSelector, KaHyParSelector
 
 # tablesolver
 export TNContractionSolver

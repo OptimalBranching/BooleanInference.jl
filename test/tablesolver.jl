@@ -2,7 +2,7 @@ using BooleanInference
 using Test
 using BooleanInference.GenericTensorNetworks
 using BooleanInference.GenericTensorNetworks: ∧, ∨, ¬
-using BooleanInference.OptimalBranchingCore: branching_table,select_variables
+using BooleanInference.OptimalBranchingCore: select_variables
 using BooleanInference.OptimalBranchingCore.BitBasis
 using BooleanInference:SubBIP
 
@@ -13,7 +13,7 @@ using BooleanInference:SubBIP
     bs = initialize_branching_status(bip)
 
     subbip = SubBIP(bip,bs,[1,2,3,4,5])
-    tbl = branching_table(bip, bs,BooleanInference.TNContractionSolver(), subbip)
+    tbl = BooleanInference.branching_table(bip, bs, BooleanInference.TNContractionSolver(), subbip)
 
     @test subbip.outside_vs_ind == [2,5]
     test_tag = true

@@ -8,14 +8,40 @@ end
 
 function SubBIP(p::BooleanInferenceProblem, bs::AbstractBranchingStatus, vs::Vector{Int})
     he2v, edge_list, decided_v = subhg(p, bs)
-    edges = sort([i for i in 1:length(he2v) if (he2v[i] ⊆ vs)])
-    outside_vs_ind = [v for v in vs if any(i -> !(i in edges) && (v in he2v[i]), 1:length(he2v))]
-    return SubBIP{length(vs)}(vs, edges, outside_vs_ind, gen_sub_tensor(p, bs, vs, edges, he2v, edge_list))
+    vs_set = Set(vs)
+    
+    # select edges that are completely contained in vs
+    edges = [i for i in 1:length(he2v) if (he2v[i] ⊆ vs_set)]
+    
+    # if no edge is completely contained in vs, expand vs until it contains at least one edge
+    if isempty(edges)
+        # find the edge with the largest intersection with vs
+        best_edge = argmax([length(he2v[i] ∩ vs_set) for i in 1:length(he2v)])
+        push!(edges, best_edge)
+        union!(vs_set, he2v[best_edge])
+    end
+    
+    # vs must be the union of the variables in the selected edges (gen_sub_tensor requires)
+    vs = sort!(collect(union([he2v[e] for e in edges]...)))
+    sort!(edges)
+    
+    # outside_vs_ind: indices of variables in vs that connect to external edges
+    outside_vertices = Set{Int}()
+    for e_idx in setdiff(1:length(he2v), edges)
+        for v in vs
+            if v in he2v[e_idx]
+                push!(outside_vertices, v)
+            end
+        end
+    end
+    outside_vs_ind = [ind for ind in 1:length(vs) if vs[ind] in outside_vertices]
+    
+    return SubBIP{length(vs)}(vs, edge_list[edges], outside_vs_ind, gen_sub_tensor(p, bs, vs, edges, he2v, edge_list))
 end
 
 struct KNeighborSelector <: AbstractSelector
     k::Int
-    initial_vertex_strategy::Int # 1: maximum, 2: minimum,3: minimum weight
+    initial_vertex_strategy::Int # 1: maximum, 2: minimum, 3: minimum weight
 end
 
 struct Smallest2NeighborSelector <: AbstractSelector end
@@ -24,12 +50,13 @@ struct KaHyParSelector <: AbstractSelector
 end
 
 function OptimalBranchingCore.select_variables(p::BooleanInferenceProblem, bs::AbstractBranchingStatus, m::M, selector::KaHyParSelector) where {M <: AbstractMeasure}
-    # Extract hyperedges with at least one undecided vertex
     he2v, edge_list, decided_v = subhg(p, bs)
     h = KaHyPar.HyperGraph(hyperedge_to_sparse(he2v))
+    # extract the hypergraph with at least one undecided vertex
     imbalance = 1-2*selector.app_domain_size/p.literal_num
-    @show imbalance
-    parts = KaHyPar.partition(h, 2; configuration=:edge_cut, imbalance)
+    parts = redirect_stdout(devnull) do
+        KaHyPar.partition(h, 2; configuration=:edge_cut, imbalance)
+    end
 
     zero_num = count(x-> x ≈ 0,parts)
     one_num = length(parts)-zero_num
@@ -39,7 +66,7 @@ function OptimalBranchingCore.select_variables(p::BooleanInferenceProblem, bs::A
 end
 
 function OptimalBranchingCore.select_variables(p::BooleanInferenceProblem, bs::AbstractBranchingStatus, m::M, selector::KNeighborSelector) where {M <: AbstractMeasure}
-    # Extract hyperedges with at least one undecided vertex
+    # extract the hypergraph with at least one undecided vertex
     he2v, edge_list, decided_v = subhg(p, bs)
     # all undecided variables ordered increasingly
     undecided_variables = setdiff(1:p.literal_num, decided_v)
