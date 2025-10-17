@@ -4,10 +4,10 @@ using BooleanInference: LeastOccurrenceSelector
 using ProblemReductions: Factoring, reduceto, CircuitSAT
 using GenericTensorNetworks
 using BooleanInference: setup_from_tensor_network, TNProblem, HopWorkspace, NumUnfixedVars
-using BooleanInference: get_cached_region, clear_region_cache!, clear_all_region_caches!
-using BooleanInference: VarId, TensorId
+using BooleanInference: get_cached_region, clear_region_cache!, clear_all_region_caches!, setup_from_cnf, k_neighboring
 using OptimalBranchingCore: select_variables
-using BenchmarkTools
+using BooleanInference.GenericTensorNetworks: ∧, ∨, ¬
+using BooleanInference.OptimalBranchingCore: select_variables, apply_branch, Clause
 
 function generate_example_problem(n::Int = 12)
     fproblem = Factoring(n, n, 6)
@@ -36,16 +36,16 @@ end
     select_variables(tn_problem, NumUnfixedVars(), selector)
 
     region = get_cached_region(tn_problem)
-    first_var = VarId(Int32(region.id))
-    should_involved_tensors = tn_static.v2t[first_var.id]
+    first_var = region.id
+    should_involved_tensors = tn_static.v2t[first_var]
     @test length(region.tensors) == length(should_involved_tensors)
     @test all(t in region.tensors for t in should_involved_tensors)
     @test length(region.inner_vars) == 1
     @test region.inner_vars[1] == first_var
-    boundary_vars = VarId[]
+    boundary_vars = Int[]
     for t in should_involved_tensors
-        for v in tn_static.t2v[t.id]
-            if v.var.id != first_var.id
+        for v in tn_static.t2v[t]
+            if v.var != first_var
                 push!(boundary_vars, v.var)
             end
         end
@@ -76,4 +76,17 @@ end
     clear_all_region_caches!()
     @test get_cached_region(tn_problem) == nothing
     @test get_cached_region(tn_problem2) == nothing
+end
+
+@testset "KNeighborSelector" begin
+    @bools a b c d e f g
+    cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c))
+    problem = setup_from_cnf(cnf)
+
+    vars = select_variables(problem, NumUnfixedVars(), LeastOccurrenceSelector(4))
+    @test vars == collect(1:7)
+
+    region = get_cached_region(problem)
+    @test region.tensors == collect(1:4)
+    @test region.boundary_vars == []
 end

@@ -7,7 +7,10 @@ function OptimalBranchingCore.branch_and_reduce(
     tag::Vector{Tuple{Int,Int}}=Tuple{Int,Int}[]
 ) where TR
     # Step 1: Check if problem is solved (all variables fixed)
-    is_solved(problem) && return one(result_type)
+    if is_solved(problem)
+        @debug "problem is solved"
+        return one(result_type)
+    end
     
     # Step 2: Try to reduce the problem
     @assert reducer isa NoReducer
@@ -45,9 +48,11 @@ function OptimalBranchingCore.branch_and_reduce(
     
     # Step 6: Branch and recurse
     clauses = OptimalBranchingCore.get_clauses(result)
+    @debug "A new branch-level search starts with $(length(clauses)) clauses: $(clauses)"
     
     return sum(enumerate(clauses)) do (i, branch)
         show_progress && (OptimalBranchingCore.print_sequence(stdout, tag); println(stdout))
+        @debug "branch=$branch, n_unfixed=$(problem.n_unfixed)"
         
         # Apply branch to get subproblem
         subproblem, local_value = OptimalBranchingCore.apply_branch(
@@ -56,8 +61,11 @@ function OptimalBranchingCore.branch_and_reduce(
             variables
         )
         
+        @debug "local_value=$local_value, n_unfixed=$(subproblem.n_unfixed)"
+        
         # If branch led to contradiction (UNSAT), skip this branch
         if local_value == 0 || subproblem.n_unfixed == 0 && any(dm -> dm.bits == 0x00, subproblem.doms)
+            @debug "Returning zero: local_value=$local_value, n_unfixed=$(subproblem.n_unfixed), has_contradiction=$(any(dm -> dm.bits == 0x00, subproblem.doms))"
             return zero(result_type)
         end
         
@@ -77,22 +85,22 @@ function OptimalBranchingCore.branch_and_reduce(
     end
 end
 
-# function OptimalBranchingCore.optimal_branching_rule(
-#     tbl::OptimalBranchingCore.BranchingTable,
-#     variables::Vector{T},
-#     problem::TNProblem,
-#     measure::OptimalBranchingCore.AbstractMeasure,
-#     solver::OptimalBranchingCore.AbstractSetCoverSolver
-# ) where T
-#     candidates = OptimalBranchingCore.bit_clauses(tbl)
-#     return OptimalBranchingCore.greedymerge(candidates, problem, variables, measure)
-# end
+function OptimalBranchingCore.optimal_branching_rule(
+    tbl::OptimalBranchingCore.BranchingTable,
+    variables::Vector{T},
+    problem::TNProblem,
+    measure::OptimalBranchingCore.AbstractMeasure,
+    solver::OptimalBranchingCore.AbstractSetCoverSolver
+) where T
+    candidates = OptimalBranchingCore.bit_clauses(tbl)
+    return OptimalBranchingCore.greedymerge(candidates, problem, variables, measure)
+end
 
 
 function OptimalBranchingCore.apply_branch(
     problem::TNProblem, 
     clause::OptimalBranchingCore.Clause{INT}, 
-    variables::Vector{Int32}
+    variables::Vector{Int}
 ) where {INT<:Integer}
     # Copy domain masks
     new_doms = copy(problem.doms)
@@ -105,36 +113,40 @@ function OptimalBranchingCore.apply_branch(
             bit_val = OptimalBranchingCore.readbit(clause.val, i)
             new_val = (bit_val == 1) ? DM_1 : DM_0
             
-            # Safety check: ensure we're actually fixing a variable
             if !is_fixed(problem.doms[var_id])
                 new_doms[var_id] = new_val
                 n_fixed += 1
-            elseif problem.doms[var_id] != new_val
-                # Contradiction: trying to fix to different value
-                # Return empty problem (will be detected as UNSAT)
-                return (TNProblem(problem.static, fill(DomainMask(0x00), length(problem.doms)), Int32(0), problem.ws), 0)
             end
         end
     end
+    
+    @debug "apply_branch: Fixed $n_fixed variables"
     
     # Safety check: must fix at least one variable to make progress
     # @assert n_fixed > 0 "Branch clause must fix at least one variable to avoid infinite loop"
 
     # Apply propagation (unit propagation)
-    propagated_doms = propagate!(problem.static, new_doms)
+    propagated_doms = propagate(problem.static, new_doms)
     
     # Check for contradiction (all domains set to 0x00)
     if any(dm -> dm.bits == 0x00, propagated_doms)
         # UNSAT: contradiction detected during propagation
-        return (TNProblem(problem.static, fill(DomainMask(0x00), length(propagated_doms)), Int32(0), problem.ws), 0)
+        @debug "apply_branch: Contradiction detected during propagation"
+        return (TNProblem(problem.static, fill(DomainMask(0x00), length(propagated_doms)), 0, problem.ws), 0)
     end
     
     # Count unfixed variables
     new_n_unfixed = count_unfixed(propagated_doms)
     
-    # Safety check: problem must have gotten smaller
-    if new_n_unfixed >= problem.n_unfixed 
-        return (TNProblem(problem.static, fill(DomainMask(0x00), length(propagated_doms)), Int32(0), problem.ws), 0)
+    @debug "apply_branch: n_unfixed: $(problem.n_unfixed) -> $new_n_unfixed"
+    
+    # Safety check: problem must have gotten smaller OR we fixed at least one variable
+    if new_n_unfixed > problem.n_unfixed
+        @debug "apply_branch: ERROR - unfixed count increased!"
+        return (TNProblem(problem.static, fill(DomainMask(0x00), length(propagated_doms)), 0, problem.ws), 0)
+    elseif new_n_unfixed == problem.n_unfixed && n_fixed == 0
+        @debug "apply_branch: No progress made (n_unfixed same and n_fixed=0)"
+        return (TNProblem(problem.static, fill(DomainMask(0x00), length(propagated_doms)), 0, problem.ws), 0)
     end
 
     # Create new problem with updated domains
@@ -162,7 +174,7 @@ end
 # TODO: Implement other reducers
 # function reduce_problem(::Type{T}, problem::TNProblem, reducer::UnitPropagationReducer) where T
 #     # Apply unit propagation
-#     new_doms, propagated = unit_propagate!(problem.static, problem.doms)
+#     new_doms, propagated = unit_propagate(problem.static, problem.doms)
 #     if propagated
 #         new_n_unfixed = count_unfixed(new_doms)
 #         new_problem = TNProblem(problem.static, new_doms, new_n_unfixed, problem.ws)

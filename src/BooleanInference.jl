@@ -37,7 +37,7 @@ export TNContractionSolver
 export @debug_problem, @debug_region
 
 include("refactor/problems.jl")
-include("refactor/region_cache.jl")
+include("refactor/region.jl")
 include("refactor/measure.jl")
 include("refactor/utils.jl")
 include("refactor/knn.jl")
@@ -46,6 +46,7 @@ include("refactor/contraction.jl")
 include("refactor/branchtable.jl")
 include("refactor/branch.jl")
 include("refactor/propagate.jl")
+include("refactor/interface.jl")
 
 
 # include("status.jl")

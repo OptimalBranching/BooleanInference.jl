@@ -2,11 +2,11 @@ function contract_region(tn::TNStatic, region::Region, doms::Vector{DomainMask})
     n_tensors = length(region.tensors)
     
     sliced_tensors = Vector{Vector{Tropical{Float64}}}(undef, n_tensors)
-    tensor_indices = Vector{Vector{Int32}}(undef, n_tensors)
+    tensor_indices = Vector{Vector{Int}}(undef, n_tensors)
     
     @inbounds for (i, tensor_id) in enumerate(region.tensors)
         # Get original tensor and its variable axes
-        original_tensor = tn.tensors[tensor_id.id]
+        original_tensor = tn.tensors[tensor_id]
         var_axes = original_tensor.var_axes
         tensor_data = original_tensor.tensor
         
@@ -16,10 +16,10 @@ function contract_region(tn::TNStatic, region::Region, doms::Vector{DomainMask})
         
         # Determine remaining (unfixed) variable indices
         # After slicing, only unfixed variables remain as indices
-        remaining_vars = Int32[]
+        remaining_vars = Int[]
         for var_id in var_axes
-            if !is_fixed(doms[var_id.id])
-                push!(remaining_vars, var_id.id)
+            if !is_fixed(doms[var_id])
+                push!(remaining_vars, var_id)
             end
         end
         tensor_indices[i] = remaining_vars
@@ -27,17 +27,17 @@ function contract_region(tn::TNStatic, region::Region, doms::Vector{DomainMask})
     
     # Output: only unfixed variables in the region
     # (fixed variables have already been sliced out)
-    output_vars = Int32[]
+    output_vars = Int[]
     
     # Collect unfixed variables
     for var_id in region.boundary_vars
-        if !is_fixed(doms[var_id.id])
-            push!(output_vars, var_id.id)
+        if !is_fixed(doms[var_id])
+            push!(output_vars, var_id)
         end
     end
     for var_id in region.inner_vars
-        if !is_fixed(doms[var_id.id])
-            push!(output_vars, var_id.id)
+        if !is_fixed(doms[var_id])
+            push!(output_vars, var_id)
         end
     end
     
@@ -45,36 +45,16 @@ function contract_region(tn::TNStatic, region::Region, doms::Vector{DomainMask})
     if isempty(output_vars)
         # Contract everything to a scalar
         # Use empty output indices
-        contracted = contract_tensors(sliced_tensors, tensor_indices, Int32[])
+        contracted = contract_tensors(sliced_tensors, tensor_indices, Int[])
         @assert length(contracted) == 1
-        return contracted, Int32[]
+        return contracted, Int[]
     else
         contracted = contract_tensors(sliced_tensors, tensor_indices, output_vars)
         return contracted, output_vars
     end
 end
 
-function contract_tensors(
-    tensors::Vector{Vector{T}}, 
-    ixs::Vector{Vector{Int32}}, 
-    iy::Vector{Int32}
-) where T
-    # Handle empty case
-    if isempty(tensors)
-        error("No tensors to contract")
-        # Return a scalar zero
-        # n_out = length(iy)
-        # dims = ntuple(_ -> 2, n_out)
-        # return fill(zero(T), dims)
-    end
-    
-    # Handle single tensor case (no contraction needed)
-    if length(tensors) == 1
-        @assert length(ixs) == 1
-        @assert Set(ixs[1]) == Set(iy)
-        return tensor_unwrapping(tensors[1])
-    end
-    
+function contract_tensors(tensors::Vector{Vector{T}}, ixs::Vector{Vector{Int}}, iy::Vector{Int}) where T
     eincode = EinCode(ixs, iy)
     optcode = optimize_code(eincode, uniformsize(eincode, 2), GreedyMethod())    
     unwrapped_tensors = [tensor_unwrapping(t) for t in tensors]
@@ -83,7 +63,7 @@ function contract_tensors(
 end
 
 
-function slicing(tensor::Vector{T}, doms::Vector{DomainMask}, axis_vars::Vector{VarId}) where T
+function slicing(tensor::Vector{T}, doms::Vector{DomainMask}, axis_vars::Vector{Int}) where T
     # Number of axes (Boolean => size 2 per axis)
     len = length(tensor)
     @assert len > 0
@@ -95,7 +75,7 @@ function slicing(tensor::Vector{T}, doms::Vector{DomainMask}, axis_vars::Vector{
     free_axes = Int[]
     
     for axis in 1:k
-        var_id = axis_vars[axis].id
+        var_id = axis_vars[axis]
         dom_mask = doms[var_id]
         if is_fixed(dom_mask)
             push!(fixed_axes, axis)

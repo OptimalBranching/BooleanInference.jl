@@ -1,8 +1,11 @@
 using Test
 using BooleanInference
 using TropicalNumbers
+using BooleanInference: setup_from_cnf, propagate, has1, is_fixed, has0,setup_from_circuit
+using ProblemReductions: @circuit, Assignment, BooleanExpr, Factoring, reduceto
+using GenericTensorNetworks
 
-@testset "propagate!" begin
+@testset "propagate" begin
     # Test 1: Simple AND gate (x1 ∧ x2 = 1)
     # Only one feasible config: (1, 1)
     T1 = one(Tropical{Float64})
@@ -29,7 +32,7 @@ using TropicalNumbers
         @test doms[2] == BooleanInference.DM_BOTH
         
         # After propagation, both should be fixed to 1
-        propagated = BooleanInference.propagate!(static, doms)
+        propagated = BooleanInference.propagate(static, doms)
         @test propagated[1] == BooleanInference.DM_1
         @test propagated[2] == BooleanInference.DM_1
     end
@@ -53,7 +56,7 @@ using TropicalNumbers
         doms = BooleanInference.init_doms(static)
         
         # No unit propagation should occur
-        propagated = BooleanInference.propagate!(static, doms)
+        propagated = BooleanInference.propagate(static, doms)
         @test propagated[1] == BooleanInference.DM_BOTH
         @test propagated[2] == BooleanInference.DM_BOTH
     end
@@ -79,7 +82,7 @@ using TropicalNumbers
         doms[1] = BooleanInference.DM_1
         
         # Propagation should fix x2 = 1
-        propagated = BooleanInference.propagate!(static, doms)
+        propagated = BooleanInference.propagate(static, doms)
         @test propagated[1] == BooleanInference.DM_1
         @test propagated[2] == BooleanInference.DM_1
     end
@@ -105,7 +108,7 @@ using TropicalNumbers
         doms[1] = BooleanInference.DM_0
         
         # Propagation should detect contradiction
-        propagated = BooleanInference.propagate!(static, doms)
+        propagated = BooleanInference.propagate(static, doms)
         @test all(d -> d.bits == 0x00, propagated)
     end
     
@@ -139,10 +142,33 @@ using TropicalNumbers
         doms[1] = BooleanInference.DM_1
         
         # Propagation should fix x2 = 1 and x3 = 1
-        propagated = BooleanInference.propagate!(static, doms)
+        propagated = BooleanInference.propagate(static, doms)
         @test propagated[1] == BooleanInference.DM_1
         @test propagated[2] == BooleanInference.DM_1
         @test propagated[3] == BooleanInference.DM_1
     end
 end
 
+@testset "reduce_problem" begin
+    @bools a b c d e f g
+    cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c), ∨(¬a))
+    problem = setup_from_cnf(cnf)
+    new_doms = propagate(problem.static, problem.doms)
+    @show new_doms[1]
+    @test has0(new_doms[1]) && is_fixed(new_doms[1]) == true
+    # TODO: undecided_literal has not been refactored yet
+
+    @bools x1 x2 x3 x4 x5
+    cnf = ∧(∨(x1), ∨(x2, ¬x3), ∨(x4, ¬x1), ∨(¬x3, ¬x4), ∨(x2, x5), ∨(x2, x5, ¬x3))
+    problem = setup_from_cnf(cnf)
+    new_doms = propagate(problem.static, problem.doms)
+    # TODO: undecided_literal has not been refactored yet
+
+    circuit = @circuit begin
+        c = x ∧ y
+    end
+    push!(circuit.exprs, Assignment([:c], BooleanExpr(true)))
+    problem = setup_from_circuit(circuit)
+    new_doms = propagate(problem.static, problem.doms)
+    @show new_doms
+end

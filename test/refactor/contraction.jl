@@ -1,7 +1,7 @@
 using Test
 using BooleanInference
 using BooleanInference: setup_from_tensor_network, TNProblem, HopWorkspace, setup_problem, select_variables, get_cached_region, LeastOccurrenceSelector, NumUnfixedVars
-using BooleanInference: Region, construct_region, slicing, tensor_unwrapping, VarId, TensorId, DomainMask
+using BooleanInference: Region, construct_region, slicing, tensor_unwrapping, DomainMask
 using BooleanInference: DM_BOTH, DM_0, DM_1, has0, has1, is_fixed
 using BooleanInference: contract_tensors, contract_region, TNContractionSolver
 using BooleanInference: separate_fixed_free_boundary, construct_boundary_config, construct_inner_config
@@ -12,10 +12,10 @@ using ProblemReductions: Factoring, reduceto, CircuitSAT
 using GenericTensorNetworks
 
 @testset "Region constructor" begin
-    region = Region(Int32(1), 
-                    TensorId[TensorId(Int32(1)), TensorId(Int32(2))],
-                    VarId[VarId(Int32(3)), VarId(Int32(4))],
-                    VarId[VarId(Int32(1)), VarId(Int32(2))])
+    region = Region(1, 
+                    [1, 2],
+                    [3, 4],
+                    [1, 2])
         
     @test region.id == 1
     @test length(region.tensors) == 2
@@ -57,7 +57,7 @@ end
     T1 = one(Tropical{Float64})
     T0 = zero(Tropical{Float64})
     tensor1d = [T1, T0]  # Allows x=0, forbids x=1
-    axis_vars = [VarId(Int32(1))]
+    axis_vars = [1]
     
     # Allow both values - shape unchanged
     doms_both = [DM_BOTH]
@@ -85,7 +85,7 @@ end
     T1 = one(Tropical{Float64})
     T0 = zero(Tropical{Float64})
     tensor2d = [T1, T1, T1, T0]  # (0,0), (1,0), (0,1), (1,1)
-    axis_vars = [VarId(Int32(1)), VarId(Int32(2))]
+    axis_vars = [1, 2]
     
     # Allow both variables to take both values - shape unchanged
     doms = [DM_BOTH, DM_BOTH]
@@ -122,7 +122,7 @@ end
     # Pattern: allow most, forbid some specific combinations
     # Index order: (x1,x2,x3) = (0,0,0), (1,0,0), (0,1,0), (1,1,0), (0,0,1), (1,0,1), (0,1,1), (1,1,1)
     tensor3d = [T1, T1, T0, T1, T1, T0, T1, T0]
-    axis_vars = [VarId(Int32(1)), VarId(Int32(2)), VarId(Int32(3))]
+    axis_vars = [1, 2, 3]
     
     # Allow all - shape unchanged
     doms = [DM_BOTH, DM_BOTH, DM_BOTH]
@@ -191,16 +191,16 @@ end
     tensor1 = AND_test()
     vector1 = vec(tensor1)
     DOMs = DomainMask[DM_BOTH, DM_BOTH, DM_0]
-    sliced_tensor1 = slicing(vector1, DOMs, [VarId(Int32(1)), VarId(Int32(2)), VarId(Int32(3))])
+    sliced_tensor1 = slicing(vector1, DOMs, [1, 2, 3])
     reshaped_tensor1 = tensor_unwrapping(sliced_tensor1)
 
     tensor2 = NOT_test()
     vector2 = vec(tensor2)
     DOMs = DomainMask[DM_BOTH, DM_BOTH]
-    sliced_tensor2 = slicing(vector2, DOMs, [VarId(Int32(1)), VarId(Int32(2))])
+    sliced_tensor2 = slicing(vector2, DOMs, [1, 2])
     @test size(sliced_tensor2) == size(vector2)
 
-    result = contract_tensors([sliced_tensor1, sliced_tensor2], Vector{Int32}[Int32[1,2], Int32[4,2]], Int32[1,2,4])
+    result = contract_tensors([sliced_tensor1, sliced_tensor2], Vector{Int}[Int[1,2], Int[4,2]], Int[1,2,4])
     @test result[2,2,1] == zero(Tropical{Float64})
 end
 
@@ -224,33 +224,33 @@ end
     @test contracted != nothing
     @test length(size(contracted)) == length(region.boundary_vars) + length(region.inner_vars)
 
-    table = branching_table(tn_problem, TNContractionSolver(), vcat([v.id for v in region.boundary_vars], [v.id for v in region.inner_vars]))
-    @show vcat([v.id for v in region.boundary_vars], [v.id for v in region.inner_vars])
+    table = branching_table(tn_problem, TNContractionSolver(), vcat([v for v in region.boundary_vars], [v for v in region.inner_vars]))
+    @show vcat([v for v in region.boundary_vars], [v for v in region.inner_vars])
     @show table
 end
 
 
 using BooleanInference: separate_fixed_free_boundary
 @testset "separate_fixed_free_boundary" begin
-    region = Region(Int32(1),
-                    TensorId[TensorId(Int32(1)), TensorId(Int32(2))],
-                    VarId[VarId(Int32(5)), VarId(Int32(6))],
-                    VarId[VarId(Int32(3)), VarId(Int32(4))])
+    region = Region(1,
+                    [1, 2],
+                    [5, 6],
+                    [3, 4])
     
     doms = fill(DM_BOTH, 10)
     fixed, fixed_vals, free, free_indices = separate_fixed_free_boundary(region, doms)
     @test isempty(fixed)
     @test isempty(fixed_vals)
     @test length(free) == 2
-    @test free == Int32[3, 4]
+    @test free == Int[3, 4]
     @test free_indices == [1, 2]
     
     doms[3] = DM_0
     doms[4] = DM_1
     fixed, fixed_vals, free, free_indices = separate_fixed_free_boundary(region, doms)
     @test length(fixed) == 2
-    @test fixed == Int32[3, 4]
-    @test fixed_vals == Int32[0, 1]
+    @test fixed == Int[3, 4]
+    @test fixed_vals == Int[0, 1]
     @test isempty(free)
     @test isempty(free_indices)
     
@@ -258,19 +258,19 @@ using BooleanInference: separate_fixed_free_boundary
     doms[4] = DM_BOTH
     fixed, fixed_vals, free, free_indices = separate_fixed_free_boundary(region, doms)
     @test length(fixed) == 1
-    @test fixed == Int32[3]
-    @test fixed_vals == Int32[0]
+    @test fixed == Int[3]
+    @test fixed_vals == Int[0]
     @test length(free) == 1
-    @test free == Int32[4]
+    @test free == Int[4]
     @test free_indices == [2]
 end
 
 using BooleanInference: construct_boundary_config
 @testset "construct_boundary_config" begin
-    region = Region(Int32(1),
-                    TensorId[TensorId(Int32(1))],
-                    VarId[VarId(Int32(5))],
-                    VarId[VarId(Int32(3)), VarId(Int32(4))])
+    region = Region(1,
+                    [1],
+                    [5],
+                    [3, 4])
     
     doms = fill(DM_BOTH, 10)
     free_boundary_indices = [1, 2]
@@ -322,13 +322,13 @@ end
 
 using BooleanInference: construct_inner_config
 @testset "construct_inner_config" begin
-    region = Region(Int32(1),
-                    TensorId[TensorId(Int32(1))],
-                    VarId[VarId(Int32(5)), VarId(Int32(6)), VarId(Int32(7))],
-                    VarId[VarId(Int32(3))])
+    region = Region(1,
+                    [1],
+                    [5, 6, 7],
+                    [3])
     
     doms = fill(DM_BOTH, 10)
-    inner_var_ids = Int32[5, 6, 7]
+    inner_var_ids = Int[5, 6, 7]
     free_inner_configs = [[false, false, false], [true, false, true]]
     
     inner_configs = construct_inner_config(region, doms, inner_var_ids, free_inner_configs)
@@ -337,7 +337,7 @@ using BooleanInference: construct_inner_config
     @test inner_configs[2] == [true, false, true]
     
     doms[5] = DM_1
-    inner_var_ids = Int32[6, 7]
+    inner_var_ids = Int[6, 7]
     free_inner_configs = [[false, false], [false, true]]
     
     inner_configs = construct_inner_config(region, doms, inner_var_ids, free_inner_configs)
@@ -346,7 +346,7 @@ using BooleanInference: construct_inner_config
     @test inner_configs[2] == [true, false, true]
     
     doms[6] = DM_0
-    inner_var_ids = Int32[7]
+    inner_var_ids = Int[7]
     free_inner_configs = [[false], [true]]
     
     inner_configs = construct_inner_config(region, doms, inner_var_ids, free_inner_configs)

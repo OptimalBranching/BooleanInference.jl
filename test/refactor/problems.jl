@@ -3,7 +3,6 @@ using BooleanInference
 using ProblemReductions: Factoring, reduceto, CircuitSAT
 using GenericTensorNetworks
 using BooleanInference: setup_from_tensor_network, TNProblem, HopWorkspace, setup_problem
-using BooleanInference: VarId, TensorId
 using TropicalNumbers: Tropical
 
 function generate_example_problem()
@@ -24,11 +23,11 @@ end
     @show problem
 end
 
-@testset "utils" begin
-    a = VarId(1)
-    @test a.id == 1
-    b = TensorId(1)
-    @test b.id == 1
+@testset "ids are just Int" begin
+    var_id = 1
+    @test var_id == 1
+    tensor_id = 1
+    @test tensor_id == 1
 end
 
 @testset "setup_problem" begin
@@ -56,9 +55,9 @@ end
     @test length(tn.t2v[1]) == 2
     @test length(tn.t2v[2]) == 1
     
-    @test haskey(tn.axis_of_t, (Int32(1), Int32(1)))
-    @test haskey(tn.axis_of_t, (Int32(1), Int32(2)))
-    @test haskey(tn.axis_of_t, (Int32(2), Int32(2)))
+    @test haskey(tn.axis_of_t, (1, 1))
+    @test haskey(tn.axis_of_t, (1, 2))
+    @test haskey(tn.axis_of_t, (2, 2))
 end
 
 @testset "setup_from_tensor_network" begin

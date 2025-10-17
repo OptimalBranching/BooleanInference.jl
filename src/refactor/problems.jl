@@ -1,39 +1,28 @@
-struct VarId ; id::Int32; end
-struct TensorId ; id::Int32; end
-# Base.Int(v::VarId) = Int(v.id)
-# Base.Int(f::TensorId) = Int(f.id)
-function Base.show(io::IO, vid::VarId)
-    print(io, "VarId($(vid.id))")
-end
-function Base.show(io::IO, tid::TensorId)
-    print(io, "TensorId($(tid.id))")
-end
-
 struct Variable 
-    id::VarId
-    dom_size::Int32
-    deg::Int32
+    id::Int
+    dom_size::Int
+    deg::Int
 end
 function Base.show(io::IO, v::Variable)
     print(io, "Variable($(v.id), dom_size=$(v.dom_size), deg=$(v.deg))")
 end
 
 struct EdgeRef
-    var::VarId
-    axis::Int16  # inside a factor
+    var::Int  # variable id
+    axis::Int  # inside a factor
 end
 function Base.show(io::IO, e::EdgeRef)
     print(io, "EdgeRef($(e.var), axis=$(e.axis))")
 end
 
 struct BoolTensor
-    id::TensorId
-    var_axes::Vector{VarId}
+    id::Int
+    var_axes::Vector{Int}
     tensor::Vector{Tropical{Float64}}
 end
 
 function Base.show(io::IO, f::BoolTensor)
-    print(io, "BoolTensor($(f.id), vars=[$(join([v.id for v in f.var_axes], ", "))], size=$(length(f.tensor)))")
+    print(io, "BoolTensor($(f.id), vars=[$(join(f.var_axes, ", "))], size=$(length(f.tensor)))")
 end
 
 # struct DenseTropicalTensor{T, N}
@@ -64,9 +53,9 @@ end
 struct TNStatic
     vars::Vector{Variable}
     tensors::Vector{BoolTensor}
-    v2t::Vector{Vector{TensorId}}
+    v2t::Vector{Vector{Int}}  # var id -> tensor ids
     t2v::Vector{Vector{EdgeRef}}
-    axis_of_t::Dict{Tuple{Int32,Int32},Int16}
+    axis_of_t::Dict{Tuple{Int,Int},Int}
 end
 
 function Base.show(io::IO, tn::TNStatic)
@@ -87,28 +76,28 @@ function setup_problem(var_num::Int,
                        tensor_data::Vector{Vector{Tropical{Float64}}})
     F = length(tensors_to_vars)
     tensors = Vector{BoolTensor}(undef, F)
-    vars_to_tensors = [TensorId[] for _ in 1:var_num]
+    vars_to_tensors = [Int[] for _ in 1:var_num]
     tensors_to_edges = [EdgeRef[] for _ in 1:F]
     for i in 1:F
-        var_axes = VarId.(Int32.(tensors_to_vars[i]))
+        var_axes = tensors_to_vars[i]
         @assert length(tensor_data[i]) == 1 << length(var_axes)  "Boolean tensor length mismatch"
-        tensors[i] = BoolTensor(TensorId(Int32(i)), var_axes, tensor_data[i])
+        tensors[i] = BoolTensor(i, var_axes, tensor_data[i])
         for (j, v) in enumerate(var_axes)
-            push!(vars_to_tensors[v.id], TensorId(Int32(i)))
-            push!(tensors_to_edges[i], EdgeRef(v, Int16(j)))
+            push!(vars_to_tensors[v], i)
+            push!(tensors_to_edges[i], EdgeRef(v, j))
         end
     end
 
-    axis_of_t = Dict{Tuple{Int32,Int32},Int16}()
+    axis_of_t = Dict{Tuple{Int,Int},Int}()
     for (fid, tensor) in enumerate(tensors)
         for (axis, vid) in enumerate(tensor.var_axes)
-            axis_of_t[(Int32(fid), vid.id)] = Int16(axis)
+            axis_of_t[(fid, vid)] = axis
         end
     end
 
     vars = Vector{Variable}(undef, var_num)
     for i in 1:var_num
-        vars[i] = Variable(VarId(Int32(i)), Int32(2), length(vars_to_tensors[i]))
+        vars[i] = Variable(i, 2, length(vars_to_tensors[i]))
     end
 
     return TNStatic(vars, tensors, vars_to_tensors, tensors_to_edges, axis_of_t)
@@ -138,26 +127,26 @@ function init_doms(static::TNStatic)
 end
 
 mutable struct HopWorkspace
-    epoch::Int32
-    visited_vars::Vector{Int32}
-    visited_tensors::Vector{Int32}
+    epoch::Int
+    visited_vars::Vector{Int}
+    visited_tensors::Vector{Int}
 
-    frontier::Vector{Int32}
-    next_frontier::Vector{Int32}
+    frontier::Vector{Int}
+    next_frontier::Vector{Int}
     
-    collected_vars::Vector{Int32}
-    collected_tensors::Vector{Int32}
+    collected_vars::Vector{Int}
+    collected_tensors::Vector{Int}
 end
 
 function HopWorkspace(var_num::Int, tensor_num::Int)
-    return HopWorkspace(Int32(1), fill(Int32(0), var_num), fill(Int32(0), tensor_num), Int32[], Int32[], Int32[], Int32[])
+    return HopWorkspace(1, fill(0, var_num), fill(0, tensor_num), Int[], Int[], Int[], Int[])
 end
 
 struct Region
-    id::Int32
-    tensors::Vector{TensorId}
-    inner_vars::Vector{VarId}
-    boundary_vars::Vector{VarId}
+    id::Int
+    tensors::Vector{Int}
+    inner_vars::Vector{Int}
+    boundary_vars::Vector{Int}
 end
 function Base.show(io::IO, region::Region)
     print(io, "Region(focus=$(region.id), tensors=$(length(region.tensors)), inner=$(length(region.inner_vars)), boundary=$(length(region.boundary_vars)))")
@@ -166,12 +155,12 @@ end
 struct TNProblem <: AbstractProblem
     static::TNStatic
     doms::Vector{DomainMask}
-    n_unfixed::Int32
+    n_unfixed::Int
     ws::HopWorkspace
 end
 function TNProblem(static::TNStatic)::TNProblem
     doms = init_doms(static)
-    n_unfixed = Int32(length(static.vars))
+    n_unfixed = length(static.vars)
     ws = HopWorkspace(length(static.vars), length(static.tensors))
     return TNProblem(static, doms, n_unfixed, ws)
 end

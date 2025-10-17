@@ -7,17 +7,17 @@ struct TNContractionSolver <: AbstractTableSolver end
 # =======================================================
 
 function separate_fixed_free_boundary(region::Region, doms::Vector{DomainMask})
-    fixed_vars = Int32[]
-    fixed_vals = Int32[]
-    free_vars = Int32[]
+    fixed_vars = Int[]
+    fixed_vals = Int[]
+    free_vars = Int[]
     free_indices = Int[]
     
     for (i, var_id) in enumerate(region.boundary_vars)
-        if is_fixed(doms[var_id.id])
-            push!(fixed_vars, var_id.id)
-            push!(fixed_vals, has1(doms[var_id.id]) ? Int32(1) : Int32(0))
+        if is_fixed(doms[var_id])
+            push!(fixed_vars, var_id)
+            push!(fixed_vals, has1(doms[var_id]) ? 1 : 0)
         else
-            push!(free_vars, var_id.id)
+            push!(free_vars, var_id)
             push!(free_indices, i)
         end
     end
@@ -26,20 +26,15 @@ function separate_fixed_free_boundary(region::Region, doms::Vector{DomainMask})
 end
 
 
-function construct_boundary_config(
-    region::Region, 
-    doms::Vector{DomainMask},
-    free_boundary_indices::Vector{Int},
-    free_config::Int
-)
+function construct_boundary_config(region::Region, doms::Vector{DomainMask}, free_boundary_indices::Vector{Int}, free_config::Int)
     n_boundary = length(region.boundary_vars)
     boundary_config = Vector{Bool}(undef, n_boundary)
     
     for i in 1:n_boundary
         var_id = region.boundary_vars[i]
-        if is_fixed(doms[var_id.id])
+        if is_fixed(doms[var_id])
             # Use the fixed value
-            boundary_config[i] = has1(doms[var_id.id])
+            boundary_config[i] = has1(doms[var_id])
         else
             # Use the enumerated value
             j = findfirst(==(i), free_boundary_indices)
@@ -51,12 +46,7 @@ function construct_boundary_config(
     return boundary_config
 end
 
-function construct_inner_config(
-    region::Region, 
-    doms::Vector{DomainMask},
-    inner_var_ids::Vector{Int32},
-    free_inner_configs::Vector{Vector{Bool}}
-)
+function construct_inner_config(region::Region, doms::Vector{DomainMask}, inner_var_ids::Vector{Int},free_inner_configs::Vector{Vector{Bool}})
     n_inner = length(region.inner_vars)
     n_config = length(free_inner_configs)
     inner_configs = Vector{Vector{Bool}}(undef, n_config)
@@ -64,7 +54,7 @@ function construct_inner_config(
     for config_idx in 1:n_config
         inner_config = Vector{Bool}(undef, n_inner)
         for i in 1:n_inner
-            var_id = region.inner_vars[i].id
+            var_id = region.inner_vars[i]
             if is_fixed(doms[var_id])
                 inner_config[i] = has1(doms[var_id])
             else
@@ -135,11 +125,9 @@ function OptimalBranchingCore.branching_table(
     solver::TNContractionSolver, 
     variables::Vector{T}
 ) where T
-    # Step 1: Get cached region
+    # Step 1: Get region
     region = get_cached_region(problem)
-    if isnothing(region)
-        error("No cached region found. Make sure `select_variables` is called first.")
-    end
+    isnothing(region) && error("No cached region found. Make sure `select_variables` is called first.")
     
     n_boundary = length(region.boundary_vars)
     n_inner = length(region.inner_vars)
@@ -147,9 +135,7 @@ function OptimalBranchingCore.branching_table(
     @assert n_total == length(variables)
     
     # Step 2: Handle special case - no boundary variables
-    if n_boundary == 0
-        return handle_no_boundary_case(problem, region)
-    end
+    n_boundary == 0 && return handle_no_boundary_case(problem, region)
     
     # Step 3: Separate fixed and free boundary variables
     _, _, free_boundary_vars, free_boundary_indices = 
@@ -177,13 +163,9 @@ function OptimalBranchingCore.branching_table(
         isempty(free_inner_configs) && continue
         
         # Construct full boundary configuration
-        boundary_config = construct_boundary_config(
-            region, problem.doms, free_boundary_indices, free_config
-        )
+        boundary_config = construct_boundary_config(region, problem.doms, free_boundary_indices, free_config)
 
-        inner_configs = construct_inner_config(
-             region, problem.doms, inner_var_ids, free_inner_configs
-        )
+        inner_configs = construct_inner_config(region, problem.doms, inner_var_ids, free_inner_configs)
          
         full_configs = combine_configs(boundary_config, inner_configs)
         
