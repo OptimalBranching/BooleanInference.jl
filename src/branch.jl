@@ -27,14 +27,11 @@ function branch_and_reduce(problem::BooleanInferenceProblem, bs::AbstractBranchi
     update_max_depth!(stats, depth)
     increment_nodes!(stats)
     
-    # Debug logging
-    @dbg DEBUG_BASIC depth "BRANCH" "enter branch_and_reduce (depth: $(depth))"
     debug_branching_status(bs, problem, depth)
     
     # Determines if search should terminate
     stopped, res = check_stopped(bs, config.measure, stats)
     if stopped 
-        @dbg DEBUG_BASIC depth "RESULT" (res ? "search stop: sat" : "search stop: unsat")
         return BranchResult(res, bs)
     end
 
@@ -45,32 +42,23 @@ function branch_and_reduce(problem::BooleanInferenceProblem, bs::AbstractBranchi
     end
 
     # If every active edge has ≤ 2 undecided variables, reduce to 2-SAT and solve
-    @dbg DEBUG_DETAILED depth "2SAT" "try 2-SAT reduction"
     result2sat = _try_2sat(problem, bs, config.measure, stats)
     if result2sat.success 
-        @dbg DEBUG_BASIC depth "2SAT" "2-SAT reduction success"
         return result2sat
     end
 
-    # Branch the problem
-    @dbg DEBUG_DETAILED depth "BRANCH" "start branching"
-    
     # Select a subset of variables
     subbip = select_variables(problem, bs, config.measure, config.selector)
-    @dbg DEBUG_VERBOSE depth "VARS" "selected vars: $(subbip.vs)"
     
     # Compute the BranchingTable
     tbl = branching_table(problem, bs, config.table_solver, subbip)
     if iszero(tbl.bit_length)
-        @dbg DEBUG_DETAILED depth "BACKTRACK" "empty branching table, backtrack"
         return BranchResult(false, bs)
     end
-    @dbg DEBUG_DETAILED depth "TABLE" "region: $(length(subbip.vs)) vars, $(length(subbip.edges)) edges, $(length(subbip.outside_vs_ind)) boundary vars | table: 2^$(tbl.bit_length) = $(2^tbl.bit_length) configs"
 
     # Compute the optimal branching rule
     result = optimal_branching_rule(tbl, subbip.vs, bs, problem, config.measure, config.set_cover_solver)
     branches = OptimalBranchingCore.get_clauses(result)
-    @dbg DEBUG_DETAILED depth "BRANCH" "generated $(length(branches)) branches"
     
     for (i, branch) in enumerate(branches)
         increment_branches!(stats)
@@ -81,19 +69,14 @@ function branch_and_reduce(problem::BooleanInferenceProblem, bs::AbstractBranchi
         propagated = count_ones(bs_new.decided_mask) - current_decided
         active_after = count(x -> x > 0, bs_new.undecided_literals)
         
-        @dbg DEBUG_VERBOSE depth "TRY" "branch $(i)/$(length(branches)): mask=$(count_ones(branch.mask)) vars → propagated $(propagated) total, $(active_after) remain"
-        
         branch_result = branch_and_reduce(problem, bs_new, config, reducer; depth=depth+1, stats=stats)
         
         if branch_result.success
-            @dbg DEBUG_BASIC depth "SUCCESS" "branch $(i) leads to solution"
             return branch_result
         else
-            @dbg DEBUG_VERBOSE depth "FAIL" "branch $(i) failed, backtrack"
         end
     end
     
-    @dbg DEBUG_BASIC depth "BACKTRACK" "all branches failed, backtrack"
     return BranchResult(false, bs)
 end
 

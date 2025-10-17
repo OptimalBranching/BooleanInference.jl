@@ -34,15 +34,29 @@ export KNeighborSelector, MultiStartKNeighborSelector, AdaptiveBoundarySelector,
 # tablesolver
 export TNContractionSolver
 
-include("status.jl")
-include("stride.jl")
-include("types.jl")
-include("debug.jl")
-include("interface.jl")
-include("reducer.jl")
-include("selector.jl")
-include("tablesolver.jl")
-include("twosat.jl")
-include("branch.jl")
+export @debug_problem, @debug_region
+
+include("refactor/problems.jl")
+include("refactor/region_cache.jl")
+include("refactor/measure.jl")
+include("refactor/utils.jl")
+include("refactor/knn.jl")
+include("refactor/selector.jl")
+include("refactor/contraction.jl")
+include("refactor/branchtable.jl")
+include("refactor/branch.jl")
+include("refactor/propagate.jl")
+
+
+# include("status.jl")
+# include("stride.jl")
+# include("types.jl")
+# include("debug.jl")
+# include("interface.jl")
+# include("reducer.jl")
+# include("selector.jl")
+# include("tablesolver.jl")
+# include("twosat.jl")
+# include("branch.jl")
 
 end

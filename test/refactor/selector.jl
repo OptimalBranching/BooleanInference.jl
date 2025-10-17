@@ -1,0 +1,79 @@
+using Test
+using BooleanInference
+using BooleanInference: LeastOccurrenceSelector
+using ProblemReductions: Factoring, reduceto, CircuitSAT
+using GenericTensorNetworks
+using BooleanInference: setup_from_tensor_network, TNProblem, HopWorkspace, NumUnfixedVars
+using BooleanInference: get_cached_region, clear_region_cache!, clear_all_region_caches!
+using BooleanInference: VarId, TensorId
+using OptimalBranchingCore: select_variables
+using BenchmarkTools
+
+function generate_example_problem(n::Int = 12)
+    fproblem = Factoring(n, n, 6)
+    res = reduceto(CircuitSAT, fproblem)
+    problem = CircuitSAT(res.circuit.circuit; use_constraints=true)
+    return problem
+end
+
+@testset "LeastOccurrenceSelector" begin
+    selector = LeastOccurrenceSelector(1)
+    @test selector.k == 1
+    @test selector.max_vars == 100
+    @test selector.max_tensors == 100
+    selector = LeastOccurrenceSelector(2, 20, 20)
+    @test selector.k == 2
+    @test selector.max_vars == 20
+    @test selector.max_tensors == 20
+end
+
+@testset "select_variables" begin
+    problem = generate_example_problem()
+    tn = GenericTensorNetwork(problem)
+    tn_static = setup_from_tensor_network(tn)
+    tn_problem = TNProblem(tn_static)
+    selector = LeastOccurrenceSelector(1)
+    select_variables(tn_problem, NumUnfixedVars(), selector)
+
+    region = get_cached_region(tn_problem)
+    first_var = VarId(Int32(region.id))
+    should_involved_tensors = tn_static.v2t[first_var.id]
+    @test length(region.tensors) == length(should_involved_tensors)
+    @test all(t in region.tensors for t in should_involved_tensors)
+    @test length(region.inner_vars) == 1
+    @test region.inner_vars[1] == first_var
+    boundary_vars = VarId[]
+    for t in should_involved_tensors
+        for v in tn_static.t2v[t.id]
+            if v.var.id != first_var.id
+                push!(boundary_vars, v.var)
+            end
+        end
+    end
+    @test length(region.boundary_vars) == length(boundary_vars)
+    @test all(v in region.boundary_vars for v in boundary_vars)
+end
+
+@testset "clear_region_cache!" begin
+    problem = generate_example_problem()
+    tn = GenericTensorNetwork(problem)
+    tn_static = setup_from_tensor_network(tn)
+    tn_problem = TNProblem(tn_static)
+    @test get_cached_region(tn_problem) == nothing
+    select_variables(tn_problem, NumUnfixedVars(), LeastOccurrenceSelector(1))
+    @test get_cached_region(tn_problem) != nothing
+    
+    problem2 = generate_example_problem()
+    tn2 = GenericTensorNetwork(problem2)
+    tn_static2 = setup_from_tensor_network(tn2)
+    tn_problem2 = TNProblem(tn_static2)
+    @test get_cached_region(tn_problem2) == nothing
+    select_variables(tn_problem2, NumUnfixedVars(), LeastOccurrenceSelector(1))
+    @test get_cached_region(tn_problem2) != nothing
+
+    clear_region_cache!(tn_problem)
+    @test get_cached_region(tn_problem) == nothing
+    clear_all_region_caches!()
+    @test get_cached_region(tn_problem) == nothing
+    @test get_cached_region(tn_problem2) == nothing
+end

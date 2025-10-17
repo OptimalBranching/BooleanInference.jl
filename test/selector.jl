@@ -12,6 +12,7 @@ using BooleanInference.OptimalBranchingCore: select_variables,apply_branch,Claus
     bs = initialize_branching_status(bip)
     bsnew = BooleanInference.deduction_reduce(bip, bs, collect(1:5))
     subhe2v,elist = subhg(bip,bsnew)
+    
 
     @test subhe2v == [[2, 3, 4],[5, 6],[2, 7]]
     @test elist == [1,3,4]
