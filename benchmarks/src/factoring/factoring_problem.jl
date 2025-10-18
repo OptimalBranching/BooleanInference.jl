@@ -129,8 +129,8 @@ function verify_solution(::Type{FactoringProblem}, instance, result)
         N = parse(Int, instance["N"])
         
         # Handle different result formats
-        if result isa Tuple && length(result) == 3
-            p, q, stats = result
+        if result isa Tuple && length(result) == 2
+            p, q = result
         else
             @warn "Unknown result format: $(typeof(result))"
             return false

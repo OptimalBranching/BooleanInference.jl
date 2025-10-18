@@ -1,71 +1,90 @@
-using BooleanInference
 using Test
-using BooleanInference.ProblemReductions
-using BooleanInference.GenericTensorNetworks
+using BooleanInference
+using BooleanInference: LeastOccurrenceSelector
+using ProblemReductions: Factoring, reduceto, CircuitSAT
+using GenericTensorNetworks
+using BooleanInference: setup_from_tensor_network, TNProblem, DynamicWorkspace, NumUnfixedVars
+using BooleanInference: get_cached_region, clear_region_cache!, clear_all_region_caches!, setup_from_cnf, k_neighboring
+using OptimalBranchingCore: select_variables
 using BooleanInference.GenericTensorNetworks: ∧, ∨, ¬
-using BooleanInference.OptimalBranchingCore: select_variables,apply_branch,Clause
+using BooleanInference.OptimalBranchingCore: select_variables, apply_branch, Clause
 
-@testset "subhg" begin
-    @bools a b c d e f g
-	cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c), ∨(¬a))
-	bip, syms = convert_cnf_to_bip(cnf)
-    bs = initialize_branching_status(bip)
-    bsnew = BooleanInference.deduction_reduce(bip, bs, collect(1:5))
-    subhe2v,elist = subhg(bip,bsnew)
+function generate_example_problem(n::Int = 12)
+    fproblem = Factoring(n, n, 6)
+    res = reduceto(CircuitSAT, fproblem)
+    problem = CircuitSAT(res.circuit.circuit; use_constraints=true)
+    return problem
+end
+
+@testset "LeastOccurrenceSelector" begin
+    selector = LeastOccurrenceSelector(1)
+    @test selector.k == 1
+    @test selector.max_tensors == 10
+    selector = LeastOccurrenceSelector(2, 20)
+    @test selector.k == 2
+    @test selector.max_tensors == 20
+end
+
+@testset "select_variables" begin
+    problem = generate_example_problem()
+    tn = GenericTensorNetwork(problem)
+    tn_static = setup_from_tensor_network(tn)
+    tn_problem = TNProblem(tn_static)
+    selector = LeastOccurrenceSelector(1)
+    select_variables(tn_problem, NumUnfixedVars(), selector)
+
+    region = get_cached_region(tn_problem)
+    first_var = region.id
+    should_involved_tensors = tn_static.v2t[first_var]
+    @test length(region.tensors) == length(should_involved_tensors)
+    @test all(t in region.tensors for t in should_involved_tensors)
+    @test length(region.inner_vars) == 1
+    @test region.inner_vars[1] == first_var
+    boundary_vars = Int[]
+    for t in should_involved_tensors
+        for v in tn_static.t2v[t]
+            if v.var != first_var
+                push!(boundary_vars, v.var)
+            end
+        end
+    end
+    @test length(region.boundary_vars) == length(boundary_vars)
+    @test all(v in region.boundary_vars for v in boundary_vars)
+end
+
+@testset "clear_region_cache!" begin
+    problem = generate_example_problem()
+    tn = GenericTensorNetwork(problem)
+    tn_static = setup_from_tensor_network(tn)
+    tn_problem = TNProblem(tn_static)
+    @test get_cached_region(tn_problem) == nothing
+    select_variables(tn_problem, NumUnfixedVars(), LeastOccurrenceSelector(1))
+    @test get_cached_region(tn_problem) != nothing
     
+    problem2 = generate_example_problem()
+    tn2 = GenericTensorNetwork(problem2)
+    tn_static2 = setup_from_tensor_network(tn2)
+    tn_problem2 = TNProblem(tn_static2)
+    @test get_cached_region(tn_problem2) == nothing
+    select_variables(tn_problem2, NumUnfixedVars(), LeastOccurrenceSelector(1))
+    @test get_cached_region(tn_problem2) != nothing
 
-    @test subhe2v == [[2, 3, 4],[5, 6],[2, 7]]
-    @test elist == [1,3,4]
+    clear_region_cache!(tn_problem)
+    @test get_cached_region(tn_problem) == nothing
+    clear_all_region_caches!()
+    @test get_cached_region(tn_problem) == nothing
+    @test get_cached_region(tn_problem2) == nothing
 end
 
-@testset "_neighboring" begin
-    @bools a b c d e
-    cnf = ∧(∨(b), ∨(a,¬c), ∨(d,¬b), ∨(¬c,¬d), ∨(a,e), ∨(a,e,¬c))
-    bip,syms = convert_cnf_to_bip(cnf)
-
-    subbip,edges = BooleanInference._neighboring(bip.he2v,1)
-    @test subbip == [1, 4]
-    @test edges == [1, 3]
-
-    subbip, edges = BooleanInference._neighboring(bip.he2v,2)
-    @test subbip == [2, 3, 5]
-    @test edges == [2, 5, 6]
-end
-
-@testset "k_neighboring" begin
-    @bools a b c d e
-    cnf = ∧(∨(b), ∨(a,¬c), ∨(d,¬b), ∨(¬c,¬d), ∨(a,e), ∨(a,e,¬c))
-    bip,syms = convert_cnf_to_bip(cnf)
-
-    subbip, edges, outside_vs_ind = k_neighboring(bip.he2v,1,2)
-    @test subbip == [1, 3, 4]
-    @test edges == [1, 3, 4]
-    @test outside_vs_ind == [2]
-
-    subbip, edges, outside_vs_ind = k_neighboring(bip.he2v,2,2)
-    @test subbip == [2, 3, 4, 5]
-    @test edges == [2, 4, 5, 6]
-    @test outside_vs_ind == [3]
-end
-
-@testset "KNeighborSelector,neighbor_subbip" begin
+@testset "KNeighborSelector" begin
     @bools a b c d e f g
     cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c))
-    sat = Satisfiability(cnf; use_constraints=true)
-    bip,syms = convert_sat_to_bip(sat)
-    bs = initialize_branching_status(bip)
+    problem = setup_from_cnf(cnf)
 
-    subbip = select_variables(bip,bs, BooleanInference.NumOfVertices(),KNeighborSelector(4,3))
-    @test subbip.vs == collect(1:7)
-    @test subbip.edges == collect(1:4)
-    @test subbip.outside_vs_ind == []
-end
+    vars = select_variables(problem, NumUnfixedVars(), LeastOccurrenceSelector(4))
+    @test vars == collect(1:7)
 
-@testset "KaHyParSelector" begin
-    fproblem = Factoring(8, 8, 251*249)
-    res = reduceto(CircuitSAT,fproblem)
-    circuit = CircuitSAT(res.circuit.circuit; use_constraints=true)
-    bip,syms = convert_sat_to_bip(circuit)
-    bs = initialize_branching_status(bip)
-    subbip = select_variables(bip,bs, BooleanInference.NumOfVertices(),KaHyParSelector(10))
+    region = get_cached_region(problem)
+    @test region.tensors == collect(1:4)
+    @test region.boundary_vars == []
 end

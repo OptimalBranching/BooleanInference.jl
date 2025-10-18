@@ -1,222 +1,164 @@
-function apply_branch(p::BooleanInferenceProblem, bs::AbstractBranchingStatus, clause::Clause{INT}, vertices::Vector{T}) where {INT<:Integer,T<:Integer}
-    bs_new, aedges = decide_literal(bs, p, vertices, clause)
-    return deduction_reduce(p, bs_new, aedges)
-end
-
-# Try to finish by enumerating assignments for up to 2 undecided variables
-function _finish_with_up_to_two(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, m::AbstractMeasure, stats::SearchStatistics)
-    undecided_vars = [i for i in 1:problem.literal_num if readbit(bs.decided_mask, i) == 0]
-    n = length(undecided_vars)
-    if n == 0
-        return BranchResult(true, bs)
+function OptimalBranchingCore.branch_and_reduce(
+    problem::TNProblem,
+    config::OptimalBranchingCore.BranchingStrategy,
+    reducer::OptimalBranchingCore.AbstractReducer,
+    result_type::Type{TR};
+    show_progress::Bool=false,
+    tag::Vector{Tuple{Int,Int}}=Tuple{Int,Int}[]
+) where TR
+    # Step 1: Check if problem is solved (all variables fixed)
+    if is_solved(problem)
+        @debug "problem is solved"
+        cache_branch_solution!(problem)
+        return one(result_type)
     end
-    n > 2 && return BranchResult(false, bs)
-    mask = (Int(1) << n) - 1
-    for val in 0:(1 << n) - 1
-        bs_try = apply_branch(problem, bs, Clause(mask, val), undecided_vars)
-        stopped, res = check_stopped(bs_try, m, stats)
-        if stopped && res
-            return BranchResult(true, bs_try)
+        
+    # Step 2: Try to reduce the problem
+    @assert reducer isa NoReducer
+    # reduced_problem, reduced_value = reduce_problem(result_type, problem, reducer)
+    # if reduced_problem !== problem
+    #     # Problem was reduced, recurse on reduced problem
+    #     return branch_and_reduce(
+    #         reduced_problem, config, reducer, result_type;
+    #         tag=tag, show_progress=show_progress
+    #     ) * reduced_value
+    # end
+    
+    # Step 3: Select variables for branching
+    variables = OptimalBranchingCore.select_variables(
+        problem, 
+        config.measure, 
+        config.selector
+    )
+    
+    # Step 4: Compute branching table
+    tbl = OptimalBranchingCore.branching_table(problem, config.table_solver, variables)
+    # Step 5: Compute optimal branching rule
+    result = OptimalBranchingCore.optimal_branching_rule(tbl, variables, problem, config.measure, config.set_cover_solver)
+
+    # @show result.γ
+    
+    # Step 6: Branch and recurse
+    clauses = OptimalBranchingCore.get_clauses(result)
+    @debug "A new branch-level search starts with $(length(clauses)) clauses: $(clauses)"
+    
+    return sum(enumerate(clauses)) do (i, branch)
+        show_progress && (OptimalBranchingCore.print_sequence(stdout, tag); println(stdout))
+        @debug "branch=$branch, n_unfixed=$(problem.n_unfixed)"
+        
+        # Apply branch to get subproblem
+        subproblem, local_value = OptimalBranchingCore.apply_branch(problem, branch, variables)
+        
+        @debug "local_value=$local_value, n_unfixed=$(subproblem.n_unfixed)"
+        
+        # If branch led to contradiction (UNSAT), skip this branch
+        if local_value == 0 || subproblem.n_unfixed == 0 && any(dm -> dm.bits == 0x00, subproblem.doms)
+            @debug "Returning zero: local_value=$local_value, n_unfixed=$(subproblem.n_unfixed), has_contradiction=$(any(dm -> dm.bits == 0x00, subproblem.doms))"
+            return zero(result_type)
         end
-    end
-    return BranchResult(false, bs)
-end
-
-function branch_and_reduce(problem::BooleanInferenceProblem, bs::AbstractBranchingStatus, config::BranchingStrategy, reducer::AbstractReducer; depth::Int=0, stats::SearchStatistics=SearchStatistics())
-    # Track search depth
-    update_max_depth!(stats, depth)
-    increment_nodes!(stats)
-    
-    debug_branching_status(bs, problem, depth)
-    
-    # Determines if search should terminate
-    stopped, res = check_stopped(bs, config.measure, stats)
-    if stopped 
-        return BranchResult(res, bs)
-    end
-
-    # If there are at most two undecided variables globally, finish by enumeration
-    result2 = _finish_with_up_to_two(problem, bs, config.measure, stats)
-    if result2.success 
-        return result2
-    end
-
-    # If every active edge has ≤ 2 undecided variables, reduce to 2-SAT and solve
-    result2sat = _try_2sat(problem, bs, config.measure, stats)
-    if result2sat.success 
-        return result2sat
-    end
-
-    # Select a subset of variables
-    subbip = select_variables(problem, bs, config.measure, config.selector)
-    
-    # Compute the BranchingTable
-    tbl = branching_table(problem, bs, config.table_solver, subbip)
-    if iszero(tbl.bit_length)
-        return BranchResult(false, bs)
-    end
-
-    # Compute the optimal branching rule
-    result = optimal_branching_rule(tbl, subbip.vs, bs, problem, config.measure, config.set_cover_solver)
-    branches = OptimalBranchingCore.get_clauses(result)
-    
-    for (i, branch) in enumerate(branches)
-        increment_branches!(stats)
         
-        # Apply branch and measure propagation
-        current_decided = count_ones(bs.decided_mask)
-        bs_new = apply_branch(problem, bs, branch, subbip.vs)
-        propagated = count_ones(bs_new.decided_mask) - current_decided
-        active_after = count(x -> x > 0, bs_new.undecided_literals)
+        # Recursively solve subproblem
+        new_tag = show_progress ? [tag..., (i, length(clauses))] : tag
+        sub_result = OptimalBranchingCore.branch_and_reduce(subproblem, config, reducer, result_type;tag=new_tag, show_progress=show_progress)
         
-        branch_result = branch_and_reduce(problem, bs_new, config, reducer; depth=depth+1, stats=stats)
-        
-        if branch_result.success
-            return branch_result
-        else
-        end
+        # Combine results
+        sub_result * result_type(local_value)
     end
-    
-    return BranchResult(false, bs)
 end
 
-"""
-    check_stopped(bs::AbstractBranchingStatus, m::AbstractMeasure, stats::SearchStatistics)
-
-Check whether the search should stop.
-
-Returns (stopped::Bool, result::Bool) where result is true for satisfiable.
-"""
-function check_stopped(bs::AbstractBranchingStatus, m::AbstractMeasure, stats::SearchStatistics)
-    # all constraints satisfied
-    if all(bs.undecided_literals .== -1)
-        increment_satisfiable!(stats)
-        return true, true
-    end
-    # some constraint unsatisfied
-    if any(bs.undecided_literals .== 0)
-        increment_unsatisfiable!(stats)
-        return true, false
-    end
-    # continue
-    return false, false
+function OptimalBranchingCore.optimal_branching_rule(
+    tbl::OptimalBranchingCore.BranchingTable,
+    variables::Vector{T},
+    problem::TNProblem,
+    measure::OptimalBranchingCore.AbstractMeasure,
+    solver::OptimalBranchingCore.AbstractSetCoverSolver
+) where T
+    candidates = OptimalBranchingCore.bit_clauses(tbl)
+    return OptimalBranchingCore.greedymerge(candidates, problem, variables, measure)
 end
 
 
-function optimal_branching_rule(table::BranchingTable, variables::Vector, bs::AbstractBranchingStatus, p::BooleanInferenceProblem, m::AbstractMeasure, solver::AbstractSetCoverSolver)
-    candidates = OptimalBranchingCore.bit_clauses(table)
-    return greedymerge(candidates, p, bs, variables, m)
-end
-
-"""
-    greedymerge(cls, problem, bs, variables, m)
-
-Greedy clause merging algorithm for optimal branching rule computation.
-
-This function implements a greedy algorithm that merges clauses to find an optimal 
-branching rule. It works by iteratively finding pairs of clauses that can be merged
-and checking if the merged clause provides better complexity reduction.
-
-# Arguments
-- `cls`: Vector of clause groups, where each group contains clauses to be considered
-- `problem`: The boolean inference problem instance
-- `bs`: Current branching status
-- `variables`: Variables involved in the subproblem
-- `m`: Measure function for evaluating clause effectiveness
-
-# Returns
-- Vector of merged clauses representing the optimal branching rule
-
-# Algorithm
-1. Initialize active clause indices and compute size reductions for each clause
-2. Create all possible merging pairs (i,j) where i < j
-3. For each pair, check if clauses can be merged (bdistance == 1)
-4. If mergeable, compute the merged clause and its size reduction
-5. Accept the merge if it improves the overall complexity measure
-6. Update active clauses and continue until no more beneficial merges exist
-"""
-function greedymerge(cls::Vector{Vector{Clause{INT}}}, problem::AbstractProblem, bs::AbstractBranchingStatus, variables::Vector, m::AbstractMeasure) where {INT}
-    # Initialize active clause indices (all clauses start as active)
-    active_set = Set{Int}(1:length(cls))
-    cls = copy(cls)  # Create a copy to avoid modifying the original
-
-    # Generate all possible merging pairs (i,j) where i < j to avoid duplicates
-    merging_pairs = [(i, j) for i in active_set, j in active_set if i < j]
-    n = length(variables)
-
-    # Compute size reduction for each clause (how much it reduces problem complexity)
-    # Cache the base measure to avoid repeated computation
-    base_measure = measure(bs, m)
-    size_reductions = [base_measure - measure(apply_branch(problem, bs, candidate[1], variables), m) for candidate in cls]
-
-    # Compute the complexity base γ from current size reductions
-    γ = OptimalBranchingCore.complexity_bv(size_reductions)
-
-    # Main merging loop: continue until no more merging pairs exist
-    while !isempty(merging_pairs)
-        # Get the next pair to consider for merging (use pop! to avoid O(n) cost)
-        i, j = pop!(merging_pairs)
-
-        # Only proceed if both clauses are still active (not already merged)
-        if (i in active_set) && (j in active_set)
-            # Check all combinations of clauses in groups i and j
-            did_merge = false
-            ci = cls[i]
-            cj = cls[j]
-            for ii in 1:length(ci)
-                for jj in 1:length(cj)
-                    # Check if two clauses can be merged (Hamming distance = 1)
-                    if OptimalBranchingCore.bdistance(ci[ii], cj[jj]) == 1
-                        # Create the merged clause from the two input clauses
-                        cl12 = OptimalBranchingCore.gather2(n, ci[ii], cj[jj])
-
-                        # Skip if the merged clause is invalid (empty mask)
-                        if cl12.mask == 0
-                            continue
-                        end
-
-                        # Compute size reduction for the merged clause
-                        l12 = base_measure - measure(apply_branch(problem, bs, cl12, variables), m)
-
-                        # Check if merging improves the complexity measure
-                        # The condition: γ^(-size_reductions[i]) + γ^(-size_reductions[j]) >= γ^(-l12) + ε
-                        # ensures that the merged clause provides better overall complexity reduction
-                        if γ^(-size_reductions[i]) + γ^(-size_reductions[j]) >= γ^(-l12) + 1e-8
-                            # Accept the merge: add the merged clause to the clause list
-                            push!(cls, [cl12])
-                            k = length(cls)  # Index of the new merged clause
-
-                            # Remove the original clauses from active set
-                            delete!(active_set, i)
-                            delete!(active_set, j)
-
-                            # Add new merging pairs involving the merged clause
-                            for ii_act in active_set
-                                push!(merging_pairs, (ii_act, k))
-                            end
-
-                            # Add the merged clause to active set and update reductions
-                            push!(size_reductions, l12)
-                            push!(active_set, k)
-
-                            # Recompute complexity base with updated size reductions
-                            γ = OptimalBranchingCore.complexity_bv([size_reductions[t] for t in active_set])
-
-                            did_merge = true
-                            break
-                        end
-                    end
-                end
-                did_merge && break
+function OptimalBranchingCore.apply_branch(
+    problem::TNProblem, 
+    clause::OptimalBranchingCore.Clause{INT}, 
+    variables::Vector{Int}
+) where {INT<:Integer}
+    # Copy domain masks
+    new_doms = copy(problem.doms)
+    # Apply clause: fix variables according to mask and values
+    n_fixed = 0
+    for i in 1:length(variables)
+        if OptimalBranchingCore.readbit(clause.mask, i) == 1
+            # This variable is fixed by the clause
+            var_id = variables[i]
+            bit_val = OptimalBranchingCore.readbit(clause.val, i)
+            new_val = (bit_val == 1) ? DM_1 : DM_0
+            
+            if !is_fixed(problem.doms[var_id])
+                new_doms[var_id] = new_val
+                n_fixed += 1
             end
-            did_merge && continue  # Move to next merging pair
         end
     end
+    
+    @debug "apply_branch: Fixed $n_fixed variables"
+  
+    # Apply propagation (unit propagation)
+    propagated_doms = propagate(problem.static, new_doms)
+    
+    # Check for contradiction (all domains set to 0x00)
+    if any(dm -> dm.bits == 0x00, propagated_doms)
+        # UNSAT: contradiction detected during propagation
+        @debug "apply_branch: Contradiction detected during propagation"
+        return (TNProblem(problem.static, fill(DomainMask(0x00), length(propagated_doms)), 0, problem.ws), 0)
+    end
+    
+    # Count unfixed variables
+    new_n_unfixed = count_unfixed(propagated_doms)
+    
+    @debug "apply_branch: n_unfixed: $(problem.n_unfixed) -> $new_n_unfixed"
+    
+    # Safety check: problem must have gotten smaller OR we fixed at least one variable
+    if new_n_unfixed == problem.n_unfixed && n_fixed == 0
+        @debug "apply_branch: No progress made (n_unfixed same and n_fixed=0)"
+        return (TNProblem(problem.static, fill(DomainMask(0x00), length(propagated_doms)), 0, problem.ws), 0)
+    end
 
-    # Return the first clause from each active clause group (sorted for determinism)
-    return [cls[k][1] for k in sort!(collect(active_set))]
+    # Create new problem with updated domains
+    new_problem = TNProblem(problem.static, propagated_doms, new_n_unfixed, problem.ws)
+    clear_region_cache!(problem)
+    return (new_problem, 1)  # local_value = 1 (no scoring for now)
 end
 
-function size_reduction(p::AbstractProblem, m::AbstractMeasure, bs::AbstractBranchingStatus, cl::Clause{INT}, variables::Vector) where {INT}
-    return measure(bs, m) - measure(apply_branch(p, bs, cl, variables), m)
+function OptimalBranchingCore.reduce_problem(::Type{T}, problem::TNProblem, ::OptimalBranchingCore.NoReducer) where T
+    # No reduction - return problem unchanged
+    return (problem, one(T))
 end
+
+# function reduce_problem(::Type{T}, problem::TNProblem, reducer::UnitPropagationReducer) where T
+#     propagated = propagate(problem.static, problem.doms)
+
+#     doms = problem.doms
+#     changed = false
+#     n_unfixed::Int = 0
+
+#     @inbounds for i in eachindex(doms)
+#         dm_new = propagated[i]
+#         bits = dm_new.bits
+
+#         if bits == 0x00
+#             clear_region_cache!(problem)
+#             return (TNProblem(problem.static, propagated, 0, problem.ws), zero(T))
+#         end
+
+#         changed |= bits != doms[i].bits
+#         n_unfixed += is_fixed(dm_new) ? 0 : 1
+#     end
+
+#     if !changed
+#         return (problem, one(T))
+#     end
+
+#     clear_region_cache!(problem)
+#     return (TNProblem(problem.static, propagated, n_unfixed, problem.ws), one(T))
+# end

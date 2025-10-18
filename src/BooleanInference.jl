@@ -10,57 +10,70 @@ using GenericTensorNetworks.OMEinsum
 import ProblemReductions
 import ProblemReductions: CircuitSAT, Circuit, Factoring, reduceto, Satisfiability
 using KaHyPar
+using DataStructures
+using DataStructures: PriorityQueue
 
 # using GenericTensorNetworks: ∧, ∨, ¬
 
-# status
-export BranchingStatus, initialize_branching_status
-# stride
-export get_tensor_number, slice_tensor, vec_to_tensor, indices_to_mask, longlonguint_to_vec
-# types
-export BooleanInferenceProblem, BooleanResultBranchCount, NumOfVertices, NumOfClauses, NumOfDegrees, WeightedClauseArityMeasure
-# branch helpers
-export last_branch_problem, reset_last_branch_problem!, has_last_branch_problem
-# debug
-export set_debug_level!
+include("problems.jl")
+include("region.jl")
+include("measure.jl")
+include("utils.jl")
+include("knn.jl")
+include("selector.jl")
+include("contraction.jl")
+include("branchtable.jl")
+include("branch.jl")
+include("propagate.jl")
+include("interface.jl")
 
-# interface
-export convert_cnf_to_bip, convert_circuit_to_bip, convert_sat_to_bip, solve_boolean_inference_problem, solve_factoring, solve_sat_with_assignments
+# Export core types
+export Variable, EdgeRef, BoolTensor, TNStatic, DomainMask, TNProblem
+export DM_BOTH, DM_0, DM_1
+export Region, RegionContraction, RegionCacheEntry, RegionCacheState, RegionCache
+export DynamicWorkspace
 
-# reducer
-export NoReducer, decide_literal
+# Export domain mask functions
+export is_fixed, has0, has1, init_doms, get_var_value
 
-# selector
-export KNeighborSelector, MultiStartKNeighborSelector, AdaptiveBoundarySelector, neighboring, k_neighboring, subhg, Smallest2NeighborSelector, KaHyParSelector
+# Export problem setup functions
+export setup_problem, setup_from_tensor_network, setup_from_cnf, setup_from_circuit, setup_from_sat
 
-# tablesolver
-export TNContractionSolver
+# Export problem state functions
+export is_solved, cache_branch_solution!, reset_last_branch_problem!, has_last_branch_problem, last_branch_problem
 
-# interface
-export solve_factoring, solve
+# Export solving functions
+export solve, solve_sat_problem, solve_sat_with_assignments, solve_factoring
 
-include("refactor/problems.jl")
-include("refactor/region.jl")
-include("refactor/measure.jl")
-include("refactor/utils.jl")
-include("refactor/knn.jl")
-include("refactor/selector.jl")
-include("refactor/contraction.jl")
-include("refactor/branchtable.jl")
-include("refactor/branch.jl")
-include("refactor/propagate.jl")
-include("refactor/interface.jl")
+# Export measure types
+export NumUnfixedVars
 
+# Export selector types
+export LeastOccurrenceSelector, AbstractSelector
 
-# include("status.jl")
-# include("stride.jl")
-# include("types.jl")
-# include("debug.jl")
-# include("interface.jl")
-# include("reducer.jl")
-# include("selector.jl")
-# include("tablesolver.jl")
-# include("twosat.jl")
-# include("branch.jl")
+# Export table solver types
+export TNContractionSolver, AbstractTableSolver
+
+# Export contraction functions
+export contract_region, contract_tensors, slicing, tensor_unwrapping
+
+# Export propagation functions
+export propagate, get_active_tensors, build_tensor_masks
+export TensorMasks, PropagationBuffers
+
+# Export region management functions
+export cache_region!, get_cached_region_entry, get_cached_region, cache_region_contraction!
+export get_cached_region_contraction, clear_region_cache!, clear_all_region_caches!
+
+# Export k-neighboring functions
+export k_neighboring, KNNWorkspace
+
+# Export utility functions
+export get_unfixed_vars, count_unfixed, bits_to_int
+
+# Export branching table functions
+export separate_fixed_free_boundary, construct_boundary_config, construct_inner_config
+export extract_inner_configs, combine_configs, get_region_contraction, slice_region_contraction
+export handle_no_boundary_case
 
 end
