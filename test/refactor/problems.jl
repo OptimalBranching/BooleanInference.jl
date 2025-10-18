@@ -2,7 +2,7 @@ using Test
 using BooleanInference
 using ProblemReductions: Factoring, reduceto, CircuitSAT
 using GenericTensorNetworks
-using BooleanInference: setup_from_tensor_network, TNProblem, HopWorkspace, setup_problem
+using BooleanInference: setup_from_tensor_network, TNProblem, DynamicWorkspace, setup_problem
 using TropicalNumbers: Tropical
 
 function generate_example_problem()

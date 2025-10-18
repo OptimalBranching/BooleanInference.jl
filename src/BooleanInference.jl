@@ -7,6 +7,7 @@ using OptimalBranchingCore: AbstractProblem, select_variables, reduce_problem, _
 using OptimalBranchingCore.BitBasis
 using GenericTensorNetworks
 using GenericTensorNetworks.OMEinsum
+using DataStructures: PriorityQueue, peek
 import ProblemReductions
 import ProblemReductions: CircuitSAT, Circuit, Factoring, reduceto, Satisfiability
 using KaHyPar
@@ -19,6 +20,8 @@ export BranchingStatus, initialize_branching_status
 export get_tensor_number, slice_tensor, vec_to_tensor, indices_to_mask, longlonguint_to_vec
 # types
 export BooleanInferenceProblem, BooleanResultBranchCount, NumOfVertices, NumOfClauses, NumOfDegrees, WeightedClauseArityMeasure
+# branch helpers
+export last_branch_problem, reset_last_branch_problem!, has_last_branch_problem
 # debug
 export set_debug_level!
 
@@ -34,7 +37,7 @@ export KNeighborSelector, MultiStartKNeighborSelector, AdaptiveBoundarySelector,
 # tablesolver
 export TNContractionSolver
 
-export @debug_problem, @debug_region
+export clear_contraction_cache!
 
 include("refactor/problems.jl")
 include("refactor/region.jl")

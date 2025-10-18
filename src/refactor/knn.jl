@@ -1,23 +1,46 @@
-@inline function _mark_var!(ws::HopWorkspace, var::Int)
+# Local workspace for k-neighboring algorithm
+mutable struct KNNWorkspace
+    epoch::Int
+    visited_vars::Vector{Int}
+    visited_tensors::Vector{Int}
+    frontier::Vector{Int}
+    next_frontier::Vector{Int}
+    collected_vars::Vector{Int}
+    collected_tensors::Vector{Int}
+end
+
+function KNNWorkspace(var_num::Int, tensor_num::Int)
+    return KNNWorkspace(
+        1,
+        zeros(Int, var_num),
+        zeros(Int, tensor_num),
+        Int[],
+        Int[],
+        Int[],
+        Int[]
+    )
+end
+
+@inline function _mark_var!(ws::KNNWorkspace, var::Int)
     ws.visited_vars[var] = ws.epoch
 end
-@inline function _mark_tensor!(ws::HopWorkspace, tensor::Int)
+@inline function _mark_tensor!(ws::KNNWorkspace, tensor::Int)
     ws.visited_tensors[tensor] = ws.epoch
 end
-@inline function _check_seen_var(ws::HopWorkspace, var::Int)
+@inline function _check_seen_var(ws::KNNWorkspace, var::Int)
     return ws.visited_vars[var] == ws.epoch
 end
-@inline function _check_seen_tensor(ws::HopWorkspace, tensor::Int)
+@inline function _check_seen_tensor(ws::KNNWorkspace, tensor::Int)
     return ws.visited_tensors[tensor] == ws.epoch
 end
 
-@inline function _bump_epoch!(ws::HopWorkspace)
+@inline function _bump_epoch!(ws::KNNWorkspace)
     ws.epoch += 1
 end
 
 function expand_one_var!(
     tn::TNStatic,
-    ws::HopWorkspace,
+    ws::KNNWorkspace,
     doms::Vector{DomainMask},
     max_tensors::Int
 )::Bool  # returns `true` if STOPPED EARLY due to limits; `false` otherwise
@@ -45,7 +68,7 @@ function expand_one_var!(
     return false
 end
 
-function classify_inner_boundary!(tn::TNStatic, ws::HopWorkspace, vars::Vector{Int})
+function classify_inner_boundary!(tn::TNStatic, ws::KNNWorkspace, vars::Vector{Int})
     inner = Int[]
     boundary = Int[]
     @inbounds for vid in vars
@@ -66,7 +89,6 @@ end
 
 function k_neighboring(
     tn::TNStatic,
-    ws::HopWorkspace,
     doms::Vector{DomainMask},
     focus_var::Int;
     max_tensors::Int,
@@ -74,12 +96,12 @@ function k_neighboring(
 )
     @debug "k_neighboring: focus_var = $focus_var"
     @assert k ≥ 0
-    # bump epoch & reset buffers
-    _bump_epoch!(ws)
-    empty!(ws.frontier); empty!(ws.next_frontier)
-    empty!(ws.collected_vars); empty!(ws.collected_tensors)
-
     @assert !is_fixed(doms[focus_var]) "Focus variable must be unfixed"
+    
+    # Create local workspace for this call
+    ws = KNNWorkspace(length(tn.vars), length(tn.tensors))
+    
+    # Initialize with focus variable
     _mark_var!(ws, focus_var)
     push!(ws.frontier, focus_var)
     push!(ws.collected_vars, focus_var)

@@ -25,31 +25,6 @@ function Base.show(io::IO, f::BoolTensor)
     print(io, "BoolTensor($(f.id), vars=[$(join(f.var_axes, ", "))], size=$(length(f.tensor)))")
 end
 
-# struct DenseTropicalTensor{T, N}
-#     data::Vector{T}  # length == prod(shape)
-#     shape::NTuple{N, Int32}  # per-axis domain size
-#     strides::NTuple{N, Int32}  # column-major strides
-# end
-
-# @inline function compute_strides(shape::NTuple{N, Int32}) where {N}
-#     nd = length(shape)  # number of dimensions
-#     s = Vector{Int32}(undef, nd)
-#     stride = Int32(1)
-#     @inbounds for i in 1:nd
-#         s[i] = stride
-#         stride *= shape[i]
-#     end
-#     return s
-# end
-
-# @inline function linindex(strides::NTuple{N, Int32}, coords::NTuple{N,Int32}) where {N}
-#     idx = Int32(1)
-#     @inbounds for i in 1:N
-#         idx += (coords[i]-Int32(1))*strides[i]
-#     end
-#     return Int(idx)
-# end
-
 struct TNStatic
     vars::Vector{Variable}
     tensors::Vector{BoolTensor}
@@ -126,21 +101,14 @@ function init_doms(static::TNStatic)
     return fill(DM_BOTH, length(static.vars))
 end
 
-mutable struct HopWorkspace
-    epoch::Int
-    visited_vars::Vector{Int}
-    visited_tensors::Vector{Int}
+@inline get_var_value(dms::Vector{DomainMask}, var_id::Int) = has1(dms[var_id]) ? 1 : 0
 
-    frontier::Vector{Int}
-    next_frontier::Vector{Int}
-    
-    collected_vars::Vector{Int}
-    collected_tensors::Vector{Int}
+mutable struct DynamicWorkspace
+    cached_doms::Vector{DomainMask}
+    has_cached_solution::Bool
+    branch_queue::Any
 end
-
-function HopWorkspace(var_num::Int, tensor_num::Int)
-    return HopWorkspace(1, fill(0, var_num), fill(0, tensor_num), Int[], Int[], Int[], Int[])
-end
+DynamicWorkspace(var_num::Int) = DynamicWorkspace(Vector{DomainMask}(undef, var_num), false, nothing)
 
 struct Region
     id::Int
@@ -156,18 +124,43 @@ struct TNProblem <: AbstractProblem
     static::TNStatic
     doms::Vector{DomainMask}
     n_unfixed::Int
-    ws::HopWorkspace
+    ws::DynamicWorkspace
 end
 function TNProblem(static::TNStatic)::TNProblem
     doms = init_doms(static)
     n_unfixed = length(static.vars)
-    ws = HopWorkspace(length(static.vars), length(static.tensors))
+    ws = DynamicWorkspace(length(static.vars))
     return TNProblem(static, doms, n_unfixed, ws)
 end
 function Base.show(io::IO, problem::TNProblem)
     print(io, "TNProblem(unfixed=$(problem.n_unfixed)/$(length(problem.static.vars)))")
 end
 
+get_var_value(problem::TNProblem, var_id::Int) = get_var_value(problem.doms, var_id)
+get_var_value(problem::TNProblem, var_ids::Vector{Int}) = Bool[get_var_value(problem.doms, var_id) for var_id in var_ids]
+
 @inline function is_solved(problem::TNProblem)::Bool
     return problem.n_unfixed == 0
+end
+
+function cache_branch_solution!(problem::TNProblem)
+    ws = problem.ws
+    copyto!(ws.cached_doms, problem.doms)
+    ws.has_cached_solution = true
+    return nothing
+end
+
+function reset_last_branch_problem!(problem::TNProblem)
+    problem.ws.has_cached_solution = false
+    return nothing
+end
+
+@inline has_last_branch_problem(problem::TNProblem) = problem.ws.has_cached_solution
+
+function last_branch_problem(problem::TNProblem)
+    has_last_branch_problem(problem) || throw(ErrorException("No cached branch solution"))
+    doms = copy(problem.ws.cached_doms)
+    fixed = count(x -> is_fixed(x), doms)
+    @assert fixed == length(doms)
+    return TNProblem(problem.static, doms, 0, problem.ws)
 end

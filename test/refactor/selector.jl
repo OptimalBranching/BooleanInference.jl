@@ -3,7 +3,7 @@ using BooleanInference
 using BooleanInference: LeastOccurrenceSelector
 using ProblemReductions: Factoring, reduceto, CircuitSAT
 using GenericTensorNetworks
-using BooleanInference: setup_from_tensor_network, TNProblem, HopWorkspace, NumUnfixedVars
+using BooleanInference: setup_from_tensor_network, TNProblem, DynamicWorkspace, NumUnfixedVars
 using BooleanInference: get_cached_region, clear_region_cache!, clear_all_region_caches!, setup_from_cnf, k_neighboring
 using OptimalBranchingCore: select_variables
 using BooleanInference.GenericTensorNetworks: ∧, ∨, ¬
@@ -19,11 +19,9 @@ end
 @testset "LeastOccurrenceSelector" begin
     selector = LeastOccurrenceSelector(1)
     @test selector.k == 1
-    @test selector.max_vars == 100
-    @test selector.max_tensors == 100
-    selector = LeastOccurrenceSelector(2, 20, 20)
+    @test selector.max_tensors == 10
+    selector = LeastOccurrenceSelector(2, 20)
     @test selector.k == 2
-    @test selector.max_vars == 20
     @test selector.max_tensors == 20
 end
 

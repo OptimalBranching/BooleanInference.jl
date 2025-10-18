@@ -18,3 +18,5 @@ end
     end
     return c
 end
+
+bits_to_int(v::Vector{Bool}) = sum(b << (i - 1) for (i, b) in enumerate(v))

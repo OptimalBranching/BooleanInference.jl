@@ -30,7 +30,7 @@ function construct_boundary_config(region::Region, doms::Vector{DomainMask}, fre
     n_boundary = length(region.boundary_vars)
     boundary_config = Vector{Bool}(undef, n_boundary)
     
-    for i in 1:n_boundary
+    @inbounds for i in 1:n_boundary
         var_id = region.boundary_vars[i]
         if is_fixed(doms[var_id])
             # Use the fixed value
@@ -51,7 +51,7 @@ function construct_inner_config(region::Region, doms::Vector{DomainMask}, inner_
     n_config = length(free_inner_configs)
     inner_configs = Vector{Vector{Bool}}(undef, n_config)
 
-    for config_idx in 1:n_config
+    @inbounds for config_idx in 1:n_config
         inner_config = Vector{Bool}(undef, n_inner)
         for i in 1:n_inner
             var_id = region.inner_vars[i]
@@ -73,36 +73,94 @@ function extract_inner_configs(contracted::Array{T, N}, n_inner::Int) where {T, 
     # Find all feasible configurations (where value == 1)
     @assert n_inner == N
     feasible_indices = findall(x -> x == one(Tropical{Float64}), contracted)
-    configs = Vector{Bool}[]
-    for idx in feasible_indices
-        config = Bool[]
+    n_configs = length(feasible_indices)
+    configs = Vector{Vector{Bool}}(undef, n_configs)
+    
+    @inbounds for (config_idx, idx) in enumerate(feasible_indices)
+        config = Vector{Bool}(undef, n_inner)
         if n_inner > 0
             linear_idx = LinearIndices(contracted)[idx] - 1  # 0-based
             for i in 1:n_inner
-                push!(config, ((linear_idx >> (i-1)) & 0x1) == 1)
+                config[i] = ((linear_idx >> (i-1)) & 0x1) == 1
             end
         end
-        push!(configs, config)
+        configs[config_idx] = config
     end
     return configs
 end
 
 function combine_configs(boundary_config::Vector{Bool}, inner_configs::Vector{Vector{Bool}})
-    full_configs = Vector{Bool}[]
+    n_configs = length(inner_configs)
+    n_boundary = length(boundary_config)
+    n_inner = isempty(inner_configs) ? 0 : length(inner_configs[1])
+    n_total = n_boundary + n_inner
     
-    for inner_config in inner_configs
-        full_config = vcat(boundary_config, inner_config)
-        push!(full_configs, full_config)
+    full_configs = Vector{Vector{Bool}}(undef, n_configs)
+    
+    @inbounds for i in 1:n_configs
+        inner_config = inner_configs[i]
+        full_config = Vector{Bool}(undef, n_total)
+        
+        # Copy boundary config
+        for j in 1:n_boundary
+            full_config[j] = boundary_config[j]
+        end
+        
+        # Copy inner config
+        for j in 1:n_inner
+            full_config[n_boundary + j] = inner_config[j]
+        end
+        
+        full_configs[i] = full_config
     end
     
     return full_configs
 end
 
+function get_region_contraction(problem::TNProblem, region::Region)
+    cached = get_cached_region_contraction(problem; region_id=region.id)
+    if isnothing(cached)
+        @debug "contract_region_cache_miss" focus=region.id
+        contracted, output_vars = contract_region(problem.static, region, problem.doms)
+        cache_region_contraction!(problem, contracted, output_vars; region_id=region.id)
+        return contracted, output_vars
+    else
+        @debug "contract_region_cache_hit" focus=region.id
+        return cached
+    end
+end
 
-function handle_no_boundary_case(problem::TNProblem, region::Region)
+function slice_region_contraction(
+    tensor::AbstractArray{Tropical{Float64}},
+    assignments::Vector{Tuple{Int,Bool}},
+    axis_lookup::Dict{Int,Int},
+)
+    isempty(assignments) && return tensor
+    nd = ndims(tensor)
+    nd == 0 && return tensor
+
+    selectors = Vector{Any}(undef, nd)
+    for i in 1:nd
+        selectors[i] = Colon()
+    end
+
+    for (var_id, value) in assignments
+        axis = get(axis_lookup, var_id, nothing)
+        @assert axis !== nothing "Boundary variable $var_id not found in contraction axes"
+        selectors[axis] = value ? 2 : 1
+    end
+
+    view_tensor = view(tensor, selectors...)
+    return copy(view_tensor)
+end
+
+function handle_no_boundary_case(
+    problem::TNProblem,
+    region::Region,
+    contracted::AbstractArray{Tropical{Float64}},
+    inner_var_ids::Vector{Int},
+)
     n_inner = length(region.inner_vars)
-    
-    contracted, inner_var_ids = contract_region(problem.static, region, problem.doms)
     
     free_inner_configs = extract_inner_configs(contracted, length(inner_var_ids))
     
@@ -134,8 +192,24 @@ function OptimalBranchingCore.branching_table(
     n_total = n_boundary + n_inner
     @assert n_total == length(variables)
     
+    contracted_tensor, output_vars = get_region_contraction(problem, region)
+
+    axis_lookup = Dict{Int,Int}()
+    @inbounds for (idx, var_id) in enumerate(output_vars)
+        axis_lookup[var_id] = idx
+    end
+
+    inner_output_vars = Int[]
+    @inbounds for var_id in output_vars
+        if var_id in region.inner_vars
+            push!(inner_output_vars, var_id)
+        end
+    end
+
     # Step 2: Handle special case - no boundary variables
-    n_boundary == 0 && return handle_no_boundary_case(problem, region)
+    if n_boundary == 0
+        return handle_no_boundary_case(problem, region, contracted_tensor, inner_output_vars)
+    end
     
     # Step 3: Separate fixed and free boundary variables
     _, _, free_boundary_vars, free_boundary_indices = 
@@ -146,26 +220,30 @@ function OptimalBranchingCore.branching_table(
     # Step 4: Enumerate free boundary configurations
     valid_config_groups = Vector{Vector{Bool}}[]
     
+    assignments = Tuple{Int,Bool}[]
+    resize!(assignments, n_free_boundary)
+    
     for free_config in 0:(2^n_free_boundary - 1)
-        # Fix free boundary variables in temporary doms
-        doms_temp = copy(problem.doms)
         for (j, var_id) in enumerate(free_boundary_vars)
             bit = (free_config >> (j-1)) & 0x1
-            doms_temp[var_id] = (bit == 1) ? DM_1 : DM_0
+            assignments[j] = (var_id, bit == 1)
         end
         
-        # Contract tensors (all boundary vars now fixed)
-        contracted, inner_var_ids = contract_region(problem.static, region, doms_temp)
+        contracted_slice = slice_region_contraction(
+            contracted_tensor,
+            assignments,
+            axis_lookup,
+        )
         
         # Extract feasible inner configurations
-        free_inner_configs = extract_inner_configs(contracted, length(inner_var_ids))
+        free_inner_configs = extract_inner_configs(contracted_slice, length(inner_output_vars))
         
         isempty(free_inner_configs) && continue
         
         # Construct full boundary configuration
         boundary_config = construct_boundary_config(region, problem.doms, free_boundary_indices, free_config)
 
-        inner_configs = construct_inner_config(region, problem.doms, inner_var_ids, free_inner_configs)
+        inner_configs = construct_inner_config(region, problem.doms, inner_output_vars, free_inner_configs)
          
         full_configs = combine_configs(boundary_config, inner_configs)
         

@@ -24,7 +24,6 @@ function OptimalBranchingCore.select_variables(
     # The returned region will only contain unfixed variables
     region = k_neighboring(
         problem.static,
-        problem.ws,
         problem.doms,
         unfixed_vars[least_show_var_idx];
         max_tensors = selector.max_tensors,

@@ -1,4 +1,6 @@
 function contract_region(tn::TNStatic, region::Region, doms::Vector{DomainMask})
+    # @show region.id
+    # println(union(region.boundary_vars, region.inner_vars))
     n_tensors = length(region.tensors)
     
     sliced_tensors = Vector{Vector{Tropical{Float64}}}(undef, n_tensors)
@@ -65,16 +67,10 @@ end
 
 function slicing(tensor::Vector{T}, doms::Vector{DomainMask}, axis_vars::Vector{Int}) where T
     # Number of axes (Boolean => size 2 per axis)
-    len = length(tensor)
-    @assert len > 0
-    k = trailing_zeros(len)
+    k = trailing_zeros(length(tensor)) # log2
+    fixed_axes = Int[]; fixed_vals = Int[]; free_axes = Int[]
     
-    # Identify fixed and free axes
-    fixed_axes = Int[]
-    fixed_vals = Int[]
-    free_axes = Int[]
-    
-    for axis in 1:k
+    for axis in 1:k  # each variable
         var_id = axis_vars[axis]
         dom_mask = doms[var_id]
         if is_fixed(dom_mask)
@@ -86,7 +82,7 @@ function slicing(tensor::Vector{T}, doms::Vector{DomainMask}, axis_vars::Vector{
     end
     
     n_free = length(free_axes)
-    out_len = 1 << n_free
+    out_len = 1 << n_free # 2^n_free
     out = Vector{T}(undef, out_len)
     
     # Iterate over all assignments to free variables
@@ -96,8 +92,8 @@ function slicing(tensor::Vector{T}, doms::Vector{DomainMask}, axis_vars::Vector{
         
         # Set free variable bits
         for (i, axis) in enumerate(free_axes)
-            bit = (free_idx >> (i-1)) & 0x1
-            full_idx |= (bit << (axis-1))
+            bit = (free_idx >> (i-1)) & 0x1  # get the i-th bit of free_idx
+            full_idx |= (bit << (axis-1))  # set free-idx in the full_idx
         end
         
         # Set fixed variable bits

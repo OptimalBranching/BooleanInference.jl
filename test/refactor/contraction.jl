@@ -1,11 +1,12 @@
 using Test
 using BooleanInference
-using BooleanInference: setup_from_tensor_network, TNProblem, HopWorkspace, setup_problem, select_variables, get_cached_region, LeastOccurrenceSelector, NumUnfixedVars
+using BooleanInference: setup_from_tensor_network, TNProblem, DynamicWorkspace, setup_problem, select_variables, get_cached_region, LeastOccurrenceSelector, NumUnfixedVars
 using BooleanInference: Region, construct_region, slicing, tensor_unwrapping, DomainMask
 using BooleanInference: DM_BOTH, DM_0, DM_1, has0, has1, is_fixed
 using BooleanInference: contract_tensors, contract_region, TNContractionSolver
 using BooleanInference: separate_fixed_free_boundary, construct_boundary_config, construct_inner_config
 using BooleanInference: extract_inner_configs, combine_configs, handle_no_boundary_case
+using BooleanInference: get_cached_region_contraction, clear_region_cache!
 using OptimalBranchingCore: branching_table
 using TropicalNumbers: Tropical
 using ProblemReductions: Factoring, reduceto, CircuitSAT
@@ -220,6 +221,8 @@ end
     region = get_cached_region(tn_problem)
     @show region
     @test region != nothing
+    @test isnothing(get_cached_region_contraction(tn_problem))
+
     contracted, _ = contract_region(tn_static, region, tn_problem.doms)
     @test contracted != nothing
     @test length(size(contracted)) == length(region.boundary_vars) + length(region.inner_vars)
@@ -227,6 +230,13 @@ end
     table = branching_table(tn_problem, TNContractionSolver(), vcat([v for v in region.boundary_vars], [v for v in region.inner_vars]))
     @show vcat([v for v in region.boundary_vars], [v for v in region.inner_vars])
     @show table
+
+    cached_contraction = get_cached_region_contraction(tn_problem)
+    @test !isnothing(cached_contraction)
+
+    clear_region_cache!(tn_problem)
+    @test isnothing(get_cached_region(tn_problem))
+    @test isnothing(get_cached_region_contraction(tn_problem))
 end
 
 
