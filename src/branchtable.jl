@@ -2,11 +2,18 @@ using OptimalBranchingCore: BranchingTable
 
 struct TNContractionSolver <: AbstractTableSolver end
 
+function _build_axismap(output_vars::Vector{Int})
+    isempty(output_vars) && return Int[]
+    max_var = maximum(output_vars)
+    axismap = zeros(Int, max_var)
+    @inbounds for (idx, var_id) in enumerate(output_vars)
+        axismap[var_id] = idx
+    end
+    return axismap
+end
+
 function separate_fixed_free_boundary(region::Region, doms::Vector{DomainMask})
-    fixed_vars = Int[]
-    fixed_vals = Int[]
-    free_vars = Int[]
-    free_indices = Int[]
+    fixed_vars = Int[]; fixed_vals = Int[]; free_vars = Int[]; free_indices = Int[]
     
     for (i, var_id) in enumerate(region.boundary_vars)
         if is_fixed(doms[var_id])
@@ -21,19 +28,16 @@ function separate_fixed_free_boundary(region::Region, doms::Vector{DomainMask})
     return fixed_vars, fixed_vals, free_vars, free_indices
 end
 
-
-function construct_boundary_config(region::Region, doms::Vector{DomainMask}, free_boundary_indices::Vector{Int}, free_config::Int)
+function construct_boundary_config(region::Region, doms::Vector{DomainMask}, free_pos_of_boundary::Vector{Int}, free_config::Int)
     n_boundary = length(region.boundary_vars)
     boundary_config = Vector{Bool}(undef, n_boundary)
     
     @inbounds for i in 1:n_boundary
         var_id = region.boundary_vars[i]
         if is_fixed(doms[var_id])
-            # Use the fixed value
             boundary_config[i] = has1(doms[var_id])
         else
-            # Use the enumerated value
-            j = findfirst(==(i), free_boundary_indices)
+            j = free_pos_of_boundary[i]
             bit = (free_config >> (j-1)) & 0x1
             boundary_config[i] = (bit == 1)
         end
@@ -42,7 +46,7 @@ function construct_boundary_config(region::Region, doms::Vector{DomainMask}, fre
     return boundary_config
 end
 
-function construct_inner_config(region::Region, doms::Vector{DomainMask}, inner_var_ids::Vector{Int},free_inner_configs::Vector{Vector{Bool}})
+function construct_inner_config(region::Region, doms::Vector{DomainMask}, inner_posmap::Vector{Int}, free_inner_configs::Vector{Vector{Bool}})
     n_inner = length(region.inner_vars)
     n_config = length(free_inner_configs)
     inner_configs = Vector{Vector{Bool}}(undef, n_config)
@@ -54,7 +58,7 @@ function construct_inner_config(region::Region, doms::Vector{DomainMask}, inner_
             if is_fixed(doms[var_id])
                 inner_config[i] = has1(doms[var_id])
             else
-                j = findfirst(==(var_id), inner_var_ids)
+                j = inner_posmap[var_id]
                 inner_config[i] = free_inner_configs[config_idx][j]
             end
         end
@@ -64,23 +68,20 @@ function construct_inner_config(region::Region, doms::Vector{DomainMask}, inner_
     return inner_configs
 end
 
-
-function extract_inner_configs(contracted::Array{T, N}, n_inner::Int) where {T, N}
-    # Find all feasible configurations (where value == 1)
+function extract_inner_configs(contracted::AbstractArray{T, N}, n_inner::Int) where {T, N}
     @assert n_inner == N
-    feasible_indices = findall(x -> x == one(Tropical{Float64}), contracted)
-    n_configs = length(feasible_indices)
-    configs = Vector{Vector{Bool}}(undef, n_configs)
+    configs = Vector{Vector{Bool}}()
+    one_tropical = one(Tropical{Float64})
     
-    @inbounds for (config_idx, idx) in enumerate(feasible_indices)
-        config = Vector{Bool}(undef, n_inner)
-        if n_inner > 0
-            linear_idx = LinearIndices(contracted)[idx] - 1  # 0-based
+    @inbounds for lin in eachindex(contracted)
+        if contracted[lin] == one_tropical
+            config = Vector{Bool}(undef, n_inner)
+            linear_idx = LinearIndices(contracted)[lin] - 1
             for i in 1:n_inner
                 config[i] = ((linear_idx >> (i-1)) & 0x1) == 1
             end
+            push!(configs, config)
         end
-        configs[config_idx] = config
     end
     return configs
 end
@@ -94,19 +95,9 @@ function combine_configs(boundary_config::Vector{Bool}, inner_configs::Vector{Ve
     full_configs = Vector{Vector{Bool}}(undef, n_configs)
     
     @inbounds for i in 1:n_configs
-        inner_config = inner_configs[i]
         full_config = Vector{Bool}(undef, n_total)
-        
-        # Copy boundary config
-        for j in 1:n_boundary
-            full_config[j] = boundary_config[j]
-        end
-        
-        # Copy inner config
-        for j in 1:n_inner
-            full_config[n_boundary + j] = inner_config[j]
-        end
-        
+        copyto!(full_config, 1, boundary_config, 1, n_boundary)
+        copyto!(full_config, n_boundary + 1, inner_configs[i], 1, n_inner)
         full_configs[i] = full_config
     end
     
@@ -129,40 +120,37 @@ end
 function slice_region_contraction(
     tensor::AbstractArray{Tropical{Float64}},
     assignments::Vector{Tuple{Int,Bool}},
-    axis_lookup::Dict{Int,Int},
+    axismap::Vector{Int},
 )
     isempty(assignments) && return tensor
     nd = ndims(tensor)
     nd == 0 && return tensor
 
-    selectors = Vector{Any}(undef, nd)
-    for i in 1:nd
-        selectors[i] = Colon()
+    indices = Any[Colon() for _ in 1:nd]
+    
+    @inbounds for (var_id, value) in assignments
+        axis = axismap[var_id]
+        @assert axis > 0 "Boundary variable $var_id not found in contraction axes"
+        indices[axis] = value ? 2 : 1
     end
 
-    for (var_id, value) in assignments
-        axis = get(axis_lookup, var_id, nothing)
-        @assert axis !== nothing "Boundary variable $var_id not found in contraction axes"
-        selectors[axis] = value ? 2 : 1
-    end
-
-    view_tensor = view(tensor, selectors...)
-    return copy(view_tensor)
+    return @view tensor[indices...]
 end
 
 function handle_no_boundary_case(
     problem::TNProblem,
     region::Region,
     contracted::AbstractArray{Tropical{Float64}},
-    inner_var_ids::Vector{Int},
+    inner_output_vars::Vector{Int},
 )
     n_inner = length(region.inner_vars)
     
-    free_inner_configs = extract_inner_configs(contracted, length(inner_var_ids))
+    free_inner_configs = extract_inner_configs(contracted, length(inner_output_vars))
     
     if !isempty(free_inner_configs)
+        inner_posmap = _build_axismap(inner_output_vars)
         inner_configs = construct_inner_config(
-            region, problem.doms, inner_var_ids, free_inner_configs
+            region, problem.doms, inner_posmap, free_inner_configs
         )
         return BranchingTable(n_inner, [inner_configs])
     else
@@ -175,7 +163,6 @@ function OptimalBranchingCore.branching_table(
     solver::TNContractionSolver, 
     variables::Vector{T}
 ) where T
-    # Step 1: Get region
     region = get_cached_region(problem)
     isnothing(region) && error("No cached region found. Make sure `select_variables` is called first.")
     
@@ -185,11 +172,7 @@ function OptimalBranchingCore.branching_table(
     @assert n_total == length(variables)
     
     contracted_tensor, output_vars = get_region_contraction(problem, region)
-
-    axis_lookup = Dict{Int,Int}()
-    @inbounds for (idx, var_id) in enumerate(output_vars)
-        axis_lookup[var_id] = idx
-    end
+    axismap = _build_axismap(output_vars)
 
     inner_output_vars = Int[]
     @inbounds for var_id in output_vars
@@ -198,19 +181,23 @@ function OptimalBranchingCore.branching_table(
         end
     end
 
-    # Step 2: Handle special case - no boundary variables
     if n_boundary == 0
         return handle_no_boundary_case(problem, region, contracted_tensor, inner_output_vars)
     end
     
-    # Step 3: Separate fixed and free boundary variables
     _, _, free_boundary_vars, free_boundary_indices = 
         separate_fixed_free_boundary(region, problem.doms)
     
     n_free_boundary = length(free_boundary_vars)
     
-    # Step 4: Enumerate free boundary configurations
-    valid_config_groups = Vector{Vector{Bool}}[]
+    free_pos_of_boundary = zeros(Int, n_boundary)
+    @inbounds for (j, boundary_idx) in enumerate(free_boundary_indices)
+        free_pos_of_boundary[boundary_idx] = j
+    end
+    
+    inner_posmap = _build_axismap(inner_output_vars)
+    
+    valid_config_groups = Vector{Vector{Vector{Bool}}}()
     
     assignments = Tuple{Int,Bool}[]
     resize!(assignments, n_free_boundary)
@@ -224,25 +211,22 @@ function OptimalBranchingCore.branching_table(
         contracted_slice = slice_region_contraction(
             contracted_tensor,
             assignments,
-            axis_lookup,
+            axismap,
         )
         
-        # Extract feasible inner configurations
         free_inner_configs = extract_inner_configs(contracted_slice, length(inner_output_vars))
         
         isempty(free_inner_configs) && continue
         
-        # Construct full boundary configuration
-        boundary_config = construct_boundary_config(region, problem.doms, free_boundary_indices, free_config)
+        boundary_config = construct_boundary_config(region, problem.doms, free_pos_of_boundary, free_config)
 
-        inner_configs = construct_inner_config(region, problem.doms, inner_output_vars, free_inner_configs)
+        inner_configs = construct_inner_config(region, problem.doms, inner_posmap, free_inner_configs)
          
         full_configs = combine_configs(boundary_config, inner_configs)
         
         push!(valid_config_groups, full_configs)
     end
     
-    # Step 5: Return branching table
     if isempty(valid_config_groups)
         return BranchingTable(0, [Int[]])
     end

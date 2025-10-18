@@ -2,7 +2,6 @@ using Test
 using BooleanInference
 using ProblemReductions: Factoring, reduceto, CircuitSAT
 using GenericTensorNetworks
-using BenchmarkTools
 using BooleanInference: setup_from_cnf, k_neighboring
 using BooleanInference.GenericTensorNetworks: ∧, ∨, ¬
 

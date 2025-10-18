@@ -1,7 +1,7 @@
 using Test
 using BooleanInference
 using BooleanInference: setup_from_tensor_network, TNProblem, DynamicWorkspace, setup_problem, select_variables, get_cached_region, LeastOccurrenceSelector, NumUnfixedVars
-using BooleanInference: Region, construct_region, slicing, tensor_unwrapping, DomainMask
+using BooleanInference: Region, slicing, tensor_unwrapping, DomainMask
 using BooleanInference: DM_BOTH, DM_0, DM_1, has0, has1, is_fixed
 using BooleanInference: contract_tensors, contract_region, TNContractionSolver
 using BooleanInference: separate_fixed_free_boundary, construct_boundary_config, construct_inner_config
@@ -11,6 +11,7 @@ using OptimalBranchingCore: branching_table
 using TropicalNumbers: Tropical
 using ProblemReductions: Factoring, reduceto, CircuitSAT
 using GenericTensorNetworks
+using BooleanInference: separate_fixed_free_boundary, construct_boundary_config, construct_inner_config, extract_inner_configs, combine_configs
 
 @testset "Region constructor" begin
     region = Region(1, 
@@ -240,7 +241,6 @@ end
 end
 
 
-using BooleanInference: separate_fixed_free_boundary
 @testset "separate_fixed_free_boundary" begin
     region = Region(1,
                     [1, 2],
@@ -275,7 +275,6 @@ using BooleanInference: separate_fixed_free_boundary
     @test free_indices == [2]
 end
 
-using BooleanInference: construct_boundary_config
 @testset "construct_boundary_config" begin
     region = Region(1,
                     [1],
@@ -284,30 +283,40 @@ using BooleanInference: construct_boundary_config
     
     doms = fill(DM_BOTH, 10)
     free_boundary_indices = [1, 2]
+    # Build free_pos_of_boundary: maps boundary position to free position
+    n_boundary = length(region.boundary_vars)
+    free_pos_of_boundary = zeros(Int, n_boundary)
+    for (j, boundary_idx) in enumerate(free_boundary_indices)
+        free_pos_of_boundary[boundary_idx] = j
+    end
     
-    config = construct_boundary_config(region, doms, free_boundary_indices, 0)
+    config = construct_boundary_config(region, doms, free_pos_of_boundary, 0)
     @test config == [false, false]
     
-    config = construct_boundary_config(region, doms, free_boundary_indices, 1)
+    config = construct_boundary_config(region, doms, free_pos_of_boundary, 1)
     @test config == [true, false]
     
-    config = construct_boundary_config(region, doms, free_boundary_indices, 2)
+    config = construct_boundary_config(region, doms, free_pos_of_boundary, 2)
     @test config == [false, true]
     
-    config = construct_boundary_config(region, doms, free_boundary_indices, 3)
+    config = construct_boundary_config(region, doms, free_pos_of_boundary, 3)
     @test config == [true, true]
     
     doms[3] = DM_1
     free_boundary_indices = [2]
+    # Rebuild free_pos_of_boundary with new free_boundary_indices
+    free_pos_of_boundary = zeros(Int, n_boundary)
+    for (j, boundary_idx) in enumerate(free_boundary_indices)
+        free_pos_of_boundary[boundary_idx] = j
+    end
     
-    config = construct_boundary_config(region, doms, free_boundary_indices, 0)
+    config = construct_boundary_config(region, doms, free_pos_of_boundary, 0)
     @test config == [true, false]
     
-    config = construct_boundary_config(region, doms, free_boundary_indices, 1)
+    config = construct_boundary_config(region, doms, free_pos_of_boundary, 1)
     @test config == [true, true]
 end
 
-using BooleanInference: extract_inner_configs
 @testset "extract_inner_configs" begin
     T0 = zero(Tropical{Float64})
     T1 = one(Tropical{Float64})
@@ -330,7 +339,6 @@ using BooleanInference: extract_inner_configs
     @test length(configs) == 8
 end
 
-using BooleanInference: construct_inner_config
 @testset "construct_inner_config" begin
     region = Region(1,
                     [1],
@@ -339,33 +347,47 @@ using BooleanInference: construct_inner_config
     
     doms = fill(DM_BOTH, 10)
     inner_var_ids = Int[5, 6, 7]
+    # Build inner_posmap: maps var_id to position in free inner vars
+    inner_posmap = zeros(Int, maximum(inner_var_ids))
+    for (j, var_id) in enumerate(inner_var_ids)
+        inner_posmap[var_id] = j
+    end
     free_inner_configs = [[false, false, false], [true, false, true]]
     
-    inner_configs = construct_inner_config(region, doms, inner_var_ids, free_inner_configs)
+    inner_configs = construct_inner_config(region, doms, inner_posmap, free_inner_configs)
     @test length(inner_configs) == 2
     @test inner_configs[1] == [false, false, false]
     @test inner_configs[2] == [true, false, true]
     
     doms[5] = DM_1
     inner_var_ids = Int[6, 7]
+    # Rebuild inner_posmap with new inner_var_ids
+    inner_posmap = zeros(Int, maximum(inner_var_ids))
+    for (j, var_id) in enumerate(inner_var_ids)
+        inner_posmap[var_id] = j
+    end
     free_inner_configs = [[false, false], [false, true]]
     
-    inner_configs = construct_inner_config(region, doms, inner_var_ids, free_inner_configs)
+    inner_configs = construct_inner_config(region, doms, inner_posmap, free_inner_configs)
     @test length(inner_configs) == 2
     @test inner_configs[1] == [true, false, false]
     @test inner_configs[2] == [true, false, true]
     
     doms[6] = DM_0
     inner_var_ids = Int[7]
+    # Rebuild inner_posmap with new inner_var_ids
+    inner_posmap = zeros(Int, maximum(inner_var_ids))
+    for (j, var_id) in enumerate(inner_var_ids)
+        inner_posmap[var_id] = j
+    end
     free_inner_configs = [[false], [true]]
     
-    inner_configs = construct_inner_config(region, doms, inner_var_ids, free_inner_configs)
+    inner_configs = construct_inner_config(region, doms, inner_posmap, free_inner_configs)
     @test length(inner_configs) == 2
     @test inner_configs[1] == [true, false, false]
     @test inner_configs[2] == [true, false, true]
 end
 
-using BooleanInference: combine_configs
 @testset "combine_configs" begin
     boundary_config = [true, false]
     inner_configs = [[false, true], [true, false]]

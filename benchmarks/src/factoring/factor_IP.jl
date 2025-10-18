@@ -1,4 +1,3 @@
-# This file is contributed by Zhongyi Ni
 """
     findmin(problem::AbstractProblem, optimizer, tag::Bool)
 

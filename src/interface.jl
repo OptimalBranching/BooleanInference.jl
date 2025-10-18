@@ -7,7 +7,8 @@ function setup_from_circuit(cir::Circuit)
 end
 
 function setup_from_sat(sat::ConstraintSatisfactionProblem)
-    static = setup_from_tensor_network(GenericTensorNetwork(sat))
+    tn = GenericTensorNetwork(sat)
+    static = setup_from_tensor_network(tn)
     TNProblem(static)
 end
 
@@ -21,7 +22,7 @@ function solve_sat_problem(
     sat::ConstraintSatisfactionProblem; 
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(), 
-        selector=LeastOccurrenceSelector(2, 10), 
+        selector=LeastOccurrenceSelector(1, 2), 
         measure=NumUnfixedVars()
     ), 
     reducer::AbstractReducer=NoReducer()
@@ -36,7 +37,7 @@ function solve_sat_with_assignments(
     sat::ConstraintSatisfactionProblem;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(), 
-        selector=LeastOccurrenceSelector(2, 10), 
+        selector=LeastOccurrenceSelector(1, 2), 
         measure=NumUnfixedVars()
     ), 
     reducer::AbstractReducer=NoReducer()
@@ -56,7 +57,7 @@ end
 
 function solve_factoring(
     n::Int, m::Int, N::Int;
-    bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=LeastOccurrenceSelector(2, 10), measure=NumUnfixedVars()), 
+    bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=LeastOccurrenceSelector(1, 2), measure=NumUnfixedVars()), 
     reducer::AbstractReducer=NoReducer()
 )
     fproblem = Factoring(n, m, N)

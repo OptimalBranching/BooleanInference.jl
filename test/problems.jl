@@ -65,11 +65,3 @@ end
     tn_static = setup_from_tensor_network(tn)
     tn_problem = TNProblem(tn_static)
 end
-
-# @testset "compute_strides_for_column_major" begin
-#     shape = (Int32(2),Int32(3),Int32(4))
-#     strides = compute_strides(shape)
-#     @test strides == [1,2,6]
-#     idx = linindex(strides, (Int32(1),Int32(2),Int32(3)))
-#     @test idx == 15
-# end
