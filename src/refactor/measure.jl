@@ -1,13 +1,6 @@
-# Measure implementations for TNProblem
-
-"""
-    NumUnfixedVars <: AbstractMeasure
-
-Counts the number of unfixed variables in the problem.
-"""
 struct NumUnfixedVars <: AbstractMeasure end
 
 function OptimalBranchingCore.measure(problem::TNProblem, ::NumUnfixedVars)
+    # problem.n_unfixed == 0 && println("n_unfixed is 0")
     return Int(problem.n_unfixed)
 end
-
