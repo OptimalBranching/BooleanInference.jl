@@ -36,7 +36,6 @@ export KNeighborSelector, MultiStartKNeighborSelector, AdaptiveBoundarySelector,
 # tablesolver
 export TNContractionSolver
 
-export @debug_problem, @debug_region
 export clear_contraction_cache!
 
 include("refactor/problems.jl")

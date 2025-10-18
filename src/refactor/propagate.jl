@@ -1,19 +1,12 @@
 function propagate(static::TNStatic, doms::Vector{DomainMask})
-    # Create a working copy to avoid modifying input
     working_doms = copy(doms)
     
-    # Queue of tensors to check (initially all)
-    # Use a simple vector as FIFO queue
-    tensor_queue = Int[]
-    in_queue = falses(length(static.tensors))
-    
-    # Add all tensors to initial queue
-    for i in 1:length(static.tensors)
-        push!(tensor_queue, i)
-        in_queue[i] = true
-    end
+    tensor_queue = collect(1:length(static.tensors))
+    in_queue = trues(length(static.tensors))
     
     queue_pos = 1  # Current position in queue
+
+    masks_cache = _masks_cache!(static)
     
     while queue_pos <= length(tensor_queue)
         tensor_idx = tensor_queue[queue_pos]
@@ -21,18 +14,23 @@ function propagate(static::TNStatic, doms::Vector{DomainMask})
         in_queue[tensor_idx] = false
         
         tensor = static.tensors[tensor_idx]
+        masks = get_mask!(masks_cache, tensor_idx, tensor)
         
-        # Check how many configurations satisfy this tensor
-        # Returns (count, first_config) for efficiency
-        n_feasible, first_config = count_feasible_configs(tensor, working_doms)
-        
-        if n_feasible == 0
-            # Contradiction - no feasible configuration
-            return fill(DomainMask(0x00), length(working_doms))
-        elseif n_feasible == 1
-            # Unit propagation: only one way to satisfy this tensor
-            # Extract variable assignments and fix them
-            for (axis, var_id) in enumerate(tensor.var_axes)
+        feasible = copy(masks.sat)
+        @inbounds for (axis, var_id) in enumerate(tensor.var_axes)
+            allowed_axis = falses(length(feasible))
+            dm = working_doms[var_id]
+            has0(dm) && (allowed_axis .|= masks.axis_masks0[axis])
+            has1(dm) && (allowed_axis .|= masks.axis_masks1[axis])
+            feasible .&= allowed_axis
+            !any(feasible) && return fill(DomainMask(0x00), length(working_doms))
+        end
+
+        n_feasible = count(==(true), feasible)
+        if n_feasible == 1
+            first_idx = findfirst(==(true), feasible)
+            first_config = first_idx - 1
+            @inbounds for (axis, var_id) in enumerate(tensor.var_axes)
                 bit_val = (first_config >> (axis - 1)) & 1
                 new_mask = (bit_val == 1) ? DM_1 : DM_0
                 
@@ -46,7 +44,6 @@ function propagate(static::TNStatic, doms::Vector{DomainMask})
                     end
                     working_doms[var_id] = DomainMask(new_bits)
                     
-                    # Add all tensors connected to this variable to queue
                     for tensor_id in static.v2t[var_id]
                         if !in_queue[tensor_id]
                             push!(tensor_queue, tensor_id)
@@ -55,60 +52,103 @@ function propagate(static::TNStatic, doms::Vector{DomainMask})
                     end
                 end
             end
+        else
+            @inbounds for (axis, var_id) in enumerate(tensor.var_axes)
+                dm = working_doms[var_id]
+                if has0(dm)
+                    has_support0 = any(feasible .& masks.axis_masks0[axis])
+                    if !has_support0
+                        new_bits = dm.bits & DM_1.bits
+                        if new_bits ==0x00
+                            return fill(DomainMask(0x00), length(working_doms))
+                        elseif new_bits != dm.bits
+                            working_doms[var_id] = DomainMask(new_bits)
+                            for tensor_id in static.v2t[var_id]
+                                if !in_queue[tensor_id]
+                                    push!(tensor_queue, tensor_id)
+                                    in_queue[tensor_id] = true
+                                end
+                            end
+                        end
+                    end
+                end
+                if has1(dm)
+                    has_support1 = any(feasible .& masks.axis_masks1[axis])
+                    if !has_support1
+                        new_bits = dm.bits & DM_0.bits
+                        if new_bits == 0x00
+                            return fill(DomainMask(0x00), length(working_doms))
+                        elseif new_bits != dm.bits
+                            working_doms[var_id] = DomainMask(new_bits)
+                            for tensor_id in static.v2t[var_id]
+                                if !in_queue[tensor_id]
+                                    push!(tensor_queue, tensor_id)
+                                    in_queue[tensor_id] = true
+                                end
+                            end
+                        end
+                    end
+                end
+            end
         end
-        # If n_feasible > 1, multiple feasible configs - can't deduce anything
     end
     
     return working_doms
 end
 
-function count_feasible_configs(tensor::BoolTensor, doms::Vector{DomainMask})
-    var_axes = tensor.var_axes
-    n_vars = length(var_axes)
-    n_configs = 1 << n_vars
-    
-    count = 0
-    first_config = 0
-    
-    for config in 0:(n_configs-1)
-        # Check if this config is allowed by current domains
-        allowed = true
-        @inbounds for (axis, var_id) in enumerate(var_axes)
-            bit_val = (config >> (axis - 1)) & 1
-            dm = doms[var_id]
-            
-            # Check if this bit value is in the domain
-            if bit_val == 0
-                if !has0(dm)
-                    allowed = false
-                    break
-                end
-            else  # bit_val == 1
-                if !has1(dm)
-                    allowed = false
-                    break
-                end
-            end
+struct TensorMasks
+    sat::BitVector
+    axis_masks0::Vector{BitVector}
+    axis_masks1::Vector{BitVector}
+end
+
+function build_tensor_masks(tensor::BoolTensor)
+    nvars = length(tensor.var_axes)
+    n_cfg = 1 << nvars
+
+    sat = falses(n_cfg)
+    axis_masks0 = [falses(n_cfg) for _ in 1:nvars]
+    axis_masks1 = [falses(n_cfg) for _ in 1:nvars]
+
+    @inbounds for cfg in 0:(n_cfg-1)
+        if tensor.tensor[cfg+1] == Tropical(0.0)  # one(Tropical{Float64})
+            sat[cfg+1] = true
         end
-        
-        if !allowed
-            continue
-        end
-        
-        # Check if this config satisfies the tensor constraint
-        # tensor.tensor is 1-indexed, config is 0-indexed
-        @inbounds if tensor.tensor[config + 1] == Tropical(0.0)
-            count += 1
-            if count == 1
-                first_config = config
-            elseif count == 2
-                # Early termination: we know there are multiple solutions
-                # No point continuing
-                return (2, first_config)
+
+        @inbounds for axis in 1:nvars
+            bit = (cfg >> (axis - 1)) & 1
+            if bit == 0
+                axis_masks0[axis][cfg+1] = true
+            else
+                axis_masks1[axis][cfg+1] = true
             end
         end
     end
-    
-    return (count, first_config)
+    return TensorMasks(sat, axis_masks0, axis_masks1)
 end
 
+@inline function get_mask!(cache::Vector{Union{Nothing, TensorMasks}}, idx::Int, tensor::BoolTensor)
+    m = cache[idx]
+    isnothing(m) && (m = build_tensor_masks(tensor); cache[idx] = m)
+    return m
+end
+
+# 每个 TNStatic 对象一份的掩码缓存：key 用 objectid(static)
+const _MASKS_CACHE = IdDict{UInt, Vector{Union{Nothing, TensorMasks}}}()
+
+function _masks_cache!(static::TNStatic)
+    key = objectid(static)
+    vec = get!(_MASKS_CACHE, key) do
+        v = Vector{Union{Nothing, TensorMasks}}(undef, length(static.tensors))
+        fill!(v, nothing)
+        v
+    end
+    # 若该 static 的张量数量发生变化（例如新构建了 static），重建缓存
+    if length(vec) != length(static.tensors)
+        v = Vector{Union{Nothing, TensorMasks}}(undef, length(static.tensors))
+        fill!(v, nothing)
+        _MASKS_CACHE[key] = v
+        return v
+    end
+    return vec
+end
