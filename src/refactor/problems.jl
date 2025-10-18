@@ -25,31 +25,6 @@ function Base.show(io::IO, f::BoolTensor)
     print(io, "BoolTensor($(f.id), vars=[$(join(f.var_axes, ", "))], size=$(length(f.tensor)))")
 end
 
-# struct DenseTropicalTensor{T, N}
-#     data::Vector{T}  # length == prod(shape)
-#     shape::NTuple{N, Int32}  # per-axis domain size
-#     strides::NTuple{N, Int32}  # column-major strides
-# end
-
-# @inline function compute_strides(shape::NTuple{N, Int32}) where {N}
-#     nd = length(shape)  # number of dimensions
-#     s = Vector{Int32}(undef, nd)
-#     stride = Int32(1)
-#     @inbounds for i in 1:nd
-#         s[i] = stride
-#         stride *= shape[i]
-#     end
-#     return s
-# end
-
-# @inline function linindex(strides::NTuple{N, Int32}, coords::NTuple{N,Int32}) where {N}
-#     idx = Int32(1)
-#     @inbounds for i in 1:N
-#         idx += (coords[i]-Int32(1))*strides[i]
-#     end
-#     return Int(idx)
-# end
-
 struct TNStatic
     vars::Vector{Variable}
     tensors::Vector{BoolTensor}
@@ -182,7 +157,7 @@ end
 @inline has_last_branch_problem(problem::TNProblem) = problem.ws.has_cached_solution
 
 function last_branch_problem(problem::TNProblem)
-    has_last_branch_problem(problem) || throw(ErrorException("No cached branch solution"))
+    has_last_branch_problem(problem) || return nothing
     doms = copy(problem.ws.cached_doms)
     fixed = count(x -> is_fixed(x), doms)
     @assert fixed == length(doms)

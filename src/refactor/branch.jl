@@ -88,16 +88,16 @@ function OptimalBranchingCore.branch_and_reduce(
     end
 end
 
-function OptimalBranchingCore.optimal_branching_rule(
-    tbl::OptimalBranchingCore.BranchingTable,
-    variables::Vector{T},
-    problem::TNProblem,
-    measure::OptimalBranchingCore.AbstractMeasure,
-    solver::OptimalBranchingCore.AbstractSetCoverSolver
-) where T
-    candidates = OptimalBranchingCore.bit_clauses(tbl)
-    return OptimalBranchingCore.greedymerge(candidates, problem, variables, measure)
-end
+# function OptimalBranchingCore.optimal_branching_rule(
+#     tbl::OptimalBranchingCore.BranchingTable,
+#     variables::Vector{T},
+#     problem::TNProblem,
+#     measure::OptimalBranchingCore.AbstractMeasure,
+#     solver::OptimalBranchingCore.AbstractSetCoverSolver
+# ) where T
+#     candidates = OptimalBranchingCore.bit_clauses(tbl)
+#     return OptimalBranchingCore.greedymerge(candidates, problem, variables, measure)
+# end
 
 
 function OptimalBranchingCore.apply_branch(

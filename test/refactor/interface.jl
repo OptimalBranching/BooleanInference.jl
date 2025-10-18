@@ -5,13 +5,15 @@ using Test
 using BooleanInference.GenericTensorNetworks.ProblemReductions
 using BooleanInference.OptimalBranchingCore: BranchingStrategy
 
-@testset "convert_cnf_to_bip" begin
+@testset "setup_from_cnf" begin
     @bools a b c d e f g
     cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c), ∨(¬a))
-    bip, syms = convert_cnf_to_bip(cnf)
-    @test bip.he2v == [[1, 2, 3, 4], [1, 3, 4, 5], [5, 6], [2, 7], [1]]
-    @test bip.tensors[3][1] == zero(Tropical{Float64})
-    @test bip.literal_num == 7
+    tnproblem = setup_from_cnf(cnf)
+    @test tnproblem.static.t2v == [[1, 2, 3, 4], [1, 3, 4, 5], [5, 6], [2, 7], [1]]
+    @test tnproblem.n_unfixed == 7
+    # @test bip.he2v == [[1, 2, 3, 4], [1, 3, 4, 5], [5, 6], [2, 7], [1]]
+    # @test bip.tensors[3][1] == zero(Tropical{Float64})
+    # @test bip.literal_num == 7
 end
 
 @testset "convert_circuit_to_bip" begin

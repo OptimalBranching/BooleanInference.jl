@@ -133,7 +133,6 @@ end
     return m
 end
 
-# 每个 TNStatic 对象一份的掩码缓存：key 用 objectid(static)
 const _MASKS_CACHE = IdDict{UInt, Vector{Union{Nothing, TensorMasks}}}()
 
 function _masks_cache!(static::TNStatic)
@@ -143,7 +142,6 @@ function _masks_cache!(static::TNStatic)
         fill!(v, nothing)
         v
     end
-    # 若该 static 的张量数量发生变化（例如新构建了 static），重建缓存
     if length(vec) != length(static.tensors)
         v = Vector{Union{Nothing, TensorMasks}}(undef, length(static.tensors))
         fill!(v, nothing)
