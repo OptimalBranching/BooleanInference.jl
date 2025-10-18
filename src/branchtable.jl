@@ -2,10 +2,6 @@ using OptimalBranchingCore: BranchingTable
 
 struct TNContractionSolver <: AbstractTableSolver end
 
-# =======================================================
-# Helper functions for branching table construction
-# =======================================================
-
 function separate_fixed_free_boundary(region::Region, doms::Vector{DomainMask})
     fixed_vars = Int[]
     fixed_vals = Int[]
@@ -173,10 +169,6 @@ function handle_no_boundary_case(
         return BranchingTable(0, [Int[]])
     end
 end
-
-# ======================================================
-# Main branching table function
-# ======================================================
 
 function OptimalBranchingCore.branching_table(
     problem::TNProblem, 
