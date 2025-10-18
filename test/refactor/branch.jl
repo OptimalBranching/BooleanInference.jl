@@ -7,15 +7,13 @@ using ProblemReductions: Factoring, reduceto, CircuitSAT, read_solution
 using GenericTensorNetworks
 using BenchmarkTools
 using TropicalNumbers: Tropical
-using DataStructures: peek
 # using Logging
 
 # ENV["JULIA_DEBUG"] = "BooleanInference"
 
 @testset "branch" begin
-    # fproblem = Factoring(8, 8, 10395529)
-    n = 2
-    fproblem = Factoring(n, n, 10395529)
+    fproblem = Factoring(12, 12, 10395529)
+    # fproblem = Factoring(2, 2, 9)
     circuit_sat = reduceto(CircuitSAT, fproblem)
     problem = CircuitSAT(circuit_sat.circuit.circuit; use_constraints=true)
 
@@ -25,15 +23,6 @@ using DataStructures: peek
     @test !has_last_branch_problem(tn_problem)
 
     br_strategy = BranchingStrategy(table_solver = TNContractionSolver(), selector = LeastOccurrenceSelector(2, 10), measure = NumUnfixedVars())
-
-    tn_problem_eval = TNProblem(tn_static)
-    state = BooleanInference.gamma_queue_state(tn_problem_eval)
-    BooleanInference.populate_queue!(tn_problem_eval, br_strategy, br_strategy.selector, state)
-    @test !isempty(state.candidates)
-    gammas = [cand.result.γ for cand in values(state.candidates)]
-    focus, _ = peek(state.queue)
-    best_candidate = state.candidates[focus]
-    @test best_candidate.result.γ ≈ minimum(gammas)
 
     @time branch_and_reduce(tn_problem, br_strategy, NoReducer(), Tropical{Float64}; show_progress=false)
     @test has_last_branch_problem(tn_problem)

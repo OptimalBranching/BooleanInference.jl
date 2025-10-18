@@ -25,6 +25,31 @@ function Base.show(io::IO, f::BoolTensor)
     print(io, "BoolTensor($(f.id), vars=[$(join(f.var_axes, ", "))], size=$(length(f.tensor)))")
 end
 
+# struct DenseTropicalTensor{T, N}
+#     data::Vector{T}  # length == prod(shape)
+#     shape::NTuple{N, Int32}  # per-axis domain size
+#     strides::NTuple{N, Int32}  # column-major strides
+# end
+
+# @inline function compute_strides(shape::NTuple{N, Int32}) where {N}
+#     nd = length(shape)  # number of dimensions
+#     s = Vector{Int32}(undef, nd)
+#     stride = Int32(1)
+#     @inbounds for i in 1:nd
+#         s[i] = stride
+#         stride *= shape[i]
+#     end
+#     return s
+# end
+
+# @inline function linindex(strides::NTuple{N, Int32}, coords::NTuple{N,Int32}) where {N}
+#     idx = Int32(1)
+#     @inbounds for i in 1:N
+#         idx += (coords[i]-Int32(1))*strides[i]
+#     end
+#     return Int(idx)
+# end
+
 struct TNStatic
     vars::Vector{Variable}
     tensors::Vector{BoolTensor}
@@ -106,9 +131,8 @@ end
 mutable struct DynamicWorkspace
     cached_doms::Vector{DomainMask}
     has_cached_solution::Bool
-    branch_queue::Any
 end
-DynamicWorkspace(var_num::Int) = DynamicWorkspace(Vector{DomainMask}(undef, var_num), false, nothing)
+DynamicWorkspace(var_num::Int) = DynamicWorkspace(Vector{DomainMask}(undef, var_num), false)
 
 struct Region
     id::Int

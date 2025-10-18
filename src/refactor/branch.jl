@@ -1,202 +1,3 @@
-struct BranchingCandidate
-    focus_var::Int
-    region::Union{Nothing,Region}
-    variables::Vector{Int}
-    table::OptimalBranchingCore.BranchingTable
-    result::OptimalBranchingCore.OptimalBranchingResult
-    signature::Vector{UInt8}
-end
-
-mutable struct GammaQueueState
-    queue::PriorityQueue{Int,Float64}
-    candidates::Dict{Int,BranchingCandidate}
-end
-GammaQueueState() = GammaQueueState(PriorityQueue{Int,Float64}(), Dict{Int,BranchingCandidate}())
-
-@inline function gamma_queue_state(problem::TNProblem)
-    ws = problem.ws
-    state = ws.branch_queue
-    if state === nothing
-        state = GammaQueueState()
-        ws.branch_queue = state
-    end
-    return state::GammaQueueState
-end
-
-@inline function dom_signature(problem::TNProblem, vars::Vector{Int})
-    sig = Vector{UInt8}(undef, length(vars))
-    @inbounds for (i, var_id) in enumerate(vars)
-        sig[i] = problem.doms[var_id].bits
-    end
-    return sig
-end
-
-@inline function candidate_valid(candidate::BranchingCandidate, problem::TNProblem)::Bool
-    vars = candidate.variables
-    sig = candidate.signature
-    length(vars) == length(sig) || return false
-    @inbounds for (i, var_id) in enumerate(vars)
-        dm = problem.doms[var_id]
-        if dm.bits == 0x00 || dm.bits != sig[i]
-            return false
-        end
-    end
-    return true
-end
-
-function build_region_for_variable(
-    problem::TNProblem,
-    selector::LeastOccurrenceSelector,
-    var_id::Int,
-)
-    is_fixed(problem.doms[var_id]) && return nothing
-    return k_neighboring(
-        problem.static,
-        problem.doms,
-        var_id;
-        max_tensors = selector.max_tensors,
-        k = selector.k,
-    )
-end
-
-function compute_branching_candidate_for_var(
-    problem::TNProblem,
-    config::OptimalBranchingCore.BranchingStrategy,
-    selector::LeastOccurrenceSelector,
-    var_id::Int,
-)
-    region = build_region_for_variable(problem, selector, var_id)
-    region === nothing && return nothing
-    cache_region!(problem, region)
-    variables = vcat(region.boundary_vars, region.inner_vars)
-    isempty(variables) && return nothing
-    tbl = OptimalBranchingCore.branching_table(problem, config.table_solver, variables)
-    result = OptimalBranchingCore.optimal_branching_rule(
-        tbl,
-        variables,
-        problem,
-        config.measure,
-        config.set_cover_solver,
-    )
-    @debug "candidate_gamma" focus=region.id γ=result.γ
-    signature = dom_signature(problem, variables)
-    return BranchingCandidate(region.id, region, variables, tbl, result, signature)
-end
-
-function default_branching_candidate(
-    problem::TNProblem,
-    config::OptimalBranchingCore.BranchingStrategy,
-)
-    variables = OptimalBranchingCore.select_variables(
-        problem,
-        config.measure,
-        config.selector,
-    )
-    tbl = OptimalBranchingCore.branching_table(problem, config.table_solver, variables)
-    result = OptimalBranchingCore.optimal_branching_rule(
-        tbl,
-        variables,
-        problem,
-        config.measure,
-        config.set_cover_solver,
-    )
-    region = get_cached_region(problem)
-    if region !== nothing
-        set_last_region!(problem, region.id)
-    end
-    focus_var = region === nothing ? (isempty(variables) ? 0 : variables[1]) : region.id
-    signature = dom_signature(problem, variables)
-    return BranchingCandidate(focus_var, region, variables, tbl, result, signature)
-end
-
-function ensure_candidate!(
-    problem::TNProblem,
-    config::OptimalBranchingCore.BranchingStrategy,
-    selector::LeastOccurrenceSelector,
-    state::GammaQueueState,
-    var_id::Int,
-)
-    candidate = get(state.candidates, var_id, nothing)
-    if candidate !== nothing && candidate_valid(candidate, problem)
-        return candidate
-    end
-
-    candidate = compute_branching_candidate_for_var(problem, config, selector, var_id)
-    if candidate === nothing
-        if haskey(state.queue, var_id)
-            delete!(state.queue, var_id)
-        end
-        delete!(state.candidates, var_id)
-        return nothing
-    end
-
-    state.candidates[var_id] = candidate
-    state.queue[var_id] = candidate.result.γ
-    return candidate
-end
-
-function prune_fixed!(state::GammaQueueState, problem::TNProblem)
-    to_remove = Int[]
-    for var_id in keys(state.candidates)
-        if is_fixed(problem.doms[var_id])
-            push!(to_remove, var_id)
-        end
-    end
-    for var_id in to_remove
-        delete!(state.candidates, var_id)
-        if haskey(state.queue, var_id)
-            delete!(state.queue, var_id)
-        end
-    end
-    return nothing
-end
-
-function populate_queue!(
-    problem::TNProblem,
-    config::OptimalBranchingCore.BranchingStrategy,
-    selector::LeastOccurrenceSelector,
-    state::GammaQueueState,
-)
-    for var_id in get_unfixed_vars(problem.doms)
-        haskey(state.candidates, var_id) && continue
-        ensure_candidate!(problem, config, selector, state, var_id)
-    end
-    return nothing
-end
-
-function select_branching_candidate(
-    problem::TNProblem,
-    config::OptimalBranchingCore.BranchingStrategy,
-)
-    selector = config.selector
-    selector isa LeastOccurrenceSelector || return default_branching_candidate(problem, config)
-
-    state = gamma_queue_state(problem)
-    prune_fixed!(state, problem)
-    isempty(state.queue) && populate_queue!(problem, config, selector, state)
-
-    while !isempty(state.queue)
-        focus_var, _ = peek(state.queue)
-        candidate = ensure_candidate!(problem, config, selector, state, focus_var)
-        candidate === nothing && continue
-
-        if !candidate_valid(candidate, problem)
-            # invalid candidate was recomputed but still invalid (e.g., empty region)
-            delete!(state.queue, focus_var)
-            delete!(state.candidates, focus_var)
-            continue
-        end
-
-        region = candidate.region
-        if region !== nothing
-            set_last_region!(problem, region.id)
-        end
-        return candidate
-    end
-
-    return default_branching_candidate(problem, config)
-end
-
 function OptimalBranchingCore.branch_and_reduce(
     problem::TNProblem,
     config::OptimalBranchingCore.BranchingStrategy,
@@ -223,12 +24,30 @@ function OptimalBranchingCore.branch_and_reduce(
     #     ) * reduced_value
     # end
     
-    # Step 3-5: Evaluate branching candidates and select the best one using γ
-    candidate = select_branching_candidate(problem, config)
-    variables = candidate.variables
-    tbl = candidate.table
-    result = candidate.result
-    @debug "selected_gamma" focus=(candidate.region === nothing ? nothing : candidate.region.id) γ=result.γ
+    # Step 3: Select variables for branching
+    variables = OptimalBranchingCore.select_variables(
+        problem, 
+        config.measure, 
+        config.selector
+    )
+    
+    # Step 4: Compute branching table
+    tbl = OptimalBranchingCore.branching_table(
+        problem, 
+        config.table_solver, 
+        variables
+    )
+    
+    # Step 5: Compute optimal branching rule
+    result = OptimalBranchingCore.optimal_branching_rule(
+        tbl, 
+        variables, 
+        problem, 
+        config.measure,
+        config.set_cover_solver
+    )
+
+    # @show result.γ
     
     # Step 6: Branch and recurse
     clauses = OptimalBranchingCore.get_clauses(result)
@@ -269,16 +88,16 @@ function OptimalBranchingCore.branch_and_reduce(
     end
 end
 
-# function OptimalBranchingCore.optimal_branching_rule(
-#     tbl::OptimalBranchingCore.BranchingTable,
-#     variables::Vector{T},
-#     problem::TNProblem,
-#     measure::OptimalBranchingCore.AbstractMeasure,
-#     solver::OptimalBranchingCore.AbstractSetCoverSolver
-# ) where T
-#     candidates = OptimalBranchingCore.bit_clauses(tbl)
-#     return OptimalBranchingCore.greedymerge(candidates, problem, variables, measure)
-# end
+function OptimalBranchingCore.optimal_branching_rule(
+    tbl::OptimalBranchingCore.BranchingTable,
+    variables::Vector{T},
+    problem::TNProblem,
+    measure::OptimalBranchingCore.AbstractMeasure,
+    solver::OptimalBranchingCore.AbstractSetCoverSolver
+) where T
+    candidates = OptimalBranchingCore.bit_clauses(tbl)
+    return OptimalBranchingCore.greedymerge(candidates, problem, variables, measure)
+end
 
 
 function OptimalBranchingCore.apply_branch(

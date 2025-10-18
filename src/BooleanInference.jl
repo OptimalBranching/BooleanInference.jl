@@ -7,7 +7,6 @@ using OptimalBranchingCore: AbstractProblem, select_variables, reduce_problem, _
 using OptimalBranchingCore.BitBasis
 using GenericTensorNetworks
 using GenericTensorNetworks.OMEinsum
-using DataStructures: PriorityQueue, peek
 import ProblemReductions
 import ProblemReductions: CircuitSAT, Circuit, Factoring, reduceto, Satisfiability
 using KaHyPar
@@ -37,6 +36,7 @@ export KNeighborSelector, MultiStartKNeighborSelector, AdaptiveBoundarySelector,
 # tablesolver
 export TNContractionSolver
 
+export @debug_problem, @debug_region
 export clear_contraction_cache!
 
 include("refactor/problems.jl")
