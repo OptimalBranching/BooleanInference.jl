@@ -20,7 +20,7 @@ using BooleanInference.OptimalBranchingCore: BranchingStrategy
     end
     @test he2v == [[1, 2, 3, 4], [1, 3, 4, 5], [5, 6], [2, 7], [1]]
     @show tnproblem.static.tensors[3].tensor[1] == zero(Tropical{Float64})
-    @test tnproblem.n_unfixed == 7
+    @test tnproblem.n_unfixed == 6
 end
 
 @testset "convert_circuit_to_bip" begin
@@ -40,7 +40,8 @@ end
     @test he2v == [[1, 2, 3],[1]]
     @test tnproblem.static.tensors[1].tensor == vec(Tropical.([0.0 0.0; -Inf -Inf;;; 0.0 -Inf; -Inf 0.0]))
     @test tnproblem.static.tensors[2].tensor == [Tropical(-Inf), Tropical(0.0)]
-    @test tnproblem.n_unfixed == 3
+    # After initial propagation, all variables are fixed (problem is solved)
+    @test tnproblem.n_unfixed == 0
 end
 
 @testset "solve_sat_with_assignments" begin

@@ -25,11 +25,13 @@ end
     @bools a b c d e f g
     cnf = ∧(∨(b), ∨(a,¬c), ∨(d,¬b), ∨(¬c,¬d), ∨(a,e), ∨(a,e,¬c))
     problem = setup_from_cnf(cnf)
-    region = k_neighboring(problem.static, problem.doms, 1; max_tensors=100, k=1)
+    # Use unpropagated doms for testing k_neighboring
+    doms = BooleanInference.init_doms(problem.static)
+    region = k_neighboring(problem.static, doms, 1; max_tensors=100, k=1)
     @test region.tensors == [1, 3]
     @test Set(union(region.inner_vars, region.boundary_vars)) == Set([1, 4])
 
-    region = k_neighboring(problem.static, problem.doms, 2; max_tensors=100, k=1)
+    region = k_neighboring(problem.static, doms, 2; max_tensors=100, k=1)
     @test region.tensors == [2, 5, 6]
     @test Set(union(region.inner_vars, region.boundary_vars)) == Set([2, 3, 5])
 end
@@ -39,12 +41,14 @@ end
     @bools a b c d e
     cnf = ∧(∨(b), ∨(a,¬c), ∨(d,¬b), ∨(¬c,¬d), ∨(a,e), ∨(a,e,¬c))
     problem = setup_from_cnf(cnf)
-    region = k_neighboring(problem.static, problem.doms, 1; max_tensors=100, k=2)
+    # Use unpropagated doms for testing k_neighboring
+    doms = BooleanInference.init_doms(problem.static)
+    region = k_neighboring(problem.static, doms, 1; max_tensors=100, k=2)
     @test region.tensors == [1, 3, 4]
     @test Set(union(region.inner_vars, region.boundary_vars)) == Set([1, 3, 4])
     @test region.boundary_vars == [3]
 
-    region = k_neighboring(problem.static, problem.doms, 2; max_tensors=100, k=2)
+    region = k_neighboring(problem.static, doms, 2; max_tensors=100, k=2)
     @test region.tensors == [2, 4, 5, 6]
     @test Set(union(region.inner_vars, region.boundary_vars)) == Set([2, 3, 4, 5])
     @test region.boundary_vars == [4]

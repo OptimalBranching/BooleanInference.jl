@@ -43,10 +43,8 @@ function contract_region(tn::TNStatic, region::Region, doms::Vector{DomainMask})
         end
     end
     
-    # Special case: if all variables are fixed, output is scalar
     if isempty(output_vars)
-        # Contract everything to a scalar
-        # Use empty output indices
+        # if all variables are fixed, output is scalar
         contracted = contract_tensors(sliced_tensors, tensor_indices, Int[])
         @assert length(contracted) == 1
         return contracted, Int[]

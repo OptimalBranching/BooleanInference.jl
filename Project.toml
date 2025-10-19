@@ -6,7 +6,6 @@ authors = ["nzy1997"]
 [deps]
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 GenericTensorNetworks = "3521c873-ad32-4bb4-b63d-f4f178f42b49"
-KaHyPar = "2a6221f6-aa48-11e9-3542-2d9e0ef01880"
 OptimalBranchingCore = "c76e7b22-e1d2-40e8-b0f1-f659837787b8"
 ProblemReductions = "899c297d-f7d2-4ebf-8815-a35996def416"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
@@ -15,7 +14,6 @@ TropicalNumbers = "b3a74e9c-7526-4576-a4eb-79c0d4c32334"
 [compat]
 DataStructures = "0.18.22"
 GenericTensorNetworks = "4"
-KaHyPar = "0.3.1"
 OptimalBranchingCore = "0.1"
 ProblemReductions = "0.3.5"
 SparseArrays = "1.11.0"

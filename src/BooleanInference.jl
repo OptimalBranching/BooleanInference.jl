@@ -9,7 +9,6 @@ using GenericTensorNetworks
 using GenericTensorNetworks.OMEinsum
 import ProblemReductions
 import ProblemReductions: CircuitSAT, Circuit, Factoring, reduceto, Satisfiability
-using KaHyPar
 using DataStructures
 using DataStructures: PriorityQueue
 

@@ -25,11 +25,7 @@ function OptimalBranchingCore.branch_and_reduce(
     # end
     
     # Step 3: Select variables for branching
-    variables = OptimalBranchingCore.select_variables(
-        problem, 
-        config.measure, 
-        config.selector
-    )
+    variables = OptimalBranchingCore.select_variables(problem, config.measure, config.selector)
     
     # Step 4: Compute branching table
     tbl = OptimalBranchingCore.branching_table(problem, config.table_solver, variables)
@@ -83,7 +79,6 @@ function OptimalBranchingCore.apply_branch(
     clause::OptimalBranchingCore.Clause{INT}, 
     variables::Vector{Int}
 ) where {INT<:Integer}
-    # Copy domain masks
     new_doms = copy(problem.doms)
     # Apply clause: fix variables according to mask and values
     n_fixed = 0
@@ -131,7 +126,6 @@ function OptimalBranchingCore.apply_branch(
 end
 
 function OptimalBranchingCore.reduce_problem(::Type{T}, problem::TNProblem, ::OptimalBranchingCore.NoReducer) where T
-    # No reduction - return problem unchanged
     return (problem, one(T))
 end
 

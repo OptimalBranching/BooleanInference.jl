@@ -127,7 +127,8 @@ struct TNProblem <: AbstractProblem
 end
 function TNProblem(static::TNStatic)::TNProblem
     doms = init_doms(static)
-    n_unfixed = length(static.vars)
+    doms = propagate(static, doms)
+    n_unfixed = count_unfixed(doms)
     ws = DynamicWorkspace(length(static.vars))
     return TNProblem(static, doms, n_unfixed, ws)
 end

@@ -24,7 +24,6 @@ function separate_fixed_free_boundary(region::Region, doms::Vector{DomainMask})
             push!(free_indices, i)
         end
     end
-    
     return fixed_vars, fixed_vals, free_vars, free_indices
 end
 
@@ -181,12 +180,9 @@ function OptimalBranchingCore.branching_table(
         end
     end
 
-    if n_boundary == 0
-        return handle_no_boundary_case(problem, region, contracted_tensor, inner_output_vars)
-    end
+    n_boundary == 0 && return handle_no_boundary_case(problem, region, contracted_tensor, inner_output_vars)
     
-    _, _, free_boundary_vars, free_boundary_indices = 
-        separate_fixed_free_boundary(region, problem.doms)
+    _, _, free_boundary_vars, free_boundary_indices = separate_fixed_free_boundary(region, problem.doms)
     
     n_free_boundary = length(free_boundary_vars)
     
@@ -198,7 +194,6 @@ function OptimalBranchingCore.branching_table(
     inner_posmap = _build_axismap(inner_output_vars)
     
     valid_config_groups = Vector{Vector{Vector{Bool}}}()
-    
     assignments = Tuple{Int,Bool}[]
     resize!(assignments, n_free_boundary)
     
@@ -208,11 +203,7 @@ function OptimalBranchingCore.branching_table(
             assignments[j] = (var_id, bit == 1)
         end
         
-        contracted_slice = slice_region_contraction(
-            contracted_tensor,
-            assignments,
-            axismap,
-        )
+        contracted_slice = slice_region_contraction(contracted_tensor, assignments, axismap)
         
         free_inner_configs = extract_inner_configs(contracted_slice, length(inner_output_vars))
         
@@ -227,9 +218,6 @@ function OptimalBranchingCore.branching_table(
         push!(valid_config_groups, full_configs)
     end
     
-    if isempty(valid_config_groups)
-        return BranchingTable(0, [Int[]])
-    end
-    
+    isempty(valid_config_groups) && return BranchingTable(0, [Int[]])
     return BranchingTable(n_total, valid_config_groups)
 end
