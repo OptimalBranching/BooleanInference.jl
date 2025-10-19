@@ -6,6 +6,12 @@ function OptimalBranchingCore.branch_and_reduce(
     show_progress::Bool=false,
     tag::Vector{Tuple{Int,Int}}=Tuple{Int,Int}[]
 ) where TR
+    # Update max depth
+    current_depth = length(tag)
+    if current_depth > problem.ws.max_depth
+        problem.ws.max_depth = current_depth
+    end
+    
     # Step 1: Check if problem is solved (all variables fixed)
     if is_solved(problem)
         @debug "problem is solved"
@@ -38,6 +44,10 @@ function OptimalBranchingCore.branch_and_reduce(
     clauses = OptimalBranchingCore.get_clauses(result)
     @debug "A new branch-level search starts with $(length(clauses)) clauses: $(clauses)"
     
+    # Record branching statistics
+    problem.ws.total_branches += 1
+    problem.ws.total_subproblems += length(clauses)
+    
     return sum(enumerate(clauses)) do (i, branch)
         show_progress && (OptimalBranchingCore.print_sequence(stdout, tag); println(stdout))
         @debug "branch=$branch, n_unfixed=$(problem.n_unfixed)"
@@ -54,7 +64,8 @@ function OptimalBranchingCore.branch_and_reduce(
         end
         
         # Recursively solve subproblem
-        new_tag = show_progress ? [tag..., (i, length(clauses))] : tag
+        # Always update tag for depth tracking, only print when show_progress=true
+        new_tag = [tag..., (i, length(clauses))]
         sub_result = OptimalBranchingCore.branch_and_reduce(subproblem, config, reducer, result_type;tag=new_tag, show_progress=show_progress)
         
         # Combine results

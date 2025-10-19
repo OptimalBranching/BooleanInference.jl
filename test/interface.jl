@@ -48,21 +48,66 @@ end
     @bools a b c d e f g
     cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c), ∨(¬a))
     sat = Satisfiability(cnf; use_constraints=true)
-    res, dict = solve_sat_with_assignments(sat)
+    res, dict, _, stats = solve_sat_with_assignments(sat)
     @test res == true
     @test satisfiable(cnf, dict) == true
+    # Test that stats are recorded
+    @test stats.total_branches >= 0
+    @test stats.max_depth >= 0
 
     cnf = ∧(∨(a), ∨(a,¬c), ∨(d,¬b), ∨(¬c,¬d), ∨(a,e), ∨(a,e,¬c), ∨(¬a))
     sat = Satisfiability(cnf; use_constraints=true)
-    res, dict, _ = solve_sat_with_assignments(sat)
+    res, dict, _, stats = solve_sat_with_assignments(sat)
     @test res == false
     # @test satisfiable(cnf, dict) == false
     @test isempty(dict)
+    @test stats.total_branches >= 0
 end
 
 @testset "solve_factoring" begin
-    a,b = solve_factoring(5,5,31*29)
+    a, b, stats = solve_factoring(5, 5, 31*29)
     @test a*b == 31*29
+    @test stats.total_branches >= 0
+    @test stats.total_subproblems >= 0
+    println("Factoring stats: branches=$(stats.total_branches), subproblems=$(stats.total_subproblems), max_depth=$(stats.max_depth)")
+end
+
+@testset "branching_statistics" begin
+    # Test with a simple SAT problem
+    @bools a b c d
+    cnf = ∧(∨(a, b), ∨(¬a, c), ∨(¬b, d))
+    sat = Satisfiability(cnf; use_constraints=true)
+    tn_problem = setup_from_sat(sat)
+    
+    # Test initial stats are zero
+    initial_stats = get_branching_stats(tn_problem)
+    @test initial_stats.total_branches == 0
+    @test initial_stats.total_subproblems == 0
+    @test initial_stats.max_depth == 0
+    
+    # Solve and check stats are recorded
+    result, depth, stats = solve(tn_problem, 
+        BranchingStrategy(table_solver=TNContractionSolver(), 
+                         selector=LeastOccurrenceSelector(1, 2), 
+                         measure=NumUnfixedVars()), 
+        NoReducer())
+    
+    # Stats should have been recorded
+    @test stats.total_branches > 0 || result !== nothing  # Either branched or solved immediately
+    @test stats.total_subproblems >= stats.total_branches * 2  # Each branch creates at least 2 subproblems
+    @test stats.max_depth >= 0
+    @test stats.avg_branching_factor >= 0.0
+    
+    # Print stats for debugging
+    println("\nBranching Statistics:")
+    print_branching_stats(tn_problem)
+    
+    # Test reset functionality
+    reset_branching_stats!(tn_problem)
+    reset_stats = get_branching_stats(tn_problem)
+    @test reset_stats.total_branches == 0
+    @test reset_stats.total_subproblems == 0
+    @test reset_stats.max_depth == 0
 end
 
 # @testset "benchmark" begin

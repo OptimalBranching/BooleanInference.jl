@@ -13,9 +13,11 @@ function setup_from_sat(sat::ConstraintSatisfactionProblem)
 end
 
 function solve(problem::TNProblem, bsconfig::BranchingStrategy, reducer::AbstractReducer)
+    reset_branching_stats!(problem)  # Reset stats before solving
     depth = branch_and_reduce(problem, bsconfig, reducer, Tropical{Float64}; show_progress=false)
     res = last_branch_problem(problem)
-    return (res, depth)
+    stats = get_branching_stats(problem)
+    return (res, depth, stats)
 end
 
 function solve_sat_problem(
@@ -28,9 +30,9 @@ function solve_sat_problem(
     reducer::AbstractReducer=NoReducer()
 )
     tn_problem = setup_from_sat(sat)
-    result, depth = solve(tn_problem, bsconfig, reducer)
+    result, depth, stats = solve(tn_problem, bsconfig, reducer)
     satisfiable = !isnothing(result)
-    return satisfiable, result, depth
+    return satisfiable, result, depth, stats
 end
 
 function solve_sat_with_assignments(
@@ -42,16 +44,16 @@ function solve_sat_with_assignments(
     ), 
     reducer::AbstractReducer=NoReducer()
 )
-    satisfiable, result, depth = solve_sat_problem(sat; bsconfig, reducer)
+    satisfiable, result, depth, stats = solve_sat_problem(sat; bsconfig, reducer)
     if satisfiable && !isnothing(result)
         # Convert TNProblem result to variable assignments
         assignments = Dict{Symbol, Int}()
         for (i, symbol) in enumerate(sat.symbols)
             assignments[symbol] = get_var_value(result, i)
         end
-        return satisfiable, assignments, depth
+        return satisfiable, assignments, depth, stats
     else
-        return false, Dict{Symbol, Int}(), depth
+        return false, Dict{Symbol, Int}(), depth, stats
     end
 end
 
@@ -64,9 +66,9 @@ function solve_factoring(
     circuit_sat = reduceto(CircuitSAT, fproblem)
     problem = CircuitSAT(circuit_sat.circuit.circuit; use_constraints=true)
     tn_problem = setup_from_sat(problem)
-    res, _ = solve(tn_problem, bsconfig, reducer)
-    isnothing(res) && return nothing, nothing
+    res, _, stats = solve(tn_problem, bsconfig, reducer)
+    isnothing(res) && return nothing, nothing, stats
     a = get_var_value(res, circuit_sat.q)
     b = get_var_value(res, circuit_sat.p)
-    return bits_to_int(a), bits_to_int(b)
+    return bits_to_int(a), bits_to_int(b), stats
 end

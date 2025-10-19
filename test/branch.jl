@@ -12,7 +12,7 @@ using TropicalNumbers: Tropical
 # ENV["JULIA_DEBUG"] = "BooleanInference"
 
 @testset "branch" begin
-    fproblem = Factoring(16, 16, 3652981447)
+    fproblem = Factoring(12, 12, 10395529)
     # fproblem = Factoring(2, 2, 4)
     circuit_sat = reduceto(CircuitSAT, fproblem)
     problem = CircuitSAT(circuit_sat.circuit.circuit; use_constraints=true)

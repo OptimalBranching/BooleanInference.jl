@@ -70,6 +70,9 @@ export k_neighboring, KNNWorkspace
 # Export utility functions
 export get_unfixed_vars, count_unfixed, bits_to_int
 
+# Export branching statistics functions
+export get_branching_stats, reset_branching_stats!, print_branching_stats
+
 # Export branching table functions
 export separate_fixed_free_boundary, construct_boundary_config, construct_inner_config
 export extract_inner_configs, combine_configs, get_region_contraction, slice_region_contraction
