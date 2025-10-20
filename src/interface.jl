@@ -1,45 +1,74 @@
-function cnf2bip(cnf::CNF)
-    return sat2bip(Satisfiability(cnf))
+function setup_from_cnf(cnf::CNF)
+    return setup_from_sat(Satisfiability(cnf; use_constraints=true))
 end
 
-function sat2bip(sat::ConstraintSatisfactionProblem)
-    problem = GenericTensorNetwork(sat)
-    he2v = getixsv(problem.code)
-    tensors = GenericTensorNetworks.generate_tensors(Tropical(1.0), problem)
-    vec_tensors = [vec(t) for t in tensors]
-    new_tensors = [replace(t,Tropical(1.0) => zero(Tropical{Float64})) for t in vec_tensors]
-    return BooleanInferenceProblem(new_tensors, he2v, length(problem.problem.symbols)), problem.problem.symbols
+function setup_from_circuit(cir::Circuit)
+    return setup_from_sat(CircuitSAT(cir; use_constraints=true))
 end
 
-function cir2bip(cir::Circuit)
-    return sat2bip(CircuitSAT(cir))
+function setup_from_sat(sat::ConstraintSatisfactionProblem)
+    tn = GenericTensorNetwork(sat)
+    static = setup_from_tensor_network(tn)
+    TNProblem(static)
 end
 
-function solvesat(sat::ConstraintSatisfactionProblem; bsconfig::BranchingStrategy = BranchingStrategy(table_solver = TNContractionSolver(), selector = KNeighborSelector(1,1), measure=NumOfVertices()), reducer=NoReducer())
-    p,syms = sat2bip(sat)
-    return solvebip(p; bsconfig, reducer)
+function solve(problem::TNProblem, bsconfig::BranchingStrategy, reducer::AbstractReducer)
+    reset_branching_stats!(problem)  # Reset stats before solving
+    depth = branch_and_reduce(problem, bsconfig, reducer, Tropical{Float64}; show_progress=false)
+    res = last_branch_problem(problem)
+    stats = get_branching_stats(problem)
+    return (res, depth, stats)
 end
 
-function solve_factoring(n::Int, m::Int, N::Int; bsconfig::BranchingStrategy = BranchingStrategy(table_solver = TNContractionSolver(), selector =KNeighborSelector(1,1), measure=NumOfVertices()), reducer=NoReducer())
-    # global BRANCHNUMBER = 0
-    fproblem = Factoring(m, n, N)
-    res = reduceto(CircuitSAT,fproblem)
-    ans,vals = solvesat(res.circuit; bsconfig, reducer)
-    a, b = ProblemReductions.read_solution(fproblem, [vals[res.p]...,vals[res.q]...])
-    @show ans
-    # @show BRANCHNUMBER
-    return a,b
+function solve_sat_problem(
+    sat::ConstraintSatisfactionProblem; 
+    bsconfig::BranchingStrategy=BranchingStrategy(
+        table_solver=TNContractionSolver(), 
+        selector=LeastOccurrenceSelector(1, 2), 
+        measure=NumUnfixedVars()
+    ), 
+    reducer::AbstractReducer=NoReducer()
+)
+    tn_problem = setup_from_sat(sat)
+    result, depth, stats = solve(tn_problem, bsconfig, reducer)
+    satisfiable = !isnothing(result)
+    return satisfiable, result, depth, stats
 end
 
-function solve_sat(sat::ConstraintSatisfactionProblem)
-    res,vals = solvesat(sat)
-    return res, Dict(zip(sat.symbols,vals))
+function solve_sat_with_assignments(
+    sat::ConstraintSatisfactionProblem;
+    bsconfig::BranchingStrategy=BranchingStrategy(
+        table_solver=TNContractionSolver(), 
+        selector=LeastOccurrenceSelector(1, 2), 
+        measure=NumUnfixedVars()
+    ), 
+    reducer::AbstractReducer=NoReducer()
+)
+    satisfiable, result, depth, stats = solve_sat_problem(sat; bsconfig, reducer)
+    if satisfiable && !isnothing(result)
+        # Convert TNProblem result to variable assignments
+        assignments = Dict{Symbol, Int}()
+        for (i, symbol) in enumerate(sat.symbols)
+            assignments[symbol] = get_var_value(result, i)
+        end
+        return satisfiable, assignments, depth, stats
+    else
+        return false, Dict{Symbol, Int}(), depth, stats
+    end
 end
 
-function solvebip(bip::BooleanInferenceProblem; bsconfig::BranchingStrategy = BranchingStrategy(table_solver = TNContractionSolver(), selector = KNeighborSelector(1,1), measure=NumOfVertices()), reducer=NoReducer())
-    bs = initialize_branching_status(bip)
-    bs = deduction_reduce(bip,bs,collect(1:length(bip.he2v)))
-    ns,res,count_num = branch_and_reduce(bip,bs, bsconfig, reducer)
-    @show count_num
-    return ns,get_answer(res,bip.literal_num)
+function solve_factoring(
+    n::Int, m::Int, N::Int;
+    bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=LeastOccurrenceSelector(1, 2), measure=NumUnfixedVars()), 
+    reducer::AbstractReducer=NoReducer()
+)
+    fproblem = Factoring(n, m, N)
+    circuit_sat = reduceto(CircuitSAT, fproblem)
+    problem = CircuitSAT(circuit_sat.circuit.circuit; use_constraints=true)
+    tn_problem = setup_from_sat(problem)
+    res, _, stats = solve(tn_problem, bsconfig, reducer)
+    isnothing(res) && return nothing, nothing, stats
+    a = get_var_value(res, circuit_sat.q)
+    b = get_var_value(res, circuit_sat.p)
+    return bits_to_int(a), bits_to_int(b), stats
 end
