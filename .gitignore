@@ -20,8 +20,22 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+*.swp
+*.swo
 
 statprof/
 OptimalBranching.jl/
 .julia/
 .claude/
+
+# === Build outputs ===
+/benchmarks/artifacts/
+/benchmarks/third-party/**/build/
+/benchmarks/third-party/**/bin/
+/benchmarks/third-party/**/CMakeFiles/
+/benchmarks/third-party/**/Makefile
+/benchmarks/third-party/**/cmake_install.cmake
+
+# === Logs ===
+*.log
+*.out

@@ -1,4 +1,0 @@
-[submodule "benchmarks/third-party/aiger"]
-	ignore = all
-[submodule "benchmarks/third-party/x-sat"]
-	ignore = all
