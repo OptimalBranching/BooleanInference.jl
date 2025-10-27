@@ -11,6 +11,7 @@ benchmarks/Manifest.toml
 # IDE
 .vscode/
 .idea/
+CLAUDE.md
 
 # OS
 .DS_Store
@@ -22,3 +23,5 @@ Thumbs.db
 
 statprof/
 OptimalBranching.jl/
+.julia/
+.claude/

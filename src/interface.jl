@@ -65,6 +65,7 @@ function solve_factoring(
     fproblem = Factoring(n, m, N)
     circuit_sat = reduceto(CircuitSAT, fproblem)
     problem = CircuitSAT(circuit_sat.circuit.circuit; use_constraints=true)
+    @show problem
     tn_problem = setup_from_sat(problem)
     res, _, stats = solve(tn_problem, bsconfig, reducer)
     isnothing(res) && return nothing, nothing, stats

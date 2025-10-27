@@ -109,9 +109,10 @@ mutable struct DynamicWorkspace
     # Branching statistics
     total_branches::Int
     total_subproblems::Int
-    max_depth::Int 
+    max_depth::Int
+    var_values::PriorityQueue{Int, Float64}
 end
-DynamicWorkspace(var_num::Int) = DynamicWorkspace(Vector{DomainMask}(undef, var_num), false, 0, 0, 0)
+DynamicWorkspace(var_num::Int) = DynamicWorkspace(Vector{DomainMask}(undef, var_num), false, 0, 0, 0, PriorityQueue{Int, Float64}())
 
 struct Region
     id::Int
