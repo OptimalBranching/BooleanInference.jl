@@ -1,6 +1,8 @@
 [submodule "benchmarks/third-party/x-sat"]
 	path = benchmarks/third-party/x-sat
 	url = https://github.com/shaowei-cai-group/X-SAT.git
+	ignore = all
 [submodule "benchmarks/third-party/aiger"]
 	path = benchmarks/third-party/aiger
 	url = https://github.com/arminbiere/aiger.git
+	ignore = all
