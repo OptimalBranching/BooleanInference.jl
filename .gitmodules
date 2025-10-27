@@ -1,0 +1,3 @@
+[submodule "benchmarks/third-party/x-sat"]
+	path = benchmarks/third-party/x-sat
+	url = https://github.com/shaowei-cai-group/X-SAT.git
