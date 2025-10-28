@@ -1,7 +1,3 @@
-using JuMP
-using ProblemReductions
-using ProblemReductions: Factoring, CircuitSAT, reduceto, constraints, objectives, AbstractProblem
-
 function findmin_ip(problem::AbstractProblem, tag::Bool; optimizer, env)
     cons = constraints(problem)
     nsc = ProblemReductions.num_variables(problem)

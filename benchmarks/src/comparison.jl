@@ -1,27 +1,4 @@
-function run_full_benchmark(problem_type::Type{<:AbstractBenchmarkProblem}; 
-                           solver=nothing,
-                           dataset_per_config::Int=50,
-                           force_regenerate_datasets::Bool=false)
-    
-    problem_name = lowercase(string(problem_type)[1:end-7])
-    configs = default_configs(problem_type)
-    
-    @info "Preparing $problem_name datasets..."
-    generate_datasets(problem_type; 
-                     configs=configs, 
-                     per_config=dataset_per_config, 
-                     include_solution=true,
-                     force_regenerate=force_regenerate_datasets)
-    
-    @info "Running $problem_name benchmarks..."
-    results = benchmark_problem(problem_type; 
-                               configs=configs,
-                               solver=solver)
-    
-    print_benchmark_summary(results)
-    
-    return results
-end
+# run_full_benchmark is deprecated - implement per problem type
 
 function list_available_solvers(problem_type::Type{<:AbstractBenchmarkProblem})
     solvers = available_solvers(problem_type)
@@ -36,30 +13,29 @@ function list_available_solvers(problem_type::Type{<:AbstractBenchmarkProblem})
     end
 end
 
+"""
+    run_solver_comparison(problem_type, dataset_paths; solvers=nothing)
+
+Compare multiple solvers on the same datasets.
+"""
 function run_solver_comparison(problem_type::Type{<:AbstractBenchmarkProblem}, 
-                               config_tuples::Vector{<:Tuple}; 
-                               dataset_per_config::Int=50,
-                               force_regenerate_datasets::Bool=false)
-    solvers = available_solvers(problem_type)
+                               dataset_paths::Vector{String};
+                               solvers=nothing)
+    solver_list = isnothing(solvers) ? available_solvers(problem_type) : solvers
     results = Dict()
     
-    for solver in solvers
+    for solver in solver_list
         solver_name_str = solver_name(solver)
         @info "Running benchmark with solver: $solver_name_str"
-        configs = default_configs(problem_type)
-        if !isempty(config_tuples)
-            configs = [config(problem_type, t) for t in config_tuples]
+        
+        solver_results = []
+        for path in dataset_paths
+            result = benchmark_dataset(problem_type, path; solver=solver)
+            if !isnothing(result)
+                push!(solver_results, result)
+            end
         end
         
-        problem_name = lowercase(string(problem_type)[1:end-7])
-        
-        generate_datasets(problem_type; 
-                         configs=configs, 
-                         per_config=dataset_per_config, 
-                         include_solution=true,
-                         force_regenerate=force_regenerate_datasets)
-        
-        solver_results = benchmark_problem(problem_type; configs=configs, solver=solver)
         results[solver_name_str] = solver_results
     end
     
@@ -76,67 +52,69 @@ function print_solver_comparison_summary(solver_results::Dict)
     println("SOLVER COMPARISON SUMMARY")
     println(repeat("=", 80))
     
+    # Get all successful results (non-nothing)
     first_results = first(values(solver_results))
-    configs = [result["config"] for result in first_results if result["status"] == "success"]
+    successful_results = filter(!isnothing, first_results)
     
-    if isempty(configs)
+    if isempty(successful_results)
         println("No successful results to compare!")
         return
     end
     
+    # Get unique dataset paths
+    dataset_paths = unique([result["dataset_path"] for result in successful_results])
+    
     solver_names = collect(keys(solver_results))
-    header = "| Config   "
+    header = "| Dataset           "
     for solver in solver_names
-        header *= "| $(rpad(solver, 10)) "
+        header *= "| $(rpad(solver, 12)) "
     end
     header *= "|"
     
-    println(repeat("+", length(header)))
     println(header)
     println(repeat("-", length(header)))
     
-    for config in configs
-        config_str = "$(config.m)x$(config.n)"
-        row = "| $(rpad(config_str, 8)) "
+    for path in dataset_paths
+        # Extract a short name from path
+        path_parts = splitpath(path)
+        dataset_name = length(path_parts) > 0 ? path_parts[end] : path
+        dataset_str = dataset_name[1:min(length(dataset_name), 17)]
+        row = "| $(rpad(dataset_str, 17)) "
         
         for solver in solver_names
             solver_result = solver_results[solver]
-            matching_result = nothing
-            for result in solver_result
-                if result["config"] == config && result["status"] == "success"
-                    matching_result = result
-                    break
-                end
-            end
+            matching_result = findfirst(r -> !isnothing(r) && r["dataset_path"] == path, solver_result)
             
             if isnothing(matching_result)
                 time_str = "FAILED"
             else
-                median_time = matching_result["median_time"]
+                result = solver_result[matching_result]
+                median_time = result["median_time"]
                 time_str = format_time(median_time)
             end
-            row *= "| $(rpad(time_str, 10)) "
+            row *= "| $(rpad(time_str, 12)) "
         end
         row *= "|"
         println(row)
     end
-    println(repeat("+", length(header)))
     println(repeat("=", 80))
 end
 
 function compare_solver_results(name1::String, results1, name2::String, results2)
     println(repeat("+", 80))
-    println("| $(rpad("Config", 8)) | $(rpad("$name1", 15)) | $(rpad("$name2", 15)) | $(rpad("Winner", 20)) |")
+    println("| $(rpad("Dataset", 15)) | $(rpad("$name1", 15)) | $(rpad("$name2", 15)) | $(rpad("Winner", 20)) |")
     println(repeat("-", 80))
     
-    success1 = filter(r -> r["status"] == "success", results1)
-    success2 = filter(r -> r["status"] == "success", results2)
+    success1 = filter(!isnothing, results1)
+    success2 = filter(!isnothing, results2)
     
     for r1 in success1
-        config = r1["config"]
-        config_str = "$(config.m)x$(config.n)"
+        path = r1["dataset_path"]
+        path_parts = splitpath(path)
+        dataset_name = length(path_parts) > 0 ? path_parts[end] : path
+        dataset_str = dataset_name[1:min(length(dataset_name), 15)]
         
-        r2 = findfirst(r -> r["config"] == config, success2)
+        r2 = findfirst(r -> r["dataset_path"] == path, success2)
         if !isnothing(r2)
             r2 = success2[r2]
             
@@ -153,9 +131,9 @@ function compare_solver_results(name1::String, results1, name2::String, results2
                 winner_str = "Tie"
             end
             
-            println("| $(rpad(config_str, 8)) | $(rpad(time1_str, 15)) | $(rpad(time2_str, 15)) | $(rpad(winner_str, 20)) |")
+            println("| $(rpad(dataset_str, 15)) | $(rpad(time1_str, 15)) | $(rpad(time2_str, 15)) | $(rpad(winner_str, 20)) |")
         else
-            println("| $(rpad(config_str, 8)) | $(rpad(format_time(r1["median_time"]), 15)) | $(rpad("FAILED", 15)) | $(rpad(name1, 20)) |")
+            println("| $(rpad(dataset_str, 15)) | $(rpad(format_time(r1["median_time"]), 15)) | $(rpad("FAILED", 15)) | $(rpad(name1, 20)) |")
         end
     end
     println(repeat("+", 80))

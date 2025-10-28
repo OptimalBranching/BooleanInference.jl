@@ -1,7 +1,3 @@
-using Random
-using Primes
-using SHA: bytes2hex, sha1
-
 function random_prime_bits(bits::Int; rng=Random.GLOBAL_RNG)
     if bits <= 1
         return 2
@@ -37,16 +33,26 @@ function generate_instance(::Type{FactoringProblem}, config::FactoringConfig;
                           rng::AbstractRNG=Random.GLOBAL_RNG, 
                           include_solution::Bool=false)
     p, q, N = random_semiprime(config.m, config.n; rng=rng, distinct=true)
-    instance = Dict(
-        "m" => config.m,
-        "n" => config.n,
-        "N" => string(N),
-        "id" => problem_id(FactoringProblem, config, N)
+    id = problem_id(config, N)
+    
+    return FactoringInstance(
+        config.m, config.n, N, id;
+        p = include_solution ? p : nothing,
+        q = include_solution ? q : nothing
     )
-    if include_solution
-        instance["p"] = string(p)
-        instance["q"] = string(q)
-    end
-    return instance
+end
+
+# Helper function to add metadata to an instance
+function add_metadata(instance::FactoringInstance; 
+                     metadata_hash=nothing, 
+                     generation_seed=nothing,
+                     generation_timestamp=nothing)
+    return FactoringInstance(
+        instance.m, instance.n, instance.N, instance.id;
+        p=instance.p, q=instance.q,
+        metadata_hash=metadata_hash,
+        generation_seed=generation_seed,
+        generation_timestamp=generation_timestamp
+    )
 end
 

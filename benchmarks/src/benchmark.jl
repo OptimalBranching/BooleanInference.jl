@@ -1,43 +1,28 @@
-function benchmark_problem(problem_type::Type{<:AbstractBenchmarkProblem}; 
-                          configs=default_configs(problem_type),
-                          solver=nothing)
-    
-    results = []
+"""
+    benchmark_dataset(problem_type, dataset_path; solver=nothing)
+
+Run benchmark on a single dataset file/directory.
+"""
+function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem}, dataset_path::String; solver=nothing)
     actual_solver = isnothing(solver) ? default_solver(problem_type) : solver
     solver_info = solver_name(actual_solver)
     
+    @info "Benchmarking: $dataset_path"
     @info "Using solver: $solver_info"
     
-    for config in configs
-        @info "Benchmarking config: $config"
-        result = benchmark_dataset_instances(problem_type, config, actual_solver, solver_info)
-        push!(results, result)
-    end
-    
-    return results
-end
-
-function benchmark_dataset_instances(problem_type::Type{<:AbstractBenchmarkProblem}, 
-                                    config::AbstractProblemConfig,
-                                    solver,
-                                    solver_info::String)
     try
-        problem_name = lowercase(string(problem_type)[1:end-7])
-        filename = filename_pattern(problem_type, config)
-        dataset_path = joinpath(resolve_data_dir(problem_name), filename)
-        
-        if !isfile(dataset_path)
-            @error "Dataset file not found: $dataset_path"
-            return create_failed_result(config, "dataset_not_found: $dataset_path")
+        if !isfile(dataset_path) && !isdir(dataset_path)
+            @error "Dataset not found: $dataset_path"
+            return nothing
         end
         
         @info "  Loading instances from: $dataset_path"
-        instances = read_jsonl(dataset_path)
+        instances = read_instances(problem_type, dataset_path)
         @info "  Testing $(length(instances)) instances"
         
         if isempty(instances)
-            @error "  No instances found in dataset file"
-            return create_failed_result(config, "empty_dataset")
+            @error "  No instances found in dataset"
+            return nothing
         end
         
         all_times = Float64[]
@@ -88,32 +73,24 @@ function benchmark_dataset_instances(problem_type::Type{<:AbstractBenchmarkProbl
         end
         
         if isempty(all_times)
-            return create_failed_result(config, "all_instances_failed: $failed_runs errors, $incorrect_runs incorrect", 
-                                      failed_runs + incorrect_runs)
+            @warn "All instances failed"
+            return nothing
         end
         
         return Dict(
-            "config" => config,
-            "status" => "success",
+            "dataset_path" => dataset_path,
             "instances_tested" => length(instances),
             "correct_runs" => correct_runs,
             "successful_runs" => successful_runs,
             "accuracy_rate" => correct_runs / length(instances),
             "median_time" => median(all_times),
-            "median_memory" => median(all_memory)
+            "median_memory" => median(all_memory),
+            "solver" => solver_info
         )
         
     catch e
         @error "  Benchmark failed: $e"
-        return create_failed_result(config, "benchmark_failed: $e")
+        return nothing
     end
-end
-
-function create_failed_result(config, reason, failed_runs=0)
-    return Dict(
-        "config" => config,
-        "status" => "failed",
-        "reason" => reason
-    )
 end
 

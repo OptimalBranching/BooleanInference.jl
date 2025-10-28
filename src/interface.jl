@@ -72,3 +72,13 @@ function solve_factoring(
     b = get_var_value(res, circuit_sat.p)
     return bits_to_int(a), bits_to_int(b), stats
 end
+
+function solve_circuit_sat(
+    circuit::CircuitSAT;
+    bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=LeastOccurrenceSelector(1, 2), measure=NumUnfixedVars()), 
+    reducer::AbstractReducer=NoReducer()
+)
+    tn_problem = setup_from_circuit(circuit.circuit)
+    res, _, stats = solve(tn_problem, bsconfig, reducer)
+    return res, stats
+end
