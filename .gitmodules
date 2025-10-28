@@ -6,6 +6,3 @@
 	path = benchmarks/third-party/aiger
 	url = https://github.com/arminbiere/aiger.git
 	ignore = all
-[submodule "benchmarks/third-party/yosys"]
-	path = benchmarks/third-party/yosys
-	url = https://github.com/YosysHQ/yosys.git
