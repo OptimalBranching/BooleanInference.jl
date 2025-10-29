@@ -6,3 +6,6 @@
 	path = benchmarks/third-party/aiger
 	url = https://github.com/arminbiere/aiger.git
 	ignore = all
+[submodule "benchmarks/third-party/abc"]
+	path = benchmarks/third-party/abc
+	url = https://github.com/berkeley-abc/abc.git
