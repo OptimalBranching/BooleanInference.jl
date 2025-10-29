@@ -3,21 +3,55 @@ abstract type AbstractProblemConfig end
 abstract type AbstractInstance end
 abstract type AbstractSolver end
 
-struct BooleanInferenceSolver <: AbstractSolver end
+@kwdef struct BooleanInferenceSolver <: AbstractSolver 
+    warmup::Bool = true
+end
 
 struct IPSolver <: AbstractSolver 
+    warmup::Bool
     optimizer::Any
     env::Any
     function IPSolver(optimizer=Gurobi.Optimizer, env=nothing)
-        new(optimizer, env)
+        new(true, optimizer, env)
     end
 end
 
 struct XSATSolver <: AbstractSolver
-    path::String
-    function XSATSolver(path::String=joinpath(dirname(@__DIR__), "artifacts", "bin", "csat"))
-        !isfile(path) && error("File $path for X-SAT solver does not exist")
-        new(path)
+    warmup::Bool
+    csat_path::String
+    yosys_path::String
+    satisfiable_when_high::Bool
+    function XSATSolver(;csat_path=joinpath(dirname(@__DIR__), "artifacts", "bin", "csat"), yosys_path=nothing)
+        !isfile(csat_path) && error("File $csat_path for X-SAT solver does not exist")
+        # check if yosys is installed by homebrew or apt
+
+        if isnothing(yosys_path)
+            yosys_path = try
+                yosys_path = strip(read(`which yosys`, String))
+            catch
+                error("Yosys not found in PATH, and yosys_path is not provided")
+            end
+        else
+            !isfile(yosys_path) && error("File $yosys_path for Yosys does not exist")
+        end
+        new(false, csat_path, yosys_path, true)
+    end
+end
+
+struct KissatSolver <: AbstractSolver
+    warmup::Bool
+    kissat_path::String
+    function KissatSolver(;kissat_path=nothing)
+        if isnothing(kissat_path)
+            kissat_path = try
+                kissat_path = strip(read(`which kissat`, String))
+            catch
+                error("Kissat not found in PATH, and kissat_path is not provided")
+            end
+        else
+            !isfile(kissat_path) && error("File $kissat_path for Kissat does not exist")
+        end
+        new(true, kissat_path)
     end
 end
 

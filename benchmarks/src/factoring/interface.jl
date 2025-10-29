@@ -15,7 +15,7 @@ end
 
 # Solvers
 function available_solvers(::Type{FactoringProblem})
-    return [BooleanInferenceSolver(), IPSolver(), IPSolver(HiGHS.Optimizer)]
+    return [BooleanInferenceSolver(), IPSolver(), IPSolver(HiGHS.Optimizer), XSATSolver()]
 end
 
 function default_solver(::Type{FactoringProblem})

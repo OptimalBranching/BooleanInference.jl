@@ -1,11 +1,23 @@
 # ---------- Verilog codegen for Circuit ----------
 
 # Make a Verilog-safe identifier from a Symbol (e.g., Symbol("##var#236") -> "__var_236")
+
 sanitize_name(s::Symbol) = let raw = String(s)
     # replace non-alnum with underscore
     cleaned = replace(raw, r"[^A-Za-z0-9_]" => "_")
     # if starts with digit, prefix underscore
     startswith(cleaned, r"[0-9]") ? "_" * cleaned : cleaned
+end
+
+# Natural sort key: split alpha prefix and numeric suffix so p2 < p10
+function _nat_key(s::Symbol)
+    str = String(s)
+    m = match(r"^([A-Za-z_]+)(\d+)$", str)
+    if m === nothing
+        return (str, -1)  # names without numeric suffix come first among same prefix
+    else
+        return (m.captures[1], parse(Int, m.captures[2]))
+    end
 end
 
 is_true_sym(s::Symbol)  = s === Symbol("true")
@@ -19,10 +31,8 @@ function verilog_expr(ex::BooleanExpr, rename::Dict{Symbol,String})
                rename[s]  # 普通变量
     end
 
-    # 递归处理参数
     args = verilog_expr.(ex.args, Ref(rename))
 
-    # 按节点类型降到 Verilog 表达式
     head = ex.head
     if head == :¬
         @assert length(args) == 1 "Unary NOT expects 1 argument"
@@ -65,9 +75,9 @@ function infer_io(c::Circuit; top_inputs::Union{Nothing,Vector{Symbol}}=nothing,
     sinks            = collect(setdiff(defs_set, uses_set))  # candidates for final outputs
     internals        = collect(intersect(defs_set, uses_set))
 
-    inputs  = top_inputs  === nothing ? sort(inferred_inputs, by=string) : top_inputs
-    outputs = top_outputs === nothing ? sort(sinks, by=string)          : top_outputs
-    wires   = sort(setdiff(defs, outputs), by=string)  # everything assigned except chosen outputs
+    inputs  = top_inputs  === nothing ? sort(inferred_inputs, by=_nat_key) : top_inputs
+    outputs = top_outputs === nothing ? sort(sinks, by=_nat_key)          : top_outputs
+    wires   = sort(setdiff(defs, outputs), by=_nat_key)  # everything assigned except chosen outputs
     return inputs, outputs, wires
 end
 
@@ -116,7 +126,11 @@ function split_defs_and_constraints(sc::Circuit)
     return defs, cons
 end
 
-function circuit_to_verilog(c::Circuit; module_name::String="circuit", top_inputs::Union{Nothing,Vector{Symbol}}=nothing, top_outputs::Union{Nothing,Vector{Symbol}}=nothing)
+function circuit_to_verilog(c::Circuit; 
+                             module_name::String="circuit", 
+                             top_inputs::Union{Nothing,Vector{Symbol}}=nothing, 
+                             top_outputs::Union{Nothing,Vector{Symbol}}=nothing,
+                             satisfiable_when_high::Bool=true)
     # Ensure simplified form (introduces one-op assignments and temps)
     sc = simple_form(c)
 
@@ -131,7 +145,7 @@ function circuit_to_verilog(c::Circuit; module_name::String="circuit", top_input
     if has_sat
         outputs = Symbol[:sat]
         def_syms, _ = collect_def_use(sc)
-        wires = sort(setdiff(def_syms, outputs), by=string)
+        wires = sort(setdiff(def_syms, outputs), by=_nat_key)
     end
 
     rename = build_renames(sc, inputs, outputs, wires)
@@ -169,12 +183,26 @@ function circuit_to_verilog(c::Circuit; module_name::String="circuit", top_input
 
     # Encode constraints as a single SAT output: sat = ∧ (o == const)
     if has_sat
-        terms = String[]
-        for (o, val) in constraints
-            on = rename[o]
-            push!(terms, val ? on : "(~" * on * ")")
+        if satisfiable_when_high
+            # Normal polarity: sat=1 when all constraints satisfied
+            terms = String[]
+            for (o, val) in constraints
+                on = rename[o]
+                push!(terms, val ? on : "(~" * on * ")")
+            end
+            sat_rhs = isempty(terms) ? "1'b1" : "(" * join(terms, " & ") * ")"
+        else
+            # Inverted polarity: sat=0 when all constraints satisfied
+            # Use OR logic: sat = (o != val_1) | (o != val_2) | ...
+            # This is equivalent to ~((o == val_1) & (o == val_2) & ...)
+            terms = String[]
+            for (o, val) in constraints
+                on = rename[o]
+                # Invert each constraint check
+                push!(terms, val ? "(~" * on * ")" : on)
+            end
+            sat_rhs = isempty(terms) ? "1'b0" : "(" * join(terms, " | ") * ")"
         end
-        sat_rhs = isempty(terms) ? "1'b1" : "(" * join(terms, " & ") * ")"
         push!(lines, "  assign " * rename[:sat] * " = " * sat_rhs * ";")
     end
 

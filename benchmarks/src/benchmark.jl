@@ -1,10 +1,18 @@
 """
-    benchmark_dataset(problem_type, dataset_path; solver=nothing)
+    benchmark_dataset(problem_type, dataset_path; solver=nothing, warmup=true)
 
 Run benchmark on a single dataset file/directory.
+
+# Arguments
+- `problem_type::Type{<:AbstractBenchmarkProblem}`: The type of problem to benchmark
+- `dataset_path::String`: Path to the dataset file or directory
+- `solver`: The solver to use (defaults to the problem type's default solver)
+- `warmup::Bool`: Whether to perform warmup/tuning (default: true). Set to false for solvers
+  implemented in non-Julia languages (e.g., C++), which don't benefit from Julia's JIT compilation.
 """
 function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem}, dataset_path::String; solver=nothing)
     actual_solver = isnothing(solver) ? default_solver(problem_type) : solver
+    warmup = actual_solver.warmup
     solver_info = solver_name(actual_solver)
     
     @info "Benchmarking: $dataset_path"
@@ -31,10 +39,17 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem}, datas
         successful_runs = 0
         failed_runs = 0
         
-        sample_trial_fn = () -> solve_instance(problem_type, instances[1], solver)
-        b = @benchmarkable $sample_trial_fn()
-        tune!(b)
-        @info "  Benchmark tuned, starting verification and timing..."
+        # Warmup and tune benchmark parameters if requested
+        b = nothing
+        if warmup
+            @info "  Performing warmup and tuning..."
+            sample_trial_fn = () -> solve_instance(problem_type, instances[1], solver)
+            b = @benchmarkable $sample_trial_fn()
+            tune!(b)
+            @info "  Benchmark tuned, starting verification and timing..."
+        else
+            @info "  Skipping warmup (non-Julia solver), starting verification and timing..."
+        end
         
         correct_runs = 0
         incorrect_runs = 0
@@ -54,7 +69,9 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem}, datas
                 
                 trial_fn = () -> solve_instance(problem_type, instance, solver)
                 b_instance = @benchmarkable $trial_fn()
-                b_instance.params = b.params
+                if warmup && !isnothing(b)
+                    b_instance.params = b.params
+                end
                 timing_result = run(b_instance, samples=1)
                 
                 push!(all_times, median(timing_result).time / 1e9)

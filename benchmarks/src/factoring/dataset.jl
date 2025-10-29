@@ -87,7 +87,7 @@ function generate_factoring_datasets(configs::Vector{FactoringConfig};
                     instance = add_metadata(instance; 
                                           metadata_hash=metadata_hash,
                                           generation_seed=seed,
-                                          generation_timestamp=string(now()))
+                                          generation_timestamp=nothing)
                 end
                 
                 write_instance(io, instance)

@@ -34,11 +34,11 @@ function findmin_ip(problem::AbstractProblem, tag::Bool; optimizer, env)
     return round.(Int, JuMP.value.(x))
 end
 
-function factoring_ip(m, n, N; optimizer, env)
+function factoring_ip(m, n, N; solver::IPSolver)
     fact3 = Factoring(m, n, N)
     res3 = reduceto(CircuitSAT, fact3)
     problem = CircuitSAT(res3.circuit.circuit; use_constraints=true);
-    vals = findmin_ip(problem, true; optimizer, env)
+    vals = findmin_ip(problem, true; optimizer=solver.optimizer, env=solver.env)
     return ProblemReductions.read_solution(fact3, [vals[res3.p]...,vals[res3.q]...])
 end
 

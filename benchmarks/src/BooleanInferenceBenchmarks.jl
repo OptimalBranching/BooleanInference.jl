@@ -20,18 +20,16 @@ include("comparison.jl")
 
 # CircuitIO
 include("circuitIO/circuitIO.jl")
+using .CircuitIO
 
 # Factoring problem
 include("factoring/types.jl")
 include("factoring/interface.jl")
 include("factoring/generators.jl")
-include("factoring/ip_solver.jl")
+include("factoring/solver_ip.jl")
 include("factoring/solvers.jl")
 include("factoring/dataset.jl")
-
-# CircuitSAT problem
-include("circuitSAT/types.jl")
-include("circuitSAT/solvers.jl")
+include("factoring/solver_xsat.jl")
 
 export AbstractBenchmarkProblem, AbstractProblemConfig, AbstractInstance, AbstractSolver
 export solve_instance, verify_solution, read_instances
