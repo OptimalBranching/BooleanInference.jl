@@ -9,3 +9,8 @@
 [submodule "benchmarks/third-party/abc"]
 	path = benchmarks/third-party/abc
 	url = https://github.com/berkeley-abc/abc.git
+	ignore = all
+[submodule "benchmarks/third-party/CnC"]
+	path = benchmarks/third-party/CnC
+	url = https://github.com/marijnheule/CnC.git
+	ignore = all
