@@ -2,36 +2,42 @@ module BooleanInferenceBenchmarks
 
 using Random
 using JSON3
+using Primes
+using Dates: now
 using BenchmarkTools
 using BooleanInference
-using JuMP
+using JuMP, HiGHS, Gurobi
+using Statistics: mean, median
+using SHA: bytes2hex, sha256, sha1
 using ProblemReductions
-using Statistics: mean, median, std, quantile
-using Dates: now
-using SHA: bytes2hex, sha256
+using ProblemReductions: Factoring, CircuitSAT, reduceto, constraints, objectives, AbstractProblem, Symbol
 
-
-# Core utilities
-include("utils.jl")
-
-# Abstract types and interfaces
 include("abstract_types.jl")
+include("utils.jl")
+include("benchmark.jl")
+include("formatting.jl")
+include("comparison.jl")
 
-# Generic benchmark framework
-include("generic_benchmark.jl")
+# CircuitIO
+include("circuitIO/circuitIO.jl")
+using .CircuitIO
 
-# Problem implementations
-include("factoring/factoring_problem.jl")
-include("factoring/factor_IP.jl")
+# Factoring problem
+include("factoring/types.jl")
+include("factoring/interface.jl")
+include("factoring/generators.jl")
+include("factoring/solver_ip.jl")
+include("factoring/solvers.jl")
+include("factoring/dataset.jl")
+include("factoring/solver_xsat.jl")
 
-# Re-export main interfaces
-export AbstractBenchmarkProblem, AbstractProblemConfig, AbstractSolver
-export generate_instance, solve_instance, problem_id, default_configs, filename_pattern
+export AbstractBenchmarkProblem, AbstractProblemConfig, AbstractInstance, AbstractSolver
+export solve_instance, verify_solution, read_instances
 export available_solvers, default_solver, solver_name
-export generate_datasets, benchmark_problem, run_full_benchmark, benchmark_backend
-export create_configs_from_tuples
-export list_available_solvers, run_solver_comparison
-export FactoringProblem, FactoringConfig, BooleanInferenceSolver, IPSolver
-export print_solver_comparison_summary, save_solver_comparison
+export benchmark_dataset, run_solver_comparison
+export list_available_solvers, print_solver_comparison_summary, compare_solver_results
+export FactoringProblem, FactoringConfig, FactoringInstance, generate_factoring_datasets
+export CircuitSATProblem, CircuitSATConfig, CircuitSATInstance
+export BooleanInferenceSolver, IPSolver, XSATSolver
 
-end # module
+end

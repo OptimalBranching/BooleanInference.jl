@@ -57,7 +57,7 @@ function expand_one_var!(
             for e in tn.t2v[tensor_id]
                 var_id = e.var
                 # Only expand to unfixed variables
-                if !_check_seen_var(ws, var_id) && !is_fixed(doms[var_id])
+                if !_check_seen_var(ws, var_id) 
                     _mark_var!(ws, var_id)
                     push!(ws.collected_vars, var_id)
                     push!(ws.next_frontier, var_id)

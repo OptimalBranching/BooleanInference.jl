@@ -63,45 +63,53 @@ function contract_tensors(tensors::Vector{Vector{T}}, ixs::Vector{Vector{Int}}, 
 end
 
 
-function slicing(tensor::Vector{T}, doms::Vector{DomainMask}, axis_vars::Vector{Int}) where T
+@inline function slicing(tensor::Vector{T}, doms::Vector{DomainMask}, axis_vars::Vector{Int}) where T
     # Number of axes (Boolean => size 2 per axis)
     k = trailing_zeros(length(tensor)) # log2
-    fixed_axes = Int[]; fixed_vals = Int[]; free_axes = Int[]
-    
-    for axis in 1:k  # each variable
+
+    # Pre-allocate with size hints
+    fixed_axes = Int[]
+    fixed_vals = Int[]
+    free_axes = Int[]
+    sizehint!(fixed_axes, k)
+    sizehint!(fixed_vals, k)
+    sizehint!(free_axes, k)
+
+    @inbounds for axis in 1:k  # each variable
         var_id = axis_vars[axis]
         dom_mask = doms[var_id]
         if is_fixed(dom_mask)
             push!(fixed_axes, axis)
-            push!(fixed_vals, has1(dom_mask) ? 1 : 0)
+            push!(fixed_vals, ifelse(has1(dom_mask), 1, 0))
         else
             push!(free_axes, axis)
         end
     end
-    
+
     n_free = length(free_axes)
     out_len = 1 << n_free # 2^n_free
     out = Vector{T}(undef, out_len)
-    
+
+    # Precompute fixed part of the index
+    fixed_idx = 0
+    @inbounds for (axis, val) in zip(fixed_axes, fixed_vals)
+        fixed_idx |= (val << (axis-1))
+    end
+
     # Iterate over all assignments to free variables
     @inbounds for free_idx in 0:(out_len-1)
-        # Build full index
-        full_idx = 0
-        
+        # Build full index starting from fixed part
+        full_idx = fixed_idx
+
         # Set free variable bits
         for (i, axis) in enumerate(free_axes)
             bit = (free_idx >> (i-1)) & 0x1  # get the i-th bit of free_idx
             full_idx |= (bit << (axis-1))  # set free-idx in the full_idx
         end
-        
-        # Set fixed variable bits
-        for (axis, val) in zip(fixed_axes, fixed_vals)
-            full_idx |= (val << (axis-1))
-        end
-        
+
         out[free_idx+1] = tensor[full_idx+1]
     end
-    
+
     return out
 end
 
