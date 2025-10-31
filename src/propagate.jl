@@ -12,10 +12,10 @@ struct TensorMasks
     axis_masks1::Vector{BitVector}
 end
 
-struct PropagationBuffers
+mutable struct PropagationBuffers
     feasible::BitVector
-    allowed_axis::BitVector
     temp::BitVector
+    max_configs::Int
 end
 
 function PropagationBuffers(static::TNStatic)
@@ -24,7 +24,7 @@ function PropagationBuffers(static::TNStatic)
     return PropagationBuffers(
         falses(max_configs),
         falses(max_configs),
-        falses(max_configs)
+        max_configs
     )
 end
 
@@ -32,7 +32,6 @@ end
 function get_active_tensors(static::TNStatic, doms::Vector{DomainMask})
     active = Int[]
     sizehint!(active, length(static.tensors))  # Pre-allocate to avoid resizing
-    
     @inbounds for (tid, tensor) in enumerate(static.tensors)
         # Check if any variable in this tensor is unfixed
         has_unfixed = false
@@ -44,16 +43,15 @@ function get_active_tensors(static::TNStatic, doms::Vector{DomainMask})
                 break  # Early exit: found one unfixed variable
             end
         end
-        
         has_unfixed && push!(active, tid)
     end
     return active
 end
 
-function propagate(static::TNStatic, doms::Vector{DomainMask})
+function propagate(static::TNStatic, doms::Vector{DomainMask}, ws::Union{Nothing, DynamicWorkspace}=nothing)
     working_doms = copy(doms)
     masks_cache = _masks_cache!(static)
-    
+
     # Initialize propagation queue with only active tensors (containing unfixed variables)
     tensor_queue = get_active_tensors(static, doms)
     in_queue = falses(length(static.tensors))
@@ -61,26 +59,32 @@ function propagate(static::TNStatic, doms::Vector{DomainMask})
         in_queue[tid] = true
     end
     queue_pos = 1
-    
-    # Pre-allocate buffers to reduce allocations during propagation
-    buffers = PropagationBuffers(static)
-    
+
+    # Use cached buffers from workspace if available, otherwise create new ones
+    buffers = if !isnothing(ws) && !isnothing(ws.prop_buffers)
+        ws.prop_buffers
+    else
+        buf = PropagationBuffers(static)
+        !isnothing(ws) && (ws.prop_buffers = buf)
+        buf
+    end
+
     while queue_pos <= length(tensor_queue)
         tensor_idx = tensor_queue[queue_pos]
         queue_pos += 1
         in_queue[tensor_idx] = false
-        
+
         tensor = static.tensors[tensor_idx]
         masks = get_mask!(masks_cache, tensor_idx, tensor)
-        
+
         # Check constraint and propagate
-        if !propagate_tensor!(working_doms, tensor, masks, static.v2t, 
+        if !propagate_tensor!(working_doms, tensor, masks, static.v2t,
                               tensor_queue, in_queue, buffers)
             # Contradiction detected
             return fill(DomainMask(0x00), length(working_doms))
         end
     end
-    
+
     return working_doms
 end
 
@@ -96,7 +100,7 @@ function propagate_tensor!(
     buffers::PropagationBuffers
 )
     # Step 1: Compute feasible configurations given current domains
-    if !compute_feasible_configs!(buffers.feasible, buffers.allowed_axis, working_doms, tensor, masks)
+    if !compute_feasible_configs!(buffers.feasible, working_doms, tensor, masks)
         return false  # No feasible config -> contradiction
     end
     
@@ -117,39 +121,51 @@ end
 
 # Compute which tensor configurations are feasible given current variable domains.
 # Returns false if no feasible configuration exists.
-@inline function compute_feasible_configs!(feasible::BitVector, allowed_axis::BitVector, working_doms::Vector{DomainMask}, tensor::BoolTensor, masks::TensorMasks)
+# Avoids resize by using existing buffer capacity and working with active prefix
+@inline function compute_feasible_configs!(feasible::BitVector, working_doms::Vector{DomainMask}, tensor::BoolTensor, masks::TensorMasks)
     n_cfg = length(masks.sat)
-    
-    # Resize buffers to match this tensor's configuration space
-    resize!(feasible, n_cfg)
-    resize!(allowed_axis, n_cfg)
-    
-    # Start with satisfying configurations
-    copyto!(feasible, masks.sat)
-    
-    # Filter by each variable's domain
+
+    # Work with active prefix instead of resizing
+    # Copy only the necessary portion
+    @inbounds for i in 1:n_cfg
+        feasible[i] = masks.sat[i]
+    end
+
+    # Filter by each variable's domain using manual loop to avoid broadcast overhead
     @inbounds for (axis, var_id) in enumerate(tensor.var_axes)
-        dm = working_doms[var_id]
-        dm_bits = dm.bits
-        
+        dm_bits = working_doms[var_id].bits
+
         # Skip filtering if domain is unrestricted (both 0 and 1 allowed)
         if dm_bits == 0x03  # DM_BOTH
             continue
         end
-        
-        # Directly intersect with the appropriate mask(s)
+
+        # Directly intersect with the appropriate mask using manual loop
         if dm_bits == 0x01  # DM_0: only 0 allowed
-            feasible .&= masks.axis_masks0[axis]
+            axis_mask = masks.axis_masks0[axis]
+            for i in 1:n_cfg
+                feasible[i] = feasible[i] & axis_mask[i]
+            end
         elseif dm_bits == 0x02  # DM_1: only 1 allowed
-            feasible .&= masks.axis_masks1[axis]
-        else  # dm_bits == 0x00: contradiction, but shouldn't happen
+            axis_mask = masks.axis_masks1[axis]
+            for i in 1:n_cfg
+                feasible[i] = feasible[i] & axis_mask[i]
+            end
+        else  # dm_bits == 0x00: contradiction
             return false
         end
-        
-        # Early exit if no feasible config remains
-        any(feasible) || return false
+
+        # Early exit if no feasible config remains in active prefix
+        has_feasible = false
+        for i in 1:n_cfg
+            if feasible[i]
+                has_feasible = true
+                break
+            end
+        end
+        has_feasible || return false
     end
-    
+
     return true
 end
 
@@ -197,31 +213,41 @@ end
     tensor_queue::Vector{Int},
     in_queue::BitVector
 )
-    n_cfg = length(feasible)
-    resize!(temp, n_cfg)
-    
+    n_cfg = length(masks.sat)  # Use actual tensor config size, not buffer size
+
     @inbounds for (axis, var_id) in enumerate(tensor.var_axes)
         dm = working_doms[var_id]
         dm_bits = dm.bits
-        
-        # Check support for value 0 (avoid temp array allocation)
+
+        # Check support for value 0 using manual loop to avoid broadcast size mismatch
         if (dm_bits & 0x01) != 0  # has0(dm)
-            # Use copyto! + .&= to avoid RHS temporary array
-            copyto!(temp, feasible)
-            temp .&= masks.axis_masks0[axis]
-            if !any(temp)  # No support for 0
-                if !update_domain!(working_doms, var_id, dm_bits, DM_1.bits, 
+            has_support_0 = false
+            axis_mask = masks.axis_masks0[axis]
+            for i in 1:n_cfg
+                if feasible[i] && axis_mask[i]
+                    has_support_0 = true
+                    break
+                end
+            end
+            if !has_support_0  # No support for 0
+                if !update_domain!(working_doms, var_id, dm_bits, DM_1.bits,
                                   v2t, tensor_queue, in_queue)
                     return false
                 end
             end
         end
-        
+
         # Check support for value 1
         if (dm_bits & 0x02) != 0  # has1(dm)
-            copyto!(temp, feasible)
-            temp .&= masks.axis_masks1[axis]
-            if !any(temp)  # No support for 1
+            has_support_1 = false
+            axis_mask = masks.axis_masks1[axis]
+            for i in 1:n_cfg
+                if feasible[i] && axis_mask[i]
+                    has_support_1 = true
+                    break
+                end
+            end
+            if !has_support_1  # No support for 1
                 if !update_domain!(working_doms, var_id, dm_bits, DM_0.bits,
                                   v2t, tensor_queue, in_queue)
                     return false
@@ -229,7 +255,7 @@ end
             end
         end
     end
-    
+
     return true
 end
 

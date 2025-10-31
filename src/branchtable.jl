@@ -1,6 +1,8 @@
-using OptimalBranchingCore: BranchingTable
-
-struct TNContractionSolver <: AbstractTableSolver end
+struct TNContractionSolver <: AbstractTableSolver 
+    k::Int  # number of hops
+    max_tensors::Int
+end
+TNContractionSolver() = TNContractionSolver(1, 2)
 
 function _build_axismap(output_vars::Vector{Int})
     isempty(output_vars) && return Int[]
@@ -103,19 +105,6 @@ function combine_configs(boundary_config::Vector{Bool}, inner_configs::Vector{Ve
     return full_configs
 end
 
-function get_region_contraction(problem::TNProblem, region::Region)
-    cached = get_cached_region_contraction(problem; region_id=region.id)
-    if isnothing(cached)
-        @debug "contract_region_cache_miss" focus=region.id
-        contracted, output_vars = contract_region(problem.static, region, problem.doms)
-        cache_region_contraction!(problem, contracted, output_vars; region_id=region.id)
-        return contracted, output_vars
-    else
-        @debug "contract_region_cache_hit" focus=region.id
-        return cached
-    end
-end
-
 function slice_region_contraction(
     tensor::AbstractArray{Tropical{Float64}},
     assignments::Vector{Tuple{Int,Bool}},
@@ -136,41 +125,121 @@ function slice_region_contraction(
     return @view tensor[indices...]
 end
 
-function handle_no_boundary_case(
-    problem::TNProblem,
+function handle_no_boundary_case_unfixed(
     region::Region,
     contracted::AbstractArray{Tropical{Float64}},
     inner_output_vars::Vector{Int},
 )
     n_inner = length(region.inner_vars)
-    
     free_inner_configs = extract_inner_configs(contracted, length(inner_output_vars))
     
     if !isempty(free_inner_configs)
-        inner_posmap = _build_axismap(inner_output_vars)
-        inner_configs = construct_inner_config(
-            region, problem.doms, inner_posmap, free_inner_configs
-        )
-        return BranchingTable(n_inner, [inner_configs])
+        # All variables are unfixed, directly convert configs
+        return BranchingTable(n_inner, [free_inner_configs])
     else
         return BranchingTable(0, [Int[]])
     end
 end
 
-function OptimalBranchingCore.branching_table(
-    problem::TNProblem, 
-    solver::TNContractionSolver, 
-    variables::Vector{T}
-) where T
-    region = get_cached_region(problem)
-    isnothing(region) && error("No cached region found. Make sure `select_variables` is called first.")
-    
+function create_region(problem::TNProblem, variable::Int, solver::TNContractionSolver)
+    # Compute k-neighboring region using all-unfixed domains
+    # This ensures the region is consistent across different branches
+    all_unfixed_doms = fill(DM_BOTH, length(problem.doms))
+    k_neighboring(problem.static, all_unfixed_doms, variable; max_tensors = solver.max_tensors, k = solver.k)
+end
+
+# Filter cached BranchingTable: filter rows by fixed values, extract columns for unfixed vars
+function filter_branching_table(region::Region, table::BranchingTable, problem::TNProblem)
+    # Get all variable IDs in order: boundary_vars + inner_vars
+    var_ids = vcat(region.boundary_vars, region.inner_vars)
+    n_vars = length(var_ids)
+
+    # Separate fixed and unfixed positions
+    fixed_positions = Tuple{Int, Bool}[]  # (position, required_value)
+    unfixed_positions = Int[]             # positions to extract
+
+    @inbounds for (i, var_id) in enumerate(var_ids)
+        if is_fixed(problem.doms[var_id])
+            required_value = has1(problem.doms[var_id])
+            push!(fixed_positions, (i, required_value))
+        else
+            push!(unfixed_positions, i)
+        end
+    end
+
+    # If no variables are fixed, return the original table with all vars
+    if isempty(fixed_positions)
+        return table, var_ids
+    end
+
+    n_unfixed = length(unfixed_positions)
+
+    # Filter and extract configs
+    filtered_table = similar(table.table, 0)
+    sizehint!(filtered_table, length(table.table))
+
+    @inbounds for config_group in table.table
+        filtered_group = similar(config_group, 0)
+        sizehint!(filtered_group, length(config_group))
+
+        for config_bits in config_group
+            # Check if this config matches all fixed variable values
+            matches = true
+            for (pos, required_val) in fixed_positions
+                bit_val = OptimalBranchingCore.readbit(config_bits, pos)
+                if (bit_val == 1) != required_val
+                    matches = false
+                    break
+                end
+            end
+
+            if matches
+                # Extract bits for unfixed variables into a new config
+                new_config_int = 0
+                for (new_pos, old_pos) in enumerate(unfixed_positions)
+                    bit_val = OptimalBranchingCore.readbit(config_bits, old_pos)
+                    if bit_val == 1
+                        new_config_int |= (1 << (new_pos - 1))
+                    end
+                end
+                # Convert to same type as original config
+                new_config = typeof(config_bits)(new_config_int)
+                push!(filtered_group, new_config)
+            end
+        end
+
+        # Only add groups that have at least one matching config
+        if !isempty(filtered_group)
+            push!(filtered_table, filtered_group)
+        end
+    end
+
+    # Return empty table if no configs match
+    if isempty(filtered_table)
+        return BranchingTable(0, eltype(table.table)[]), Int[]
+    end
+
+    # Return filtered table with new bit_length for unfixed vars only
+    unfixed_var_ids = [var_ids[i] for i in unfixed_positions]
+    return BranchingTable(n_unfixed, filtered_table), unfixed_var_ids
+end
+
+function OptimalBranchingCore.branching_table(problem::TNProblem, solver::TNContractionSolver, variable::Int)
+    cached_region, cached_table = get_cached_region(variable)
+    if !isnothing(cached_region) && !isnothing(cached_table)
+        filtered_table, unfixed_vars = filter_branching_table(cached_region, cached_table, problem)
+        return filtered_table, unfixed_vars
+    end
+
+    # Cache miss - recompute
+    region = create_region(problem, variable, solver)
     n_boundary = length(region.boundary_vars)
     n_inner = length(region.inner_vars)
     n_total = n_boundary + n_inner
-    @assert n_total == length(variables)
     
-    contracted_tensor, output_vars = get_region_contraction(problem, region)
+    # Contract with all-unfixed doms for consistent caching
+    all_unfixed_doms = fill(DM_BOTH, length(problem.doms))
+    contracted_tensor, output_vars = contract_region(problem.static, region, all_unfixed_doms)
     axismap = _build_axismap(output_vars)
 
     inner_output_vars = Int[]
@@ -180,16 +249,20 @@ function OptimalBranchingCore.branching_table(
         end
     end
 
-    n_boundary == 0 && return handle_no_boundary_case(problem, region, contracted_tensor, inner_output_vars)
+    if n_boundary == 0
+        table = handle_no_boundary_case_unfixed(region, contracted_tensor, inner_output_vars)
+        variables = vcat(region.boundary_vars, region.inner_vars)
+        cache_region_table!(region, table)
+        # Filter based on current doms before returning
+        filtered_table, unfixed_vars = filter_branching_table(region, table, problem)
+        return filtered_table, unfixed_vars
+    end
     
-    _, _, free_boundary_vars, free_boundary_indices = separate_fixed_free_boundary(region, problem.doms)
+    # All vars are unfixed in cached version, so all boundary vars are free
+    free_boundary_vars = region.boundary_vars
+    free_boundary_indices = collect(1:n_boundary)
     
     n_free_boundary = length(free_boundary_vars)
-    
-    free_pos_of_boundary = zeros(Int, n_boundary)
-    @inbounds for (j, boundary_idx) in enumerate(free_boundary_indices)
-        free_pos_of_boundary[boundary_idx] = j
-    end
     
     inner_posmap = _build_axismap(inner_output_vars)
     
@@ -209,15 +282,28 @@ function OptimalBranchingCore.branching_table(
         
         isempty(free_inner_configs) && continue
         
-        boundary_config = construct_boundary_config(region, problem.doms, free_pos_of_boundary, free_config)
-
-        inner_configs = construct_inner_config(region, problem.doms, inner_posmap, free_inner_configs)
+        # Construct configs: all vars are unfixed, so directly use bit values
+        boundary_config = Vector{Bool}(undef, n_boundary)
+        @inbounds for i in 1:n_boundary
+            bit = (free_config >> (i-1)) & 0x1
+            boundary_config[i] = (bit == 1)
+        end
          
-        full_configs = combine_configs(boundary_config, inner_configs)
+        full_configs = combine_configs(boundary_config, free_inner_configs)
         
         push!(valid_config_groups, full_configs)
     end
     
-    isempty(valid_config_groups) && return BranchingTable(0, [Int[]])
-    return BranchingTable(n_total, valid_config_groups)
+    if isempty(valid_config_groups)
+        table = BranchingTable(0, [Int[]])
+        cache_region_table!(region, table)
+        return table, Int[]
+    end
+    
+    table = BranchingTable(n_total, valid_config_groups)
+    cache_region_table!(region, table)
+    
+    # Filter based on current doms before returning
+    filtered_table, unfixed_vars = filter_branching_table(region, table, problem)
+    return filtered_table, unfixed_vars
 end

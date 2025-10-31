@@ -218,26 +218,22 @@ end
     tn = GenericTensorNetwork(problem)
     tn_static = setup_from_tensor_network(tn)
     tn_problem = TNProblem(tn_static)
-    select_variables(tn_problem, NumUnfixedVars(), LeastOccurrenceSelector(2, 5))
-    region = get_cached_region(tn_problem)
-    @show region
-    @test region != nothing
-    @test isnothing(get_cached_region_contraction(tn_problem))
+    variable = select_variables(tn_problem, NumUnfixedVars(), LeastOccurrenceSelector())
+    @test variable isa Int
 
-    contracted, _ = contract_region(tn_static, region, tn_problem.doms)
-    @test contracted != nothing
-    @test length(size(contracted)) == length(region.boundary_vars) + length(region.inner_vars)
+    # Create region for the selected variable
+    solver = TNContractionSolver(1, 2)
+    all_unfixed_doms = fill(DM_BOTH, length(tn_problem.doms))
+    region = k_neighboring(tn_static, all_unfixed_doms, variable; max_tensors=solver.max_tensors, k=solver.k)
+    @test region !== nothing
 
-    table = branching_table(tn_problem, TNContractionSolver(), vcat([v for v in region.boundary_vars], [v for v in region.inner_vars]))
+    contracted, output_vars = contract_region(tn_static, region, tn_problem.doms)
+    @test contracted !== nothing
+    @test length(output_vars) <= length(region.boundary_vars) + length(region.inner_vars)
+
+    table = branching_table(tn_problem, TNContractionSolver(), region.id)
     @show vcat([v for v in region.boundary_vars], [v for v in region.inner_vars])
     @show table
-
-    cached_contraction = get_cached_region_contraction(tn_problem)
-    @test !isnothing(cached_contraction)
-
-    clear_region_cache!(tn_problem)
-    @test isnothing(get_cached_region(tn_problem))
-    @test isnothing(get_cached_region_contraction(tn_problem))
 end
 
 

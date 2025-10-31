@@ -17,14 +17,15 @@ function solve(problem::TNProblem, bsconfig::BranchingStrategy, reducer::Abstrac
     depth = branch_and_reduce(problem, bsconfig, reducer, Tropical{Float64}; show_progress=false)
     res = last_branch_problem(problem)
     stats = get_branching_stats(problem)
+    clear_all_region_caches!()
     return (res, depth, stats)
 end
 
 function solve_sat_problem(
     sat::ConstraintSatisfactionProblem; 
     bsconfig::BranchingStrategy=BranchingStrategy(
-        table_solver=TNContractionSolver(), 
-        selector=LeastOccurrenceSelector(1, 2), 
+        table_solver=TNContractionSolver(1,2), 
+        selector=LeastOccurrenceSelector(), 
         measure=NumUnfixedVars()
     ), 
     reducer::AbstractReducer=NoReducer()
@@ -38,8 +39,8 @@ end
 function solve_sat_with_assignments(
     sat::ConstraintSatisfactionProblem;
     bsconfig::BranchingStrategy=BranchingStrategy(
-        table_solver=TNContractionSolver(), 
-        selector=LeastOccurrenceSelector(1, 2), 
+        table_solver=TNContractionSolver(1,2), 
+        selector=LeastOccurrenceSelector(), 
         measure=NumUnfixedVars()
     ), 
     reducer::AbstractReducer=NoReducer()
@@ -59,7 +60,7 @@ end
 
 function solve_factoring(
     n::Int, m::Int, N::Int;
-    bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=LeastOccurrenceSelector(1, 2), measure=NumUnfixedVars()), 
+    bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(1,2), selector=LeastOccurrenceSelector(), measure=NumUnfixedVars()), 
     reducer::AbstractReducer=NoReducer()
 )
     fproblem = Factoring(n, m, N)
@@ -73,12 +74,12 @@ function solve_factoring(
     return bits_to_int(a), bits_to_int(b), stats
 end
 
-function solve_circuit_sat(
-    circuit::CircuitSAT;
-    bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=LeastOccurrenceSelector(1, 2), measure=NumUnfixedVars()), 
-    reducer::AbstractReducer=NoReducer()
-)
-    tn_problem = setup_from_circuit(circuit.circuit)
-    res, _, stats = solve(tn_problem, bsconfig, reducer)
-    return res, stats
-end
+# function solve_circuit_sat(
+#     circuit::CircuitSAT;
+#     bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=LeastOccurrenceSelector(1, 2), measure=NumUnfixedVars()), 
+#     reducer::AbstractReducer=NoReducer()
+# )
+#     tn_problem = setup_from_circuit(circuit.circuit)
+#     res, _, stats = solve(tn_problem, bsconfig, reducer)
+#     return res, stats
+# end

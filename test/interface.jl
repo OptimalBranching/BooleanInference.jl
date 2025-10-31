@@ -87,8 +87,8 @@ end
     
     # Solve and check stats are recorded
     result, depth, stats = BooleanInference.solve(tn_problem, 
-        BranchingStrategy(table_solver=TNContractionSolver(), 
-                         selector=LeastOccurrenceSelector(1, 2), 
+        BranchingStrategy(table_solver=TNContractionSolver(1, 2), 
+                         selector=LeastOccurrenceSelector(), 
                          measure=NumUnfixedVars()), 
         NoReducer())
     

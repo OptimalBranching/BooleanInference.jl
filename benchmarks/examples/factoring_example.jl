@@ -16,7 +16,7 @@ configs = [
     FactoringConfig(10, 10),
     FactoringConfig(12, 12),
     FactoringConfig(14, 14),
-    FactoringConfig(16, 16),
+    # FactoringConfig(16, 16),
     # FactoringConfig(18, 18),
     # FactoringConfig(20, 20),
     # FactoringConfig(22, 22),
@@ -51,7 +51,7 @@ println("\n" * "=" ^80)
 println("Comparing Solvers")
 println("=" ^80)
 
-results = run_solver_comparison(FactoringProblem, paths, solvers=[XSATSolver(;yosys_path="/opt/homebrew/bin/yosys")])
+results = run_solver_comparison(FactoringProblem, paths, solvers=[XSATSolver(;yosys_path="/opt/homebrew/bin/yosys"), BooleanInferenceSolver()])
 
 print_solver_comparison_summary(results)
 

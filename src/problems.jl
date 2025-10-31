@@ -111,8 +111,28 @@ mutable struct DynamicWorkspace
     total_subproblems::Int
     max_depth::Int
     var_values::PriorityQueue{Int, Float64}
+    # Memory pool for doms arrays to reduce allocations
+    doms_pool::Vector{Vector{DomainMask}}
+    changed_vars_pool::Vector{Vector{Int}}
+    # BitVector for O(1) membership testing in changed_vars tracking
+    changed_vars_flags::BitVector
+    # Track which indices were set to true (for efficient clearing)
+    changed_vars_indices::Vector{Int}
+    # Cached propagation buffers (to avoid reallocating BitVectors)
+    # Type will be defined in propagate.jl
+    prop_buffers::Any
 end
-DynamicWorkspace(var_num::Int) = DynamicWorkspace(Vector{DomainMask}(undef, var_num), false, 0, 0, 0, PriorityQueue{Int, Float64}())
+DynamicWorkspace(var_num::Int) = DynamicWorkspace(
+    Vector{DomainMask}(undef, var_num),
+    false,
+    0, 0, 0,
+    PriorityQueue{Int, Float64}(),
+    Vector{Vector{DomainMask}}(),
+    Vector{Vector{Int}}(),
+    falses(var_num),
+    Int[],
+    nothing
+)
 
 struct Region
     id::Int
@@ -132,9 +152,9 @@ struct TNProblem <: AbstractProblem
 end
 function TNProblem(static::TNStatic)::TNProblem
     doms = init_doms(static)
-    doms = propagate(static, doms)
-    n_unfixed = count_unfixed(doms)
     ws = DynamicWorkspace(length(static.vars))
+    doms = propagate(static, doms, ws)
+    n_unfixed = count_unfixed(doms)
     return TNProblem(static, doms, n_unfixed, ws)
 end
 function Base.show(io::IO, problem::TNProblem)
