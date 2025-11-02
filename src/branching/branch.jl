@@ -6,14 +6,13 @@ function OptimalBranchingCore.branch_and_reduce(
     show_progress::Bool=false,
     tag::Vector{Tuple{Int,Int}}=Tuple{Int,Int}[]
 ) where TR
-    # Update max depth
+    stats = problem.ws.branch_stats
     current_depth = length(tag)
-    if current_depth > problem.ws.max_depth
-        problem.ws.max_depth = current_depth
-    end
+    record_depth!(stats, current_depth)
 
     # Step 1: Check if problem is solved (all variables fixed)
     if is_solved(problem)
+        record_solved_leaf!(stats, current_depth)
         @debug "problem is solved"
         cache_branch_solution!(problem)
         return one(result_type)
@@ -30,6 +29,7 @@ function OptimalBranchingCore.branch_and_reduce(
     # Check if table is empty (UNSAT - no valid configurations)
     if isempty(tbl.table)
         @debug "Empty branching table - UNSAT"
+        record_unsat_leaf!(stats, current_depth)
         return zero(result_type)
     end
 
@@ -43,8 +43,7 @@ function OptimalBranchingCore.branch_and_reduce(
     @debug "A new branch-level search starts with $(length(clauses)) clauses: $(clauses)"
 
     # Record branching statistics
-    problem.ws.total_branches += 1
-    problem.ws.total_subproblems += length(clauses)
+    record_branch!(stats, length(clauses), current_depth)
     # @show clauses
 
     # Use explicit loop instead of sum() to avoid closure allocation overhead
@@ -62,6 +61,8 @@ function OptimalBranchingCore.branch_and_reduce(
         # If branch led to contradiction (UNSAT), skip this branch
         if local_value == 0 || subproblem.n_unfixed == 0 && any(dm -> dm.bits == 0x00, subproblem.doms)
             @debug "Skipping branch: local_value=$local_value, n_unfixed=$(subproblem.n_unfixed), has_contradiction=$(any(dm -> dm.bits == 0x00, subproblem.doms))"
+            record_skipped_subproblem!(stats)
+            record_unsat_leaf!(stats, current_depth + 1)
             continue  # Skip to next branch instead of creating zero value
         end
 
@@ -90,22 +91,8 @@ function OptimalBranchingCore.optimal_branching_rule(
     return OptimalBranchingCore.greedymerge(candidates, problem, variables, measure)
 end
 
-
-function OptimalBranchingCore.apply_branch(
-    problem::TNProblem,
-    clause::OptimalBranchingCore.Clause{INT},
-    variables::Vector{Int}
-) where {INT<:Integer}
-    # Use object pool to reduce allocations
-    new_doms = get_doms_from_pool!(problem.ws, problem.doms)
-
-    # Use BitVector for O(1) membership testing
-    # Track which indices we modify for efficient cleanup
-    changed_flags = problem.ws.changed_vars_flags
-    changed_indices = problem.ws.changed_vars_indices
-    empty!(changed_indices)
-
-    # Apply clause: fix variables according to mask and values
+# Apply a clause to domain masks, fixing variables according to the clause's mask and values. Returns the number of variables that were fixed.
+function apply_clause_to_doms!(new_doms::Vector{DomainMask}, clause::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}, original_doms::Vector{DomainMask}, changed_flags::BitVector, changed_indices::Vector{Int}) where {INT<:Integer}
     n_fixed = 0
 
     @inbounds for i in 1:length(variables)
@@ -116,7 +103,7 @@ function OptimalBranchingCore.apply_branch(
             bit_val = OptimalBranchingCore.readbit(clause.val, i)
             new_val = ifelse(bit_val == 1, DM_1, DM_0)
 
-            old_bits = problem.doms[var_id].bits
+            old_bits = original_doms[var_id].bits
             # Branchless: check if not fixed (bits == 0x03)
             if old_bits == 0x03
                 new_doms[var_id] = new_val
@@ -127,16 +114,27 @@ function OptimalBranchingCore.apply_branch(
         end
     end
 
+    return n_fixed
+end
+
+function OptimalBranchingCore.apply_branch(
+    problem::TNProblem,
+    clause::OptimalBranchingCore.Clause{INT},
+    variables::Vector{Int}
+) where {INT<:Integer}
+    new_doms = copy(problem.doms)
+
+    changed_flags = problem.ws.changed_vars_flags  # BitVector: tracking variable changes
+    changed_indices = problem.ws.changed_vars_indices
+    empty!(changed_indices)
+
+    # Apply clause: fix variables according to mask and values
+    n_fixed = apply_clause_to_doms!(new_doms, clause, variables, problem.doms, changed_flags, changed_indices)
+
     @debug "apply_branch: Fixed $n_fixed variables"
 
-    # Apply propagation (unit propagation) with cached buffers from workspace
-    propagated_doms = propagate(problem.static, new_doms, problem.ws)
+    propagated_doms = propagate(problem.static, new_doms, changed_indices, problem.ws)
 
-    # Return new_doms to pool since we now have propagated_doms
-    return_doms_to_pool!(problem.ws, new_doms)
-
-    # Track additional variables that changed during propagation
-    # Use BitVector for O(1) check instead of O(n) with ∉
     @inbounds for i in eachindex(propagated_doms)
         if propagated_doms[i].bits != problem.doms[i].bits && !changed_flags[i]
             changed_flags[i] = true
@@ -144,17 +142,7 @@ function OptimalBranchingCore.apply_branch(
         end
     end
 
-    # Check for contradiction (all domains set to 0x00)
-    # Use manual loop instead of any() for better performance
-    has_contradiction = false
-    @inbounds for dm in propagated_doms
-        if dm.bits == 0x00
-            has_contradiction = true
-            break
-        end
-    end
-
-    if has_contradiction
+    if has_contradiction(propagated_doms)
         # UNSAT: contradiction detected during propagation
         @debug "apply_branch: Contradiction detected during propagation"
         return (TNProblem(problem.static, fill(DomainMask(0x00), length(propagated_doms)), 0, problem.ws), 0, Int[])
@@ -171,10 +159,10 @@ function OptimalBranchingCore.apply_branch(
         return (TNProblem(problem.static, fill(DomainMask(0x00), length(propagated_doms)), 0, problem.ws), 0, Int[])
     end
 
-    # Create new problem with updated domains
+    # 创建新问题实例（复用 workspace）
     new_problem = TNProblem(problem.static, propagated_doms, new_n_unfixed, problem.ws)
 
-    # Clear only the flags we set (O(k) instead of O(n) where k = number of changed vars)
+    # 清理 BitVector 标志：只清理已设置的位（O(k) 而非 O(n)）
     @inbounds for idx in changed_indices
         changed_flags[idx] = false
     end

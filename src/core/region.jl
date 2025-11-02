@@ -1,23 +1,33 @@
+struct Region
+    id::Int
+    tensors::Vector{Int}
+    inner_vars::Vector{Int}
+    boundary_vars::Vector{Int}
+end
+
+function Base.show(io::IO, region::Region)
+    print(io, "Region(focus=$(region.id), tensors=$(length(region.tensors)), inner_vars=$(region.inner_vars), boundary_vars=$(region.boundary_vars))")
+end
+
 struct RegionCacheEntry
     region::Region
     table::BranchingTable
 end
 
-mutable struct RegionCacheState  # a collection of region entries
-    entries::Dict{Int, RegionCacheEntry}  # region id -> region entry
+mutable struct RegionCacheState
+    entries::Dict{Int, RegionCacheEntry}
 end
+
 RegionCacheState() = RegionCacheState(Dict{Int, RegionCacheEntry}())
 
-# Global cache shared across all problems during solving
+# global region cache
 const REGION_CACHE = RegionCacheState()
 
-# Cache region and table together (creates or updates entry)
-function cache_region_table!(region::Region, table::BranchingTable)
+function cache_region!(region::Region, table::BranchingTable)
     REGION_CACHE.entries[region.id] = RegionCacheEntry(region, table)
     return nothing
 end
 
-# Get cached region and table by region_id
 function get_cached_region(region_id::Int)
     entry = get(REGION_CACHE.entries, region_id, nothing)
     (isnothing(entry) || isnothing(entry.table)) && return nothing, nothing
