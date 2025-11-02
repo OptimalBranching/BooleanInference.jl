@@ -16,11 +16,11 @@ configs = [
     FactoringConfig(10, 10),
     FactoringConfig(12, 12),
     FactoringConfig(14, 14),
-    # FactoringConfig(16, 16),
-    # FactoringConfig(18, 18),
-    # FactoringConfig(20, 20),
-    # FactoringConfig(22, 22),
-    # FactoringConfig(24, 24)
+    FactoringConfig(16, 16),
+    FactoringConfig(18, 18),
+    FactoringConfig(20, 20),
+    FactoringConfig(22, 22),
+    FactoringConfig(24, 24)
 ]
 
 paths = generate_factoring_datasets(configs; per_config=5, include_solution=true, force_regenerate=false)

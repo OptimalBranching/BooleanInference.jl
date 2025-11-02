@@ -4,7 +4,7 @@ using BooleanInference: LeastOccurrenceSelector
 using ProblemReductions: Factoring, reduceto, CircuitSAT
 using GenericTensorNetworks
 using BooleanInference: setup_from_tensor_network, TNProblem, DynamicWorkspace, NumUnfixedVars
-using BooleanInference: get_cached_region, clear_region_cache!, clear_all_region_caches!, setup_from_cnf, k_neighboring
+using BooleanInference: get_cached_region, clear_all_region_caches!, setup_from_cnf, k_neighboring
 using OptimalBranchingCore: select_variables
 using BooleanInference.GenericTensorNetworks: ∧, ∨, ¬
 using BooleanInference.OptimalBranchingCore: select_variables, apply_branch, Clause
