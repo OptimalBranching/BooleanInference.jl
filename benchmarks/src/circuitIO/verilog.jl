@@ -82,17 +82,44 @@ function infer_io(c::Circuit; top_inputs::Union{Nothing,Vector{Symbol}}=nothing,
 end
 
 # Build a stable rename dict for all symbols involved
-function build_renames(c::Circuit, inputs::Vector{Symbol}, outputs::Vector{Symbol}, wires::Vector{Symbol})
+function build_renames(sc::Circuit, inputs::Vector{Symbol}, outputs::Vector{Symbol}, wires::Vector{Symbol};
+                       use_tensor_names::Bool=false, orig_to_simplified::Union{Nothing,Dict{Int,Int}}=nothing)
     all_syms = Symbol[]
     append!(all_syms, inputs, outputs, wires)
     # Also catch any remaining RHS-only variables (should be inputs already)
-    extract_symbols!(c, all_syms)
+    extract_symbols!(sc, all_syms)
     # Remove constants
     filter!(s -> !(is_true_sym(s) || is_false_sym(s)), all_syms)
     unique!(all_syms)
     rename = Dict{Symbol,String}()
-    for s in all_syms
-        rename[s] = sanitize_name(s)
+
+    if use_tensor_names && !isnothing(orig_to_simplified)
+        # Build reverse mapping: symbol -> tensor index
+        symbol_to_tensor = Dict{Symbol, Int}()
+        for (simplified_idx, orig_idx) in orig_to_simplified
+            if simplified_idx <= length(sc.exprs)
+                expr = sc.exprs[simplified_idx]
+                for o in expr.outputs
+                    symbol_to_tensor[o] = orig_idx
+                end
+            end
+        end
+
+        # Rename based on tensor indices
+        for s in all_syms
+            if haskey(symbol_to_tensor, s)
+                # This is a gate output, name it based on tensor index
+                rename[s] = "w$(symbol_to_tensor[s])"
+            else
+                # This is an input or output, keep original sanitized name
+                rename[s] = sanitize_name(s)
+            end
+        end
+    else
+        # Original behavior: sanitize names
+        for s in all_syms
+            rename[s] = sanitize_name(s)
+        end
     end
     return rename
 end
@@ -126,11 +153,12 @@ function split_defs_and_constraints(sc::Circuit)
     return defs, cons
 end
 
-function circuit_to_verilog(c::Circuit; 
-                             module_name::String="circuit", 
-                             top_inputs::Union{Nothing,Vector{Symbol}}=nothing, 
+function circuit_to_verilog(c::Circuit;
+                             module_name::String="circuit",
+                             top_inputs::Union{Nothing,Vector{Symbol}}=nothing,
                              top_outputs::Union{Nothing,Vector{Symbol}}=nothing,
-                             satisfiable_when_high::Bool=true)
+                             satisfiable_when_high::Bool=true,
+                             use_tensor_names::Bool=true)
     # Ensure simplified form (introduces one-op assignments and temps)
     sc = simple_form(c)
 
@@ -148,7 +176,15 @@ function circuit_to_verilog(c::Circuit;
         wires = sort(setdiff(def_syms, outputs), by=_nat_key)
     end
 
-    rename = build_renames(sc, inputs, outputs, wires)
+    # Build mapping from original circuit expression index to simplified circuit expression
+    orig_to_simplified = nothing
+    if use_tensor_names
+        orig_to_simplified = build_original_to_simplified_mapping(c, sc)
+    end
+
+    rename = build_renames(sc, inputs, outputs, wires;
+                          use_tensor_names=use_tensor_names,
+                          orig_to_simplified=orig_to_simplified)
     if has_sat
         rename[:sat] = "sat"
     end
@@ -173,7 +209,7 @@ function circuit_to_verilog(c::Circuit;
     push!(lines, "")  # blank line
 
     # Assignments for functional defs only
-    for ex in defs
+    for (idx, ex) in enumerate(defs)
         rhs = verilog_expr(ex.expr, rename)
         for o in ex.outputs
             oname = rename[o]
@@ -208,6 +244,39 @@ function circuit_to_verilog(c::Circuit;
 
     push!(lines, "endmodule")
     return join(lines, "\n")
+end
+
+# Build a mapping from simplified expression index to original circuit expression index
+# This function traces back through simple_form transformations to find the original expression
+function build_original_to_simplified_mapping(c::Circuit, sc::Circuit)
+    # For now, we'll use a simple heuristic:
+    # Map each simplified expression to its index in the original circuit based on output symbol matching
+    mapping = Dict{Int, Int}()
+
+    # Build a map from output symbol to original expression index
+    output_to_orig = Dict{Symbol, Int}()
+    for (i, expr) in enumerate(c.exprs)
+        for o in expr.outputs
+            output_to_orig[o] = i
+        end
+    end
+
+    # For each simplified expression, try to find its corresponding original expression
+    for (j, sexpr) in enumerate(sc.exprs)
+        # Check if any output symbol matches an original expression
+        for o in sexpr.outputs
+            if haskey(output_to_orig, o)
+                mapping[j] = output_to_orig[o]
+                break
+            end
+        end
+        # If no match found, use the simplified index
+        if !haskey(mapping, j)
+            mapping[j] = j
+        end
+    end
+
+    return mapping
 end
 
 # Convenience writer

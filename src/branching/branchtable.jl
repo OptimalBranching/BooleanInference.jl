@@ -221,7 +221,10 @@ function OptimalBranchingCore.branching_table(problem::TNProblem, solver::TNCont
     
     table = BranchingTable(n_total, valid_config_groups)
     cache_region!(region, table)
-    
+
     filtered_table, unfixed_vars = filter_branching_table(region, table, problem)
     return filtered_table, unfixed_vars
 end
+
+# Constructor for MinGammaSelector (defined here after TNContractionSolver is available)
+MinGammaSelector() = MinGammaSelector(TNContractionSolver(2,5), OptimalBranchingCore.GreedyMerge())

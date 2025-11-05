@@ -1,6 +1,6 @@
 using Test
 using BooleanInference
-using BooleanInference: TNProblem, TNContractionSolver, LeastOccurrenceSelector, NumUnfixedVars, setup_from_tensor_network, setup_problem, select_variables, get_cached_region, last_branch_problem, reset_last_branch_problem!, has_last_branch_problem, get_var_value, bits_to_int
+using BooleanInference: TNProblem, TNContractionSolver, MostOccurrenceSelector, NumUnfixedVars, setup_from_tensor_network, setup_problem, select_variables, get_cached_region, last_branch_problem, reset_last_branch_problem!, has_last_branch_problem, get_var_value, bits_to_int
 using BooleanInference: BranchingStrategy, NoReducer
 using OptimalBranchingCore: Clause
 using OptimalBranchingCore: branching_table, branch_and_reduce, apply_branch
@@ -22,7 +22,7 @@ using TropicalNumbers: Tropical
     tn_static = setup_from_tensor_network(tn)
     tn_problem = TNProblem(tn_static)
     @test !has_last_branch_problem(tn_problem)
-    br_strategy = BranchingStrategy(table_solver = TNContractionSolver(1,2), selector = LeastOccurrenceSelector(), measure = NumUnfixedVars())
+    br_strategy = BranchingStrategy(table_solver = TNContractionSolver(1,2), selector = MostOccurrenceSelector(), measure = NumUnfixedVars())
     res = branch_and_reduce(tn_problem, br_strategy, NoReducer(), Tropical{Float64}; show_progress=false)
     @show res
     if res != Tropical(-Inf)

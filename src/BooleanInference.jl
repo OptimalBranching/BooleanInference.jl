@@ -3,7 +3,7 @@ module BooleanInference
 using TropicalNumbers
 using SparseArrays
 using OptimalBranchingCore
-using OptimalBranchingCore: AbstractProblem, select_variables, reduce_problem, _vec2int, candidate_clauses
+using OptimalBranchingCore: AbstractProblem, select_variables, reduce_problem, _vec2int, candidate_clauses, Clause
 using OptimalBranchingCore.BitBasis
 using GenericTensorNetworks
 using GenericTensorNetworks.OMEinsum
@@ -29,6 +29,7 @@ include("algorithms/propagate.jl")
 include("branching/measure.jl")
 include("branching/selector.jl")
 include("branching/branchtable.jl")
+include("branching/greedymerge.jl")
 include("branching/branch.jl")
 
 include("interface.jl")
@@ -47,12 +48,14 @@ export is_solved, cache_branch_solution!, reset_last_branch_problem!, has_last_b
 export solve, solve_sat_problem, solve_sat_with_assignments, solve_factoring
 export solve_sat_problem_lookahead, solve_sat_problem_hybrid
 export solve_sat_problem_region, solve_sat_problem_region_lookahead
+export solve_sat_problem_cdcl
 
 export NumUnfixedVars
 
-export LeastOccurrenceSelector, AbstractSelector
-export RegionAwareSelector
+export MostOccurrenceSelector, MinGammaSelector, AbstractSelector
+export RegionAwareSelector, PropagationAwareSelector
 export RegionQualityMetrics, evaluate_region_quality, score_region_quality
+export evaluate_propagation_power, compute_propagation_score, evaluate_propagation_for_branch
 
 export TNContractionSolver, AbstractTableSolver
 
@@ -66,7 +69,9 @@ export propagate_incremental, propagate_from_assignment, propagate_from_assignme
 export propagate_adaptive, should_use_incremental
 
 export propagate_cdcl, propagate_after_assignment_cdcl, propagate_with_state!
-export CDCLPropagationState, Watch, WatchLists, TensorWatchState, TrailEntry
+export CDCLState, LearnedClause, TrailEntry
+export solve_cdcl, get_solution, print_cdcl_stats
+export propagate_bcp!, analyze_conflict!, make_decision!, backtrack!
 
 export cache_region!, get_cached_region, clear_all_region_caches!
 

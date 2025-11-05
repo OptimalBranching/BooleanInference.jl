@@ -14,7 +14,7 @@ end
 
 function solve(problem::TNProblem, bsconfig::BranchingStrategy, reducer::AbstractReducer; show_stats::Bool=false)
     reset_branching_stats!(problem)  # Reset stats before solving
-    depth = branch_and_reduce(problem, bsconfig, reducer, Tropical{Float64}; show_progress=false)
+    depth = OptimalBranchingCore.branch_and_reduce(problem, bsconfig, reducer, Tropical{Float64}; show_progress=false)
     res = last_branch_problem(problem)
     stats = get_branching_stats(problem)
     clear_all_region_caches!()
@@ -28,7 +28,7 @@ function solve_sat_problem(
     sat::ConstraintSatisfactionProblem; 
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(1,2), 
-        selector=LeastOccurrenceSelector(), 
+        selector=MostOccurrenceSelector(), 
         measure=NumUnfixedVars()
     ), 
     reducer::AbstractReducer=NoReducer(),
@@ -45,7 +45,7 @@ function solve_sat_with_assignments(
     sat::ConstraintSatisfactionProblem;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(1,2),
-        selector=LeastOccurrenceSelector(),
+        selector=MostOccurrenceSelector(),
         measure=NumUnfixedVars()
     ),
     reducer::AbstractReducer=NoReducer(),
@@ -69,11 +69,13 @@ function solve_factoring(
     n::Int, m::Int, N::Int;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(1,2),
-        selector=RegionAwareSelector(5, 1,2, true),
-        measure=NumUnfixedVars()
+        # selector=MinGammaSelector(TNContractionSolver(1,2), GreedyMerge()),
+        selector=MostOccurrenceSelector(),
+        measure=NumUnfixedVars(),
+        set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
-    verbose::Bool = false,
+    verbose::Bool=false,
     show_stats::Bool=false
 )
     fproblem = Factoring(n, m, N)
@@ -91,6 +93,7 @@ function solve_factoring(
     b = get_var_value(res, circuit_sat.p)
     return bits_to_int(a), bits_to_int(b), stats
 end
+
 
 # function solve_circuit_sat(
 #     circuit::CircuitSAT;
