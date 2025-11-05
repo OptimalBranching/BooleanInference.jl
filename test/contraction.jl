@@ -1,6 +1,6 @@
 using Test
 using BooleanInference
-using BooleanInference: setup_from_tensor_network, TNProblem, DynamicWorkspace, setup_problem, select_variables, get_cached_region, LeastOccurrenceSelector, NumUnfixedVars
+using BooleanInference: setup_from_tensor_network, TNProblem, DynamicWorkspace, setup_problem, select_variables, get_cached_region, MostOccurrenceSelector, NumUnfixedVars
 using BooleanInference: Region, slicing, tensor_unwrapping, DomainMask
 using BooleanInference: DM_BOTH, DM_0, DM_1, has0, has1, is_fixed
 using BooleanInference: contract_tensors, contract_region, TNContractionSolver
@@ -216,7 +216,7 @@ end
     tn = GenericTensorNetwork(problem)
     tn_static = setup_from_tensor_network(tn)
     tn_problem = TNProblem(tn_static)
-    variable = select_variables(tn_problem, NumUnfixedVars(), LeastOccurrenceSelector())
+    variable = select_variables(tn_problem, NumUnfixedVars(), MostOccurrenceSelector())
     @test variable isa Int
 
     # Create region for the selected variable

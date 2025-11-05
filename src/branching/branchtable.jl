@@ -12,9 +12,7 @@ TNContractionSolver() = TNContractionSolver(1, 2)
     return out
 end
 
-@inline function bit_match(config::UInt64, mask::UInt64, pattern::UInt64)::Bool
-    return (config & mask) == pattern
-end
+@inline bit_match(config::UInt64, mask::UInt64, pattern::UInt64) = (config & mask) == pattern
 
 function _build_axismap(output_vars::Vector{Int})
     isempty(output_vars) && return Int[]
@@ -96,6 +94,10 @@ end
 
 # Filter cached BranchingTable: filter rows by fixed values, extract columns for unfixed vars
 function filter_branching_table(region::Region, table::BranchingTable, problem::TNProblem)
+    stats = problem.ws.branch_stats
+    has_detailed = !isnothing(stats) && !isnothing(stats.detailed)
+    filtering_start_time = has_detailed ? time_ns() : 0
+    
     var_ids = vcat(region.boundary_vars, region.inner_vars)
     n_vars = length(var_ids)
 
@@ -112,6 +114,10 @@ function filter_branching_table(region::Region, table::BranchingTable, problem::
     end
 
     if isempty(fixed_positions)
+        if has_detailed
+            filtering_time = (time_ns() - filtering_start_time) / 1e9
+            record_filtering_time!(stats, filtering_time)
+        end
         return table, var_ids
     end
 
@@ -146,24 +152,29 @@ function filter_branching_table(region::Region, table::BranchingTable, problem::
         end
     end
 
-    if isempty(filtered_table)
-        return BranchingTable(0, eltype(table.table)[]), Int[]
+    if has_detailed
+        filtering_time = (time_ns() - filtering_start_time) / 1e9
+        record_filtering_time!(stats, filtering_time)
     end
 
+    isempty(filtered_table) && return BranchingTable(0, eltype(table.table)[]), Int[]
+    
     unfixed_var_ids = [var_ids[i] for i in unfixed_positions]
+    
     return BranchingTable(n_unfixed, filtered_table), unfixed_var_ids
 end
 
 function OptimalBranchingCore.branching_table(problem::TNProblem, solver::TNContractionSolver, variable::Int)
-    # 尝试从缓存获取 region 和分支表
+    stats = problem.ws.branch_stats
+    
     cached_region, cached_table = get_cached_region(variable)
     if !isnothing(cached_region) && !isnothing(cached_table)
-        # 缓存命中：过滤分支表以匹配当前问题的固定变量
+        record_cache_hit!(stats)
         filtered_table, unfixed_vars = filter_branching_table(cached_region, cached_table, problem)
         return filtered_table, unfixed_vars
     end
 
-    # 缓存未命中：重新计算
+    record_cache_miss!(stats)
     region = create_region(problem, variable, solver)
     n_boundary = length(region.boundary_vars)
     n_inner = length(region.inner_vars)
@@ -171,7 +182,12 @@ function OptimalBranchingCore.branching_table(problem::TNProblem, solver::TNCont
     
     # Contract with all-unfixed doms for consistent caching
     all_unfixed_doms = fill(DM_BOTH, length(problem.doms))
+    
+    stats = problem.ws.branch_stats
+    contraction_start_time = time_ns()
     contracted_tensor, output_vars = contract_region(problem.static, region, all_unfixed_doms)
+    contraction_time = (time_ns() - contraction_start_time) / 1e9
+    record_contraction_time!(stats, contraction_time)
     axismap = _build_axismap(output_vars)
 
     inner_output_vars = Int[]

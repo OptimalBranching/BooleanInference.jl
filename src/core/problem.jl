@@ -52,17 +52,3 @@ function reset_branching_stats!(problem::TNProblem)
     reset!(problem.ws.branch_stats)
     return nothing
 end
-
-function print_branching_stats(io::IO, problem::TNProblem)
-    stats = get_branching_stats(problem)
-    println(io, "Branching Statistics:")
-    println(io, "  Total branch points: $(stats.total_branches)")
-    println(io, "  Total subproblems: $(stats.total_subproblems)")
-    println(io, "  Maximum depth: $(stats.max_depth)")
-    println(io, "  Solved leaves: $(stats.solved_leaves)")
-    println(io, "  UNSAT leaves: $(stats.unsat_leaves)")
-    println(io, "  Skipped subproblems: $(stats.skipped_subproblems)")
-    println(io, "  Average branching factor: $(round(stats.avg_branching_factor, digits=3))")
-end
-
-print_branching_stats(problem::TNProblem) = print_branching_stats(stdout, problem)

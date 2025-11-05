@@ -35,6 +35,7 @@ function solve_sat_problem(
     verbose::Bool = false,
     show_stats::Bool=false
 )
+    verbose = verbose || show_stats
     tn_problem = setup_from_sat(sat; verbose=verbose)
     result, depth, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
     satisfiable = !isnothing(result)
@@ -69,8 +70,8 @@ function solve_factoring(
     n::Int, m::Int, N::Int;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(1,2),
-        # selector=MinGammaSelector(TNContractionSolver(1,2), GreedyMerge()),
-        selector=MostOccurrenceSelector(),
+        selector=MinGammaSelector(TNContractionSolver(1,2), GreedyMerge()),
+        # selector=MostOccurrenceSelector(),
         measure=NumUnfixedVars(),
         set_cover_solver=GreedyMerge()
     ),
@@ -78,6 +79,7 @@ function solve_factoring(
     verbose::Bool=false,
     show_stats::Bool=false
 )
+    verbose = verbose || show_stats
     fproblem = Factoring(n, m, N)
     circuit_sat = reduceto(CircuitSAT, fproblem)
     problem = CircuitSAT(circuit_sat.circuit.circuit; use_constraints=true)

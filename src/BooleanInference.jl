@@ -11,6 +11,7 @@ import ProblemReductions
 import ProblemReductions: CircuitSAT, Circuit, Factoring, reduceto, Satisfiability
 using DataStructures
 using DataStructures: PriorityQueue
+using Statistics: median
 
 include("core/types.jl")
 include("core/static.jl")
@@ -84,10 +85,9 @@ export get_branching_stats, reset_branching_stats!, print_branching_stats
 export BranchingStats, DetailedStats
 export record_depth!, record_branch!, record_unsat_leaf!, record_solved_leaf!, record_skipped_subproblem!
 export record_propagation!, record_propagation_fixpoint!, record_domain_reduction!, record_early_unsat!
-export record_branching_time!, record_contraction_time!, record_cache_hit!, record_cache_miss!
+export record_branching_time!, record_contraction_time!, record_filtering_time!, record_cache_hit!, record_cache_miss!
 export record_variable_selection!
 export print_stats_summary
-export get_propagation_efficiency, get_early_unsat_rate, get_cache_hit_rate, get_branching_factor_variance
 
 export extract_inner_configs, combine_configs, slice_region_contraction
 export handle_no_boundary_case_unfixed

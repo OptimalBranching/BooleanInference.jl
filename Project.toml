@@ -9,6 +9,7 @@ GenericTensorNetworks = "3521c873-ad32-4bb4-b63d-f4f178f42b49"
 OptimalBranchingCore = "c76e7b22-e1d2-40e8-b0f1-f659837787b8"
 ProblemReductions = "899c297d-f7d2-4ebf-8815-a35996def416"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 TropicalNumbers = "b3a74e9c-7526-4576-a4eb-79c0d4c32334"
 
 [compat]
@@ -17,6 +18,7 @@ GenericTensorNetworks = "4"
 OptimalBranchingCore = "0.1"
 ProblemReductions = "0.3.5"
 SparseArrays = "1.11.0"
+Statistics = "1.11.1"
 TropicalNumbers = "0.6.2"
 julia = "1"
 
