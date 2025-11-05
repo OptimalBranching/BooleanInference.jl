@@ -41,7 +41,10 @@ end
 struct KissatSolver <: AbstractSolver
     warmup::Bool
     kissat_path::String
-    function KissatSolver(;kissat_path=nothing)
+    yosys_path::String
+    abc_path::String
+    satisfiable_when_high::Bool
+    function KissatSolver(;kissat_path=nothing, yosys_path=nothing, abc_path=nothing)
         if isnothing(kissat_path)
             kissat_path = try
                 kissat_path = strip(read(`which kissat`, String))
@@ -51,7 +54,7 @@ struct KissatSolver <: AbstractSolver
         else
             !isfile(kissat_path) && error("File $kissat_path for Kissat does not exist")
         end
-        new(true, kissat_path)
+        new(true, kissat_path, yosys_path, abc_path, false)
     end
 end
 

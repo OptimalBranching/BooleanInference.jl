@@ -22,6 +22,8 @@ mutable struct DynamicWorkspace
     changed_vars_indices::Vector{Int}
     # 缓存传播时的临时 BitVector（避免重复分配）
     prop_buffers::Union{Nothing, PropagationBuffers}
+    # 分支应用缓存：避免重复 compute apply_branch
+    branch_cache::Dict{UInt, Dict{Tuple{UInt, Any}, Any}}
 end
 
 DynamicWorkspace(var_num::Int, verbose::Bool = false) = DynamicWorkspace(
@@ -31,6 +33,14 @@ DynamicWorkspace(var_num::Int, verbose::Bool = false) = DynamicWorkspace(
     PriorityQueue{Int, Float64}(),
     falses(var_num),
     Int[],
-    nothing
+    nothing,
+    Dict{UInt, Dict{Tuple{UInt, Any}, Any}}()
 )
 
+@inline function clear_branch_cache!(ws::DynamicWorkspace, doms_id::UInt)
+    inner = pop!(ws.branch_cache, doms_id, nothing)
+    if !isnothing(inner)
+        empty!(inner)
+    end
+    return nothing
+end
