@@ -9,21 +9,32 @@ function OptimalBranchingCore.branch_and_reduce(
     try
         stats = problem.ws.branch_stats
         current_depth = length(tag)
-        record_depth!(stats, current_depth)
-        @debug "======= Decision Level: $current_depth ======="
 
         # Step 1: Check if problem is solved (all variables fixed)
         if is_solved(problem)
-            record_solved_leaf!(stats, current_depth)
-            @debug "problem is solved"
+            record_solved_leaf!(stats, current_depth, problem.ws.current_path)
+            @debug "problem is solved at depth $current_depth"
             cache_branch_solution!(problem)
             return one(result_type)
         end
+
+        record_depth!(stats, current_depth)
+        @debug "======= Decision Level: $(current_depth + 1) ======="
+        
         # Step 2: Try to reduce the problem
         @assert reducer isa NoReducer
 
+        # record branching time (only if detailed stats are enabled)
+        has_detailed = !isnothing(stats.detailed)
+        branching_start_time = has_detailed ? time_ns() : 0
+        
         # Step 3: Select variables for branching
         variable = OptimalBranchingCore.select_variables(problem, config.measure, config.selector)
+        
+        # Record variable selection statistics and push to current path (only if tracking)
+        record_variable_selection!(stats, variable, problem.n_unfixed, current_depth)
+        needs_path_tracking(stats) && push!(problem.ws.current_path, variable)
+        @debug "Variable $variable selected at depth $current_depth"
 
         # Step 4: Compute branching table
         tbl, variables = OptimalBranchingCore.branching_table(problem, config.table_solver, variable)
@@ -31,12 +42,18 @@ function OptimalBranchingCore.branch_and_reduce(
         # Check if table is empty (UNSAT - no valid configurations)
         if isempty(tbl.table)
             @debug "Empty branching table - UNSAT"
+            has_detailed && record_branching_time!(stats, (time_ns() - branching_start_time) / 1e9)
             record_unsat_leaf!(stats, current_depth)
+            # Pop current variable before returning (restore path for parent)
+            needs_path_tracking(stats) && !isempty(problem.ws.current_path) && pop!(problem.ws.current_path)
             return zero(result_type)
         end
 
         # Step 5: Compute optimal branching rule
         result = OptimalBranchingCore.optimal_branching_rule(tbl, variables, problem, config.measure, config.set_cover_solver)
+        
+        # record branching time (only if detailed stats are enabled)
+        has_detailed && record_branching_time!(stats, (time_ns() - branching_start_time) / 1e9)
 
         # @show tbl
         # Step 6: Branch and recurse
@@ -71,21 +88,38 @@ function OptimalBranchingCore.branch_and_reduce(
             # Use mutable tag buffer: push before recursion, pop after
             # This avoids allocating new arrays on each recursive call
             push!(tag, (i, length(clauses)))
+            # Save path length before recursion to restore after (only if tracking)
+            path_length_before = needs_path_tracking(stats) ? length(problem.ws.current_path) : 0
             sub_result = OptimalBranchingCore.branch_and_reduce(subproblem, config, reducer, result_type; tag=tag, show_progress=show_progress)
+            # Restore path to length before recursion (pop variables added during recursion)
+            if needs_path_tracking(stats)
+                while length(problem.ws.current_path) > path_length_before
+                    pop!(problem.ws.current_path)
+                end
+            end
             pop!(tag)
 
             # Combine results
             accum = accum + sub_result * result_type(local_value)
+            
+            # Early exit: if we found a solution (accum > 0), return immediately
+            # This ensures we only find one solution path
+            if accum > zero(result_type)
+                @debug "Found solution, early exit at depth $current_depth"
+                needs_path_tracking(stats) && !isempty(problem.ws.current_path) && pop!(problem.ws.current_path)
+                return accum
+            end
         end
 
+        # Pop current variable before returning (restore path for parent)
+        needs_path_tracking(stats) && !isempty(problem.ws.current_path) && pop!(problem.ws.current_path)
         return accum
     finally
         clear_branch_cache!(problem.ws, Base.objectid(problem.doms))
     end
 end
 
-@inline function lookup_branch_cache(
-    problem::TNProblem,
+@inline function lookup_branch_cache(problem::TNProblem,
     clause::OptimalBranchingCore.Clause{INT},
     variables::Vector{Int}
 ) where {INT}
@@ -118,6 +152,81 @@ end
 function OptimalBranchingCore.optimal_branching_rule(tbl::OptimalBranchingCore.BranchingTable, variables::Vector{T}, problem::TNProblem, measure::OptimalBranchingCore.AbstractMeasure, solver::OptimalBranchingCore.GreedyMerge) where T
     candidates = OptimalBranchingCore.bit_clauses(tbl)
     return OptimalBranchingCore.greedymerge(candidates, problem, variables, measure)
+end
+
+function OptimalBranchingCore.optimal_branching_rule(
+    tbl::OptimalBranchingCore.BranchingTable{INT},
+    variables::Vector{T},
+    problem::TNProblem,
+    measure::OptimalBranchingCore.AbstractMeasure,
+    solver::OptimalBranchingCore.AbstractSetCoverSolver
+) where {INT<:Integer, T}
+    candidates = OptimalBranchingCore.candidate_clauses(tbl)
+    valid_clauses = Vector{OptimalBranchingCore.Clause{INT}}()
+    reductions = Float64[]
+
+    for clause in candidates
+        reduction = Float64(OptimalBranchingCore.size_reduction(problem, measure, clause, variables))
+        if isfinite(reduction) && reduction > 0
+            push!(valid_clauses, clause)
+            push!(reductions, reduction)
+        end
+    end
+
+    if isempty(valid_clauses)
+        empty_clauses = Vector{OptimalBranchingCore.Clause{INT}}()
+        return OptimalBranchingCore.OptimalBranchingResult(
+            OptimalBranchingCore.DNF(empty_clauses),
+            Float64[],
+            Inf,
+        )
+    end
+
+    covered_mask = BitVector(undef, length(tbl.table))
+    @inbounds for (idx, group) in pairs(tbl.table)
+        covered_mask[idx] = any(valid_clauses) do clause
+            any(config -> OptimalBranchingCore.covered_by(config, clause), group)
+        end
+    end
+
+    if !all(covered_mask)
+        if !any(covered_mask)
+            empty_clauses = Vector{OptimalBranchingCore.Clause{INT}}()
+            return OptimalBranchingCore.OptimalBranchingResult(
+                OptimalBranchingCore.DNF(empty_clauses),
+                Float64[],
+                Inf,
+            )
+        end
+        filtered_groups = tbl.table[findall(covered_mask)]
+        tbl = OptimalBranchingCore.BranchingTable{INT}(tbl.bit_length, filtered_groups)
+    end
+
+    return OptimalBranchingCore.minimize_γ(tbl, valid_clauses, reductions, solver)
+end
+
+function OptimalBranchingCore.optimal_branching_rule(
+    tbl::OptimalBranchingCore.BranchingTable{INT},
+    variables::Vector{T},
+    problem::TNProblem,
+    measure::OptimalBranchingCore.AbstractMeasure,
+    solver::OptimalBranchingCore.NaiveBranch
+) where {INT<:Integer, T}
+    return invoke(
+        OptimalBranchingCore.optimal_branching_rule,
+        Tuple{
+            OptimalBranchingCore.BranchingTable,
+            Vector,
+            OptimalBranchingCore.AbstractProblem,
+            OptimalBranchingCore.AbstractMeasure,
+            OptimalBranchingCore.NaiveBranch,
+        },
+        tbl,
+        variables,
+        problem,
+        measure,
+        solver,
+    )
 end
 
 # Apply a clause to domain masks, fixing variables according to the clause's mask and values. Returns the number of variables that were fixed.

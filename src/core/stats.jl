@@ -8,7 +8,6 @@ mutable struct DetailedStats
 
     # 传播效率
     propagation_calls::Int
-    propagation_fixpoints::Int
     domain_reductions::Int
     early_unsat_detections::Int
 
@@ -16,6 +15,7 @@ mutable struct DetailedStats
     time_propagation::Float64
     time_branching::Float64
     time_contraction::Float64
+    time_filtering::Float64
 
     # 缓存效率
     cache_hits::Int
@@ -24,33 +24,35 @@ mutable struct DetailedStats
     # 分支决策质量
     variable_selection_counts::Dict{Int, Int}
     remaining_vars_at_branch::Vector{Int}
+    depth_at_selection::Vector{Int}  # 每次变量选择时的深度
+    variable_selection_sequence::Vector{Int}  # 变量选择序列（按选择顺序）
+    successful_paths::Vector{Vector{Int}}  # 成功路径列表（从根到解的变量选择序列）
 end
 
 DetailedStats() = DetailedStats(
     Int[],
     Int[],
-    0, 0, 0, 0,
-    0.0, 0.0, 0.0,
+    0, 0, 0,
+    0.0, 0.0, 0.0, 0.0,
     0, 0,
     Dict{Int, Int}(),
-    Int[]
+    Int[],
+    Int[],
+    Int[],
+    Vector{Int}[]
 )
 
 mutable struct BranchingStats
-    # 基础统计（总是记录）
     total_branches::Int
     total_subproblems::Int
     max_depth::Int
     solved_leaves::Int
-    unsat_leaves::Int
-    skipped_subproblems::Int
 
-    # 详细统计（可选）
     detailed::Union{Nothing, DetailedStats}
 end
 
 BranchingStats(verbose::Bool = false) = BranchingStats(
-    0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0,
     verbose ? DetailedStats() : nothing
 )
 
@@ -59,24 +61,25 @@ function reset!(stats::BranchingStats)
     stats.total_subproblems = 0
     stats.max_depth = 0
     stats.solved_leaves = 0
-    stats.unsat_leaves = 0
-    stats.skipped_subproblems = 0
 
-    if stats.detailed !== nothing
+    if !isnothing(stats.detailed)
         d = stats.detailed
         empty!(d.depth_distribution)
         empty!(d.branching_factors)
         d.propagation_calls = 0
-        d.propagation_fixpoints = 0
         d.domain_reductions = 0
         d.early_unsat_detections = 0
         d.time_propagation = 0.0
         d.time_branching = 0.0
         d.time_contraction = 0.0
+        d.time_filtering = 0.0
         d.cache_hits = 0
         d.cache_misses = 0
         empty!(d.variable_selection_counts)
         empty!(d.remaining_vars_at_branch)
+        empty!(d.depth_at_selection)
+        empty!(d.variable_selection_sequence)
+        empty!(d.successful_paths)
     end
 
     return stats
@@ -89,16 +92,19 @@ function Base.copy(stats::BranchingStats)
             copy(d.depth_distribution),
             copy(d.branching_factors),
             d.propagation_calls,
-            d.propagation_fixpoints,
             d.domain_reductions,
             d.early_unsat_detections,
             d.time_propagation,
             d.time_branching,
             d.time_contraction,
+            d.time_filtering,
             d.cache_hits,
             d.cache_misses,
             copy(d.variable_selection_counts),
-            copy(d.remaining_vars_at_branch)
+            copy(d.remaining_vars_at_branch),
+            copy(d.depth_at_selection),
+            copy(d.variable_selection_sequence),
+            [copy(path) for path in d.successful_paths]
         )
     else
         nothing
@@ -109,8 +115,6 @@ function Base.copy(stats::BranchingStats)
         stats.total_subproblems,
         stats.max_depth,
         stats.solved_leaves,
-        stats.unsat_leaves,
-        stats.skipped_subproblems,
         detailed_copy
     )
 end
@@ -155,19 +159,20 @@ end
 end
 
 @inline function record_unsat_leaf!(stats::BranchingStats, depth::Int)
-    stats.unsat_leaves += 1
     record_depth!(stats, depth)
     return nothing
 end
 
-@inline function record_solved_leaf!(stats::BranchingStats, depth::Int)
+@inline function record_solved_leaf!(stats::BranchingStats, depth::Int, current_path::Vector{Int} = Int[])
     stats.solved_leaves += 1
     record_depth!(stats, depth)
+    if stats.detailed !== nothing && !isempty(current_path)
+        push!(stats.detailed.successful_paths, copy(current_path))
+    end
     return nothing
 end
 
 @inline function record_skipped_subproblem!(stats::BranchingStats)
-    stats.skipped_subproblems += 1
     return nothing
 end
 
@@ -177,13 +182,6 @@ end
     if stats.detailed !== nothing
         stats.detailed.propagation_calls += 1
         stats.detailed.time_propagation += time_elapsed
-    end
-    return nothing
-end
-
-@inline function record_propagation_fixpoint!(stats::BranchingStats)
-    if stats.detailed !== nothing
-        stats.detailed.propagation_fixpoints += 1
     end
     return nothing
 end
@@ -216,6 +214,13 @@ end
     return nothing
 end
 
+@inline function record_filtering_time!(stats::BranchingStats, time_elapsed::Float64)
+    if stats.detailed !== nothing
+        stats.detailed.time_filtering += time_elapsed
+    end
+    return nothing
+end
+
 @inline function record_cache_hit!(stats::BranchingStats)
     if stats.detailed !== nothing
         stats.detailed.cache_hits += 1
@@ -230,31 +235,27 @@ end
     return nothing
 end
 
-@inline function record_variable_selection!(stats::BranchingStats, var::Int, remaining_vars::Int)
+@inline function record_variable_selection!(stats::BranchingStats, var::Int, remaining_vars::Int, depth::Int)
     if stats.detailed !== nothing
         d = stats.detailed
         d.variable_selection_counts[var] = get(d.variable_selection_counts, var, 0) + 1
         push!(d.remaining_vars_at_branch, remaining_vars)
+        push!(d.depth_at_selection, depth)
+        push!(d.variable_selection_sequence, var)
     end
     return nothing
 end
 
+# Check if we need to track paths (only when detailed stats are enabled)
+@inline needs_path_tracking(stats::BranchingStats) = !isnothing(stats.detailed)
+
 # === Statistics analysis and visualization ===
-
-"""
-    print_stats_summary(stats::BranchingStats; io::IO = stdout)
-
-打印统计信息摘要。
-"""
 function print_stats_summary(stats::BranchingStats; io::IO = stdout)
     println(io, "=== Branching Statistics ===")
-    println(io, "Total branches: ", stats.total_branches)
-    println(io, "Total subproblems: ", stats.total_subproblems)
-    println(io, "Max depth: ", stats.max_depth)
+    println(io, "Branch decisions: ", stats.total_branches)
+    println(io, "Child nodes: ", stats.total_subproblems)
+    println(io, "Max depth: ", stats.max_depth + 1)
     println(io, "Solved leaves: ", stats.solved_leaves)
-    println(io, "UNSAT leaves: ", stats.unsat_leaves)
-    println(io, "Skipped subproblems: ", stats.skipped_subproblems)
-    println(io, "Avg branching factor: ", round(stats.avg_branching_factor, digits=3))
 
     if stats.detailed !== nothing
         println(io, "\n=== Detailed Statistics ===")
@@ -263,7 +264,6 @@ function print_stats_summary(stats::BranchingStats; io::IO = stdout)
         # 传播统计
         println(io, "\nPropagation:")
         println(io, "  Calls: ", d.propagation_calls)
-        println(io, "  Fixpoints: ", d.propagation_fixpoints)
         println(io, "  Domain reductions: ", d.domain_reductions)
         println(io, "  Early UNSAT detections: ", d.early_unsat_detections)
         if d.propagation_calls > 0
@@ -272,16 +272,20 @@ function print_stats_summary(stats::BranchingStats; io::IO = stdout)
         end
 
         # 时间统计
-        total_time = d.time_propagation + d.time_branching + d.time_contraction
+        total_time = d.time_propagation + d.time_branching + d.time_contraction + d.time_filtering
+        println(io, "\nTime breakdown:")
         if total_time > 0
-            println(io, "\nTime breakdown:")
-            println(io, "  Propagation: ", round(d.time_propagation, digits=3), "s (",
-                    round(100 * d.time_propagation / total_time, digits=1), "%)")
-            println(io, "  Branching: ", round(d.time_branching, digits=3), "s (",
-                    round(100 * d.time_branching / total_time, digits=1), "%)")
-            println(io, "  Contraction: ", round(d.time_contraction, digits=3), "s (",
-                    round(100 * d.time_contraction / total_time, digits=1), "%)")
-            println(io, "  Total: ", round(total_time, digits=3), "s")
+            println(io, "  Propagation: ", round(d.time_propagation, digits=5), "s (",
+                    round(100 * d.time_propagation / total_time, digits=5), "%)")
+            println(io, "  Branching: ", round(d.time_branching, digits=5), "s (",
+                    round(100 * d.time_branching / total_time, digits=5), "%)")
+            println(io, "  Contraction: ", round(d.time_contraction, digits=5), "s (",
+                    round(100 * d.time_contraction / total_time, digits=5), "%)")
+            println(io, "  Filtering: ", round(d.time_filtering, digits=5), "s (",
+                    round(100 * d.time_filtering / total_time, digits=5), "%)")
+            println(io, "  Total: ", round(total_time, digits=5), "s")
+        else
+            println(io, "  (Time statistics not recorded)")
         end
 
         # 缓存统计
@@ -306,9 +310,26 @@ function print_stats_summary(stats::BranchingStats; io::IO = stdout)
         # 深度分布
         if !isempty(d.depth_distribution)
             println(io, "\nDepth distribution:")
-            for (depth, count) in enumerate(d.depth_distribution)
-                if count > 0
-                    println(io, "  Depth ", depth - 1, ": ", count, " nodes")
+            # 计算每个深度的累计节点数，用于匹配 branching_factors
+            cumulative_nodes = 0
+            for (depth_idx, node_count) in enumerate(d.depth_distribution)
+                if node_count > 0
+                    depth = depth_idx  # 显示时从1开始
+                    # 该深度的分支因子范围：从 cumulative_nodes+1 到 cumulative_nodes+node_count
+                    start_idx = cumulative_nodes + 1
+                    end_idx = cumulative_nodes + node_count
+                    
+                    if start_idx <= length(d.branching_factors)
+                        end_idx = min(end_idx, length(d.branching_factors))
+                        depth_branching_factors = d.branching_factors[start_idx:end_idx]
+                        avg_bf = round(sum(depth_branching_factors) / length(depth_branching_factors), digits=2)
+                        total_subproblems = sum(depth_branching_factors)
+                        println(io, "  Depth ", depth, ": ", node_count, " nodes, ", 
+                                total_subproblems, " subproblems, avg branching factor: ", avg_bf)
+                    else
+                        println(io, "  Depth ", depth, ": ", node_count, " nodes")
+                    end
+                    cumulative_nodes += node_count
                 end
             end
         end
@@ -317,92 +338,59 @@ function print_stats_summary(stats::BranchingStats; io::IO = stdout)
         if !isempty(d.variable_selection_counts)
             println(io, "\nVariable selection (top 10):")
             sorted_vars = sort(collect(d.variable_selection_counts), by=x->x[2], rev=true)
-            for (var, count) in sorted_vars[1:min(10, length(sorted_vars))]
-                println(io, "  Var ", var, ": ", count, " times")
+            # 计算每个变量的平均剩余变量数和平均深度
+            if !isempty(d.variable_selection_sequence) && 
+               length(d.variable_selection_sequence) == length(d.remaining_vars_at_branch) &&
+               length(d.variable_selection_sequence) == length(d.depth_at_selection)
+                for (var, count) in sorted_vars[1:min(10, length(sorted_vars))]
+                    # 找到该变量被选择的所有位置
+                    var_indices = [i for (i, v) in enumerate(d.variable_selection_sequence) if v == var]
+                    avg_remaining = round(sum(d.remaining_vars_at_branch[i] for i in var_indices) / length(var_indices), digits=1)
+                    avg_depth = round(sum(d.depth_at_selection[i] for i in var_indices) / length(var_indices), digits=1)
+                    println(io, "  Var ", var, ": ", count, " times, ",
+                            "avg remaining vars: ", avg_remaining, ", ",
+                            "avg depth: ", avg_depth + 1)
+                end
+            else
+                # 降级显示：只显示选择次数
+                for (var, count) in sorted_vars[1:min(10, length(sorted_vars))]
+                    println(io, "  Var ", var, ": ", count, " times")
+                end
             end
         end
 
-        # 剩余变量分析
-        if !isempty(d.remaining_vars_at_branch)
-            println(io, "\nRemaining variables at branch:")
-            println(io, "  Mean: ", round(sum(d.remaining_vars_at_branch) / length(d.remaining_vars_at_branch), digits=1))
-            println(io, "  Min: ", minimum(d.remaining_vars_at_branch))
-            println(io, "  Max: ", maximum(d.remaining_vars_at_branch))
+        # 剩余变量分析 - 按深度显示所有选择
+        if !isempty(d.remaining_vars_at_branch) && 
+           !isempty(d.depth_at_selection) && 
+           length(d.depth_at_selection) == length(d.remaining_vars_at_branch)
+            # 按深度分组
+            depth_remaining = Dict{Int, Vector{Tuple{Int, Int}}}()  # depth -> [(index, remaining_vars), ...]
+            for (idx, depth) in enumerate(d.depth_at_selection)
+                if !haskey(depth_remaining, depth)
+                    depth_remaining[depth] = Tuple{Int, Int}[]
+                end
+                push!(depth_remaining[depth], (idx, d.remaining_vars_at_branch[idx]))
+            end
+            
+            if !isempty(depth_remaining)
+                println(io, "\nRemaining variables at branch:")
+                sorted_depths = sort(collect(keys(depth_remaining)))
+                for depth in sorted_depths
+                    selections = depth_remaining[depth]
+                    println(io, "  Depth ", depth + 1, ":")
+                    for (idx, remaining_vars) in selections
+                        println(io, "    Selection ", idx, ": ", remaining_vars, " remaining vars")
+                    end
+                end
+            end
+        end
+        
+        # 成功路径显示
+        if !isempty(d.successful_paths)
+            println(io, "\nSuccessful paths:")
+            for (path_idx, path) in enumerate(d.successful_paths)
+                println(io, "  Path ", path_idx, ": ", join([string(v) for v in path], " -> "))
+            end
         end
     end
 end
-
-"""
-    get_propagation_efficiency(stats::BranchingStats) -> Float64
-
-计算传播效率：每次传播调用平均减少的域数量。
-返回 0.0 如果没有详细统计或没有传播调用。
-"""
-function get_propagation_efficiency(stats::BranchingStats)
-    if stats.detailed !== nothing && stats.detailed.propagation_calls > 0
-        return stats.detailed.domain_reductions / stats.detailed.propagation_calls
-    end
-    return 0.0
-end
-
-"""
-    get_early_unsat_rate(stats::BranchingStats) -> Float64
-
-计算传播早期检测到 UNSAT 的比率。
-返回 0.0 如果没有详细统计。
-"""
-function get_early_unsat_rate(stats::BranchingStats)
-    total_unsat = stats.unsat_leaves
-    if stats.detailed !== nothing && total_unsat > 0
-        return stats.detailed.early_unsat_detections / total_unsat
-    end
-    return 0.0
-end
-
-"""
-    get_cache_hit_rate(stats::BranchingStats) -> Float64
-
-计算缓存命中率。
-返回 0.0 如果没有详细统计或没有缓存访问。
-"""
-function get_cache_hit_rate(stats::BranchingStats)
-    if stats.detailed !== nothing
-        total = stats.detailed.cache_hits + stats.detailed.cache_misses
-        if total > 0
-            return stats.detailed.cache_hits / total
-        end
-    end
-    return 0.0
-end
-
-"""
-    get_branching_factor_variance(stats::BranchingStats) -> Float64
-
-计算分支因子的方差。
-返回 0.0 如果没有详细统计或没有分支。
-"""
-function get_branching_factor_variance(stats::BranchingStats)
-    if stats.detailed !== nothing && !isempty(stats.detailed.branching_factors)
-        bf = stats.detailed.branching_factors
-        mean_bf = sum(bf) / length(bf)
-        return sum((x - mean_bf)^2 for x in bf) / length(bf)
-    end
-    return 0.0
-end
-
-"""
-    median(v::Vector{Int}) -> Float64
-
-计算整数向量的中位数。
-"""
-function median(v::Vector{Int})
-    isempty(v) && return 0.0
-    sorted = sort(v)
-    n = length(sorted)
-    if n % 2 == 1
-        return Float64(sorted[div(n, 2) + 1])
-    else
-        return (sorted[div(n, 2)] + sorted[div(n, 2) + 1]) / 2.0
-    end
-end
-

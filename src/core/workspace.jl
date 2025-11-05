@@ -24,6 +24,8 @@ mutable struct DynamicWorkspace
     prop_buffers::Union{Nothing, PropagationBuffers}
     # 分支应用缓存：避免重复 compute apply_branch
     branch_cache::Dict{UInt, Dict{Tuple{UInt, Any}, Any}}
+    # 当前搜索路径（用于跟踪成功路径，仅在 verbose=true 时使用）
+    current_path::Vector{Int}
 end
 
 DynamicWorkspace(var_num::Int, verbose::Bool = false) = DynamicWorkspace(
@@ -34,7 +36,8 @@ DynamicWorkspace(var_num::Int, verbose::Bool = false) = DynamicWorkspace(
     falses(var_num),
     Int[],
     nothing,
-    Dict{UInt, Dict{Tuple{UInt, Any}, Any}}()
+    Dict{UInt, Dict{Tuple{UInt, Any}, Any}}(),
+    Int[]
 )
 
 @inline function clear_branch_cache!(ws::DynamicWorkspace, doms_id::UInt)

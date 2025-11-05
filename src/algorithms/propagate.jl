@@ -27,7 +27,9 @@ function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vec
 
     stats = !isnothing(ws) ? ws.branch_stats : nothing
     has_detailed = !isnothing(stats) && !isnothing(stats.detailed)
-    has_detailed && record_propagation!(stats)
+    
+    # 记录传播时间（使用纳秒精度）
+    propagation_start_time = has_detailed ? time_ns() : 0
 
     # 构建传播队列：仅包含受变化变量影响的 tensor
     tensor_queue = Int[]
@@ -81,8 +83,11 @@ function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vec
         record_propagation_fixpoint!(stats)
     end
 
-    # 记录域减少数量
+    # 记录域减少数量和时间
     if has_detailed
+        propagation_time = (time_ns() - propagation_start_time) / 1e9  # 转换为秒
+        record_propagation!(stats, propagation_time)
+        
         final_domain_count = sum(count_ones(d.bits & 0x03) for d in working_doms)
         domain_reduction = initial_domain_count - final_domain_count
         if domain_reduction > 0
@@ -263,96 +268,3 @@ end
     
     return true
 end
-
-
-
-# """
-#     LookAheadResult
-
-# Result of look-ahead propagation for a variable assignment.
-
-# Fields:
-# - `n_fixed::Int` - Number of additional variables that get fixed
-# - `has_conflict::Bool` - Whether a conflict was detected
-# - `n_propagations::Int` - Number of propagation steps performed
-# """
-# struct LookAheadResult
-#     n_fixed::Int
-#     has_conflict::Bool
-#     n_propagations::Int
-# end
-
-# """
-#     look_ahead_propagation(problem::TNProblem, var_id::Int, value::Bool) -> LookAheadResult
-
-# Perform look-ahead propagation: tentatively assign `var_id` to `value` and propagate
-# to see how many additional variables get fixed and whether a conflict occurs.
-
-# This is used to estimate the effectiveness of different branching decisions without
-# actually committing to them.
-# """
-# function look_ahead_propagation(problem::TNProblem, var_id::Int, value::Bool)
-#     # Create temporary domain assignment
-#     test_doms = get_doms_from_pool!(problem.ws, problem.doms)
-#     test_doms[var_id] = value ? DM_1 : DM_0
-
-#     # Count currently fixed variables
-#     n_fixed_before = count(is_fixed(dm) for dm in problem.doms)
-
-#     # Propagate
-#     propagated = propagate(problem.static, test_doms, problem.ws)
-
-#     # Return domains to pool
-#     return_doms_to_pool!(problem.ws, test_doms)
-
-#     # Check for conflict
-#     has_conflict = any(dm.bits == 0x00 for dm in propagated)
-
-#     # Count newly fixed variables
-#     n_fixed_after = count(is_fixed(dm) for dm in propagated)
-#     n_newly_fixed = n_fixed_after - n_fixed_before
-
-#     # Estimate number of propagation steps (active tensors affected by this variable)
-#     n_propagations = length(problem.static.v2t[var_id])
-
-#     return LookAheadResult(n_newly_fixed, has_conflict, n_propagations)
-# end
-
-# """
-#     look_ahead_score(problem::TNProblem, var_id::Int) -> Float64
-
-# Compute a look-ahead score for a variable by testing both possible assignments.
-# Higher scores indicate better branching candidates.
-
-# The score considers:
-# - How many variables get fixed by each assignment
-# - Whether either assignment leads to immediate conflict (pruning)
-# - Balance between the two branches
-# """
-# function look_ahead_score(problem::TNProblem, var_id::Int)
-#     result_0 = look_ahead_propagation(problem, var_id, false)
-#     result_1 = look_ahead_propagation(problem, var_id, true)
-
-#     # If one branch leads to conflict, that's valuable (immediate pruning)
-#     if result_0.has_conflict && result_1.has_conflict
-#         # Both lead to conflict - this is UNSAT, but score it very high
-#         # so we detect this early
-#         return 1e9
-#     elseif result_0.has_conflict
-#         # Only var=0 conflicts, so var=1 is forced - very valuable
-#         return 1e6 + Float64(result_1.n_fixed)
-#     elseif result_1.has_conflict
-#         # Only var=1 conflicts, so var=0 is forced - very valuable
-#         return 1e6 + Float64(result_0.n_fixed)
-#     end
-
-#     # Neither leads to conflict - score based on total propagation power
-#     # We want variables that cause lots of propagation
-#     total_fixed = result_0.n_fixed + result_1.n_fixed
-
-#     # Also consider minimum of the two (we want balanced branches that both make progress)
-#     min_fixed = min(result_0.n_fixed, result_1.n_fixed)
-
-#     # Combined score: prefer high total propagation with decent minimum
-#     return Float64(total_fixed) + 0.5 * Float64(min_fixed)
-# end
