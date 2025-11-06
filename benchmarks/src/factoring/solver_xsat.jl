@@ -1,7 +1,7 @@
 struct XSatResult
     status::Symbol                 # :sat | :unsat | :unknown
-    model::Union{Nothing,Dict{Int,Bool}}  # 变量 -> 取值（仅 SAT 有）
-    raw::String                    # 原始控制台输出，便于调试/记录
+    model::Union{Nothing,Dict{Int,Bool}}  # Variable -> value (present only when SAT)
+    raw::String                    # Raw console output for debugging/logging
 end
 
 """

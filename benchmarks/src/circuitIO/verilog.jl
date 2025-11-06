@@ -28,7 +28,7 @@ function verilog_expr(ex::BooleanExpr, rename::Dict{Symbol,String})
         s = ex.var
         return is_true_sym(s)  ? "1'b1" :
                is_false_sym(s) ? "1'b0" :
-               rename[s]  # 普通变量
+               rename[s]  # Regular variable
     end
 
     args = verilog_expr.(ex.args, Ref(rename))

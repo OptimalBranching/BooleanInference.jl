@@ -11,20 +11,20 @@ function PropagationBuffers(static::TNStatic)
 end
 
 mutable struct DynamicWorkspace
-    # 缓存上一次分支的完整解（用于快速恢复）
+    # Cache the full solution from the last branch for quick restoration
     cached_doms::Vector{DomainMask}
     has_cached_solution::Bool
-    # 分支统计信息
+    # Branching statistics
     branch_stats::BranchingStats
     var_values::PriorityQueue{Int, Float64}
-    # 快速 O(1) 成员测试（避免 O(n) 搜索）
+    # O(1) membership test to avoid O(n) scans
     changed_vars_flags::BitVector
     changed_vars_indices::Vector{Int}
-    # 缓存传播时的临时 BitVector（避免重复分配）
+    # Temporary BitVector cache for propagation to avoid reallocations
     prop_buffers::Union{Nothing, PropagationBuffers}
-    # 分支应用缓存：避免重复 compute apply_branch
+    # Cache of branch applications to avoid recomputing apply_branch
     branch_cache::Dict{UInt, Dict{Tuple{UInt, Any}, Any}}
-    # 当前搜索路径（用于跟踪成功路径，仅在 verbose=true 时使用）
+    # Current search path (tracked only when verbose=true)
     current_path::Vector{Int}
 end
 
