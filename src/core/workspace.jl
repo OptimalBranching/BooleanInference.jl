@@ -1,0 +1,49 @@
+mutable struct PropagationBuffers
+    feasible::BitVector
+    temp::BitVector
+    max_configs::Int
+end
+
+function PropagationBuffers(static::TNStatic)
+    max_nvars = maximum(length(t.var_axes) for t in static.tensors; init=0)
+    max_configs = max_nvars > 0 ? (1 << max_nvars) : 1
+    return PropagationBuffers(falses(max_configs), falses(max_configs), max_configs)
+end
+
+mutable struct DynamicWorkspace
+    # Cache the full solution from the last branch for quick restoration
+    cached_doms::Vector{DomainMask}
+    has_cached_solution::Bool
+    # Branching statistics
+    branch_stats::BranchingStats
+    var_values::PriorityQueue{Int, Float64}
+    # O(1) membership test to avoid O(n) scans
+    changed_vars_flags::BitVector
+    changed_vars_indices::Vector{Int}
+    # Temporary BitVector cache for propagation to avoid reallocations
+    prop_buffers::Union{Nothing, PropagationBuffers}
+    # Cache of branch applications to avoid recomputing apply_branch
+    branch_cache::Dict{UInt, Dict{Tuple{UInt, Any}, Any}}
+    # Current search path (tracked only when verbose=true)
+    current_path::Vector{Int}
+end
+
+DynamicWorkspace(var_num::Int, verbose::Bool = false) = DynamicWorkspace(
+    Vector{DomainMask}(undef, var_num),
+    false,
+    BranchingStats(verbose),
+    PriorityQueue{Int, Float64}(),
+    falses(var_num),
+    Int[],
+    nothing,
+    Dict{UInt, Dict{Tuple{UInt, Any}, Any}}(),
+    Int[]
+)
+
+@inline function clear_branch_cache!(ws::DynamicWorkspace, doms_id::UInt)
+    inner = pop!(ws.branch_cache, doms_id, nothing)
+    if !isnothing(inner)
+        empty!(inner)
+    end
+    return nothing
+end

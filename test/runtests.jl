@@ -29,6 +29,10 @@ end
     include("selector.jl")
 end
 
-@testset "tablesolver.jl" begin
-    include("tablesolver.jl")
+@testset "stats.jl" begin
+    include("stats.jl")
+end
+
+@testset "greedymerge.jl" begin
+    include("greedymerge.jl")
 end
