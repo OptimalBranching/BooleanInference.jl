@@ -40,8 +40,8 @@ function OptimalBranchingCore.select_variables(
     best_var = unfixed_vars[1]
     best_gamma = Inf
 
-    # @debug "Selecting variables with MinGammaSelector, n_unfixed=$(length(unfixed_vars))"
-    println("Selecting variables with MinGammaSelector, n_unfixed=$(length(unfixed_vars))")
+    @debug "Selecting variables with MinGammaSelector, n_unfixed=$(length(unfixed_vars))"
+    # println("Selecting variables with MinGammaSelector, n_unfixed=$(length(unfixed_vars))")
     # Iterate through all unfixed variables
     for var in unfixed_vars
         # Compute branching table for this variable
@@ -65,18 +65,18 @@ function OptimalBranchingCore.select_variables(
             selector.set_cover_solver
         )
 
-        # @debug "Optimal branching rule for variable $var: $(OptimalBranchingCore.get_clauses(result))"
-        println("Optimal branching rule for variable $var: $(OptimalBranchingCore.get_clauses(result))")
+        @debug "Optimal branching rule for variable $var: $(OptimalBranchingCore.get_clauses(result))"
+        # println("Optimal branching rule for variable $var: $(OptimalBranchingCore.get_clauses(result))")
 
         # Get the gamma value
         gamma = result.γ
-        # @debug "Gamma for variable $var: $gamma"
-        println("Gamma for variable $var: $gamma")
+        @debug "Gamma for variable $var: $gamma"
+        # println("Gamma for variable $var: $gamma")
 
         # Update best variable if this gamma is smaller
         if gamma < best_gamma
-            # @debug "Updating best variable to $var with gamma $gamma"
-            println("Updating best variable to $var with gamma $gamma")
+            @debug "Updating best variable to $var with gamma $gamma"
+            # println("Updating best variable to $var with gamma $gamma")
             best_gamma = gamma
             best_var = var
         end

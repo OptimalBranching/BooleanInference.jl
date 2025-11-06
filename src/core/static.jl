@@ -87,9 +87,6 @@ function setup_problem(var_num::Int,
         hash_to_tensor[h] => hash_to_masks[h] for h in keys(hash_to_masks)
     )
 
-    @show precomputed_masks
-    @show tensor_to_masks
-
     return TNStatic(vars, tensors, vars_to_tensors, tensors_to_edges, axis_of_t,
                     precomputed_masks, tensor_to_masks)
 end

@@ -19,8 +19,8 @@ function OptimalBranchingCore.branch_and_reduce(
         end
 
         record_depth!(stats, current_depth)
-        # @debug "======= Decision Level: $(current_depth + 1) ======="
-        println("======= Decision Level: $(current_depth + 1) =======")
+        @debug "======= Decision Level: $(current_depth + 1) ======="
+        # println("======= Decision Level: $(current_depth + 1) =======")
         # Step 2: Try to reduce the problem
         @assert reducer isa NoReducer
 

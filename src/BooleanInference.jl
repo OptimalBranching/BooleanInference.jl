@@ -88,6 +88,7 @@ export record_propagation!, record_propagation_fixpoint!, record_domain_reductio
 export record_branching_time!, record_contraction_time!, record_filtering_time!, record_cache_hit!, record_cache_miss!
 export record_variable_selection!
 export print_stats_summary
+export reset!
 
 export extract_inner_configs, combine_configs, slice_region_contraction
 export handle_no_boundary_case_unfixed
