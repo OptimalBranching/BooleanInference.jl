@@ -1,32 +1,32 @@
 # Detailed statistics (optional, only allocated when needed)
 mutable struct DetailedStats
-    # 深度分布（每个深度的节点数）
+    # Depth distribution (node count per depth)
     depth_distribution::Vector{Int}
 
-    # 分支因子历史（每次分支的实际分支数）
+    # Branching factor history (actual child count per branch)
     branching_factors::Vector{Int}
 
-    # 传播效率
+    # Propagation efficiency
     propagation_calls::Int
     domain_reductions::Int
     early_unsat_detections::Int
 
-    # 时间细分（秒）
+    # Time breakdown (seconds)
     time_propagation::Float64
     time_branching::Float64
     time_contraction::Float64
     time_filtering::Float64
 
-    # 缓存效率
+    # Cache efficiency
     cache_hits::Int
     cache_misses::Int
 
-    # 分支决策质量
+    # Branch decision quality
     variable_selection_counts::Dict{Int, Int}
     remaining_vars_at_branch::Vector{Int}
-    depth_at_selection::Vector{Int}  # 每次变量选择时的深度
-    variable_selection_sequence::Vector{Int}  # 变量选择序列（按选择顺序）
-    successful_paths::Vector{Vector{Int}}  # 成功路径列表（从根到解的变量选择序列）
+    depth_at_selection::Vector{Int}  # Depth when each variable was selected
+    variable_selection_sequence::Vector{Int}  # Variable selection order (by pick sequence)
+    successful_paths::Vector{Vector{Int}}  # Successful paths from root to solution (variable sequence)
 end
 
 DetailedStats() = DetailedStats(
@@ -143,12 +143,12 @@ end
     stats.total_subproblems += subproblem_count
     record_depth!(stats, depth)
 
-    # 记录详细统计
+    # Record detailed statistics
     if stats.detailed !== nothing
         d = stats.detailed
         push!(d.branching_factors, subproblem_count)
 
-        # 更新深度分布
+        # Update the depth distribution
         while length(d.depth_distribution) <= depth
             push!(d.depth_distribution, 0)
         end
@@ -261,7 +261,7 @@ function print_stats_summary(stats::BranchingStats; io::IO = stdout)
         println(io, "\n=== Detailed Statistics ===")
         d = stats.detailed
 
-        # 传播统计
+        # Propagation statistics
         println(io, "\nPropagation:")
         println(io, "  Calls: ", d.propagation_calls)
         println(io, "  Domain reductions: ", d.domain_reductions)
@@ -271,7 +271,7 @@ function print_stats_summary(stats::BranchingStats; io::IO = stdout)
                     round(d.domain_reductions / d.propagation_calls, digits=2))
         end
 
-        # 时间统计
+        # Timing statistics
         total_time = d.time_propagation + d.time_branching + d.time_contraction + d.time_filtering
         println(io, "\nTime breakdown:")
         if total_time > 0
@@ -288,7 +288,7 @@ function print_stats_summary(stats::BranchingStats; io::IO = stdout)
             println(io, "  (Time statistics not recorded)")
         end
 
-        # 缓存统计
+        # Cache statistics
         cache_total = d.cache_hits + d.cache_misses
         if cache_total > 0
             println(io, "\nCache efficiency:")
@@ -298,7 +298,7 @@ function print_stats_summary(stats::BranchingStats; io::IO = stdout)
                     round(100 * d.cache_hits / cache_total, digits=1), "%")
         end
 
-        # 分支因子分布
+        # Branching factor distribution
         if !isempty(d.branching_factors)
             println(io, "\nBranching factor distribution:")
             println(io, "  Min: ", minimum(d.branching_factors))
@@ -307,15 +307,15 @@ function print_stats_summary(stats::BranchingStats; io::IO = stdout)
             println(io, "  Median: ", median(d.branching_factors))
         end
 
-        # 深度分布
+        # Depth distribution
         if !isempty(d.depth_distribution)
             println(io, "\nDepth distribution:")
-            # 计算每个深度的累计节点数，用于匹配 branching_factors
+            # Compute cumulative node counts per depth to align with branching_factors
             cumulative_nodes = 0
             for (depth_idx, node_count) in enumerate(d.depth_distribution)
                 if node_count > 0
-                    depth = depth_idx  # 显示时从1开始
-                    # 该深度的分支因子范围：从 cumulative_nodes+1 到 cumulative_nodes+node_count
+                    depth = depth_idx  # Display depth starting from 1
+                    # Branching factor indices at this depth: cumulative_nodes+1 to cumulative_nodes+node_count
                     start_idx = cumulative_nodes + 1
                     end_idx = cumulative_nodes + node_count
                     
@@ -334,16 +334,16 @@ function print_stats_summary(stats::BranchingStats; io::IO = stdout)
             end
         end
 
-        # 变量选择统计
+        # Variable selection statistics
         if !isempty(d.variable_selection_counts)
             println(io, "\nVariable selection (top 10):")
             sorted_vars = sort(collect(d.variable_selection_counts), by=x->x[2], rev=true)
-            # 计算每个变量的平均剩余变量数和平均深度
+            # Compute the average remaining variable count and depth per variable
             if !isempty(d.variable_selection_sequence) && 
                length(d.variable_selection_sequence) == length(d.remaining_vars_at_branch) &&
                length(d.variable_selection_sequence) == length(d.depth_at_selection)
                 for (var, count) in sorted_vars[1:min(10, length(sorted_vars))]
-                    # 找到该变量被选择的所有位置
+                    # Locate every position where this variable was selected
                     var_indices = [i for (i, v) in enumerate(d.variable_selection_sequence) if v == var]
                     avg_remaining = round(sum(d.remaining_vars_at_branch[i] for i in var_indices) / length(var_indices), digits=1)
                     avg_depth = round(sum(d.depth_at_selection[i] for i in var_indices) / length(var_indices), digits=1)
@@ -352,40 +352,13 @@ function print_stats_summary(stats::BranchingStats; io::IO = stdout)
                             "avg depth: ", avg_depth + 1)
                 end
             else
-                # 降级显示：只显示选择次数
+                # Fallback display: show selection counts only
                 for (var, count) in sorted_vars[1:min(10, length(sorted_vars))]
                     println(io, "  Var ", var, ": ", count, " times")
                 end
             end
         end
 
-        # 剩余变量分析 - 按深度显示所有选择
-        if !isempty(d.remaining_vars_at_branch) && 
-           !isempty(d.depth_at_selection) && 
-           length(d.depth_at_selection) == length(d.remaining_vars_at_branch)
-            # 按深度分组
-            depth_remaining = Dict{Int, Vector{Tuple{Int, Int}}}()  # depth -> [(index, remaining_vars), ...]
-            for (idx, depth) in enumerate(d.depth_at_selection)
-                if !haskey(depth_remaining, depth)
-                    depth_remaining[depth] = Tuple{Int, Int}[]
-                end
-                push!(depth_remaining[depth], (idx, d.remaining_vars_at_branch[idx]))
-            end
-            
-            if !isempty(depth_remaining)
-                println(io, "\nRemaining variables at branch:")
-                sorted_depths = sort(collect(keys(depth_remaining)))
-                for depth in sorted_depths
-                    selections = depth_remaining[depth]
-                    println(io, "  Depth ", depth + 1, ":")
-                    for (idx, remaining_vars) in selections
-                        println(io, "    Selection ", idx, ": ", remaining_vars, " remaining vars")
-                    end
-                end
-            end
-        end
-        
-        # 成功路径显示
         if !isempty(d.successful_paths)
             println(io, "\nSuccessful paths:")
             for (path_idx, path) in enumerate(d.successful_paths)

@@ -28,10 +28,10 @@ function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vec
     stats = !isnothing(ws) ? ws.branch_stats : nothing
     has_detailed = !isnothing(stats) && !isnothing(stats.detailed)
     
-    # 记录传播时间（使用纳秒精度）
+    # Record propagation time (nanosecond precision)
     propagation_start_time = has_detailed ? time_ns() : 0
 
-    # 构建传播队列：仅包含受变化变量影响的 tensor
+    # Build the propagation queue with tensors affected by the changed variables
     tensor_queue = Int[]
     in_queue = falses(length(static.tensors))
     @inbounds for var_id in changed_vars
@@ -43,7 +43,7 @@ function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vec
         end
     end
 
-    # 复用传播缓存：避免重复分配 BitVector
+    # Reuse propagation buffers to avoid reallocating BitVectors
     buffers = if !isnothing(ws) && !isnothing(ws.prop_buffers)
         ws.prop_buffers
     else
@@ -52,7 +52,7 @@ function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vec
         buf
     end
 
-    # 计算初始域数量
+    # Count initial domain assignments
     initial_domain_count = has_detailed ? sum(count_ones(d.bits & 0x03) for d in doms) : 0
 
     queue_pos = 1
@@ -64,7 +64,7 @@ function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vec
         in_queue[tensor_idx] = false
 
         tensor = static.tensors[tensor_idx]
-        # 直接使用预计算的 masks，无需缓存查找
+        # Use the precomputed masks directly without cache lookups
         masks = static.tensor_to_masks[tensor_idx]
 
         # Check constraint and propagate
@@ -78,14 +78,14 @@ function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vec
         end
     end
 
-    # 检查是否达到不动点（迭代次数）
+    # Check whether we reached a fixed point (iteration count)
     if has_detailed && iteration_count == 1 && queue_pos > length(tensor_queue)
         record_propagation_fixpoint!(stats)
     end
 
-    # 记录域减少数量和时间
+    # Record domain reduction counts and elapsed time
     if has_detailed
-        propagation_time = (time_ns() - propagation_start_time) / 1e9  # 转换为秒
+        propagation_time = (time_ns() - propagation_start_time) / 1e9  # Convert to seconds
         record_propagation!(stats, propagation_time)
         
         final_domain_count = sum(count_ones(d.bits & 0x03) for d in working_doms)
@@ -124,10 +124,10 @@ end
     n_words = (n_cfg + 63) >> 6
     feas_chunks = feasible.chunks
 
-    # 清空最后一个 UInt64 字中超出 n_cfg 的部分，避免复用大缓冲区时残留位导致误判
+    # Clear stale bits beyond n_cfg in the final UInt64 to avoid reuse artefacts
     bits_in_last_word = n_cfg & 63  # n_cfg % 64
     if bits_in_last_word != 0
-        # 只保留最后字的低 bits_in_last_word 位，清空高位
+        # Keep only the lowest bits_in_last_word bits in the last word
         mask_val = (UInt64(1) << bits_in_last_word) - 1
         feas_chunks[n_words] &= mask_val
     end
@@ -135,23 +135,23 @@ end
     @inbounds for (axis, var_id) in enumerate(tensor.var_axes)
         dm_bits = working_doms[var_id].bits
 
-        # 跳过未约束的变量（允许 0 和 1）
+        # Skip unconstrained variables (both 0 and 1 are allowed)
         dm_bits == 0x03 && continue
-        # 矛盾：变量没有可行值
+        # Contradiction: variable has no feasible assignment
         dm_bits == 0x00 && return false
 
-        # 选择对应的掩码（0 或 1）
+        # Pick the corresponding mask (0 or 1)
         mask_chunks = dm_bits == 0x01 ? masks.axis_masks0[axis].chunks : masks.axis_masks1[axis].chunks
 
-        # 应用掩码并检查是否还有可行配置
-        # 优化：边计算边检查，避免不必要的内存访问
+        # Apply the mask and ensure a feasible configuration remains
+        # Optimization: merge computation and checking to avoid extra memory traffic
         has_nonzero = false
         for i in 1:n_words
             feas_chunks[i] &= mask_chunks[i]
             has_nonzero |= (feas_chunks[i] != 0)
         end
 
-        # 没有可行配置，提前返回
+        # No feasible configuration left, exit early
         has_nonzero || return false
     end
 
