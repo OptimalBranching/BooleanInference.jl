@@ -53,7 +53,7 @@ function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vec
     end
 
     # Count initial domain assignments
-    initial_domain_count = has_detailed ? sum(count_ones(d.bits & 0x03) for d in doms) : 0
+    initial_domain_count = has_detailed ? sum(count_ones(bits(d) & 0x03) for d in doms) : 0
 
     queue_pos = 1
     iteration_count = 0
@@ -74,7 +74,7 @@ function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vec
             if has_detailed
                 record_early_unsat!(stats)
             end
-            return fill(DomainMask(0x00), length(working_doms))
+            return fill(DM_NONE, length(working_doms))
         end
     end
 
@@ -88,7 +88,7 @@ function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vec
         propagation_time = (time_ns() - propagation_start_time) / 1e9  # Convert to seconds
         record_propagation!(stats, propagation_time)
         
-        final_domain_count = sum(count_ones(d.bits & 0x03) for d in working_doms)
+        final_domain_count = sum(count_ones(bits(d) & 0x03) for d in working_doms)
         domain_reduction = initial_domain_count - final_domain_count
         if domain_reduction > 0
             record_domain_reduction!(stats, domain_reduction)
@@ -133,15 +133,16 @@ end
     end
 
     @inbounds for (axis, var_id) in enumerate(tensor.var_axes)
-        dm_bits = working_doms[var_id].bits
+        dm = working_doms[var_id]
+        dm_bits = bits(dm)
 
         # Skip unconstrained variables (both 0 and 1 are allowed)
-        dm_bits == 0x03 && continue
+        dm == DM_BOTH && continue
         # Contradiction: variable has no feasible assignment
-        dm_bits == 0x00 && return false
+        dm == DM_NONE && return false
 
         # Pick the corresponding mask (0 or 1)
-        mask_chunks = dm_bits == 0x01 ? masks.axis_masks0[axis].chunks : masks.axis_masks1[axis].chunks
+        mask_chunks = dm == DM_0 ? masks.axis_masks0[axis].chunks : masks.axis_masks1[axis].chunks
 
         # Apply the mask and ensure a feasible configuration remains
         # Optimization: merge computation and checking to avoid extra memory traffic
@@ -166,9 +167,9 @@ end
     @inbounds for (axis, var_id) in enumerate(tensor.var_axes)
         bit_val = (config >> (axis - 1)) & 1
         # Branchless: avoid conditional for better performance
-        required_bits = ifelse(bit_val == 1, DM_1.bits, DM_0.bits)
+        required_bits = ifelse(bit_val == 1, bits(DM_1), bits(DM_0))
         
-        old_bits = working_doms[var_id].bits
+        old_bits = bits(working_doms[var_id])
         new_bits = old_bits & required_bits
         
         # Check for contradiction
@@ -191,7 +192,7 @@ end
 
     @inbounds for (axis, var_id) in enumerate(tensor.var_axes)
         dm = working_doms[var_id]
-        dm_bits = dm.bits
+        dm_bits = bits(dm)
 
         if (dm_bits & 0x01) != 0
             has_support_0 = false
@@ -203,7 +204,7 @@ end
                 end
             end
             if !has_support_0
-                if !update_domain!(working_doms, var_id, dm_bits, DM_1.bits,
+                if !update_domain!(working_doms, var_id, dm_bits, bits(DM_1),
                                   v2t, tensor_queue, in_queue)
                     return false
                 end
@@ -220,7 +221,7 @@ end
                 end
             end
             if !has_support_1
-                if !update_domain!(working_doms, var_id, dm_bits, DM_0.bits, v2t, tensor_queue, in_queue)
+                if !update_domain!(working_doms, var_id, dm_bits, bits(DM_0), v2t, tensor_queue, in_queue)
                     return false
                 end
             end

@@ -77,8 +77,8 @@ function OptimalBranchingCore.branch_and_reduce(
             @debug "local_value=$local_value, n_unfixed=$(subproblem.n_unfixed)"
 
             # If branch led to contradiction (UNSAT), skip this branch
-            if local_value == 0 || subproblem.n_unfixed == 0 && any(dm -> dm.bits == 0x00, subproblem.doms)
-                @debug "Skipping branch: local_value=$local_value, n_unfixed=$(subproblem.n_unfixed), has_contradiction=$(any(dm -> dm.bits == 0x00, subproblem.doms))"
+            if local_value == 0 || subproblem.n_unfixed == 0 && has_contradiction(subproblem.doms)
+                @debug "Skipping branch: local_value=$local_value, n_unfixed=$(subproblem.n_unfixed), has_contradiction=$(has_contradiction(subproblem.doms))"
                 record_skipped_subproblem!(stats)
                 record_unsat_leaf!(stats, current_depth + 1)
                 continue  # Skip to next branch instead of creating zero value
@@ -241,9 +241,9 @@ function apply_clause_to_doms!(new_doms::Vector{DomainMask}, clause::OptimalBran
             bit_val = OptimalBranchingCore.readbit(clause.val, i)
             new_val = ifelse(bit_val == 1, DM_1, DM_0)
 
-            old_bits = original_doms[var_id].bits
+            old_dm = original_doms[var_id]
             # Branchless: check if not fixed (bits == 0x03)
-            if old_bits == 0x03
+            if old_dm == DM_BOTH
                 new_doms[var_id] = new_val
                 n_fixed += 1
                 changed_flags[var_id] = true
@@ -279,7 +279,7 @@ function OptimalBranchingCore.apply_branch(
     propagated_doms = propagate(problem.static, new_doms, changed_indices, problem.ws)
 
     @inbounds for i in eachindex(propagated_doms)
-        if propagated_doms[i].bits != problem.doms[i].bits && !changed_flags[i]
+        if bits(propagated_doms[i]) != bits(problem.doms[i]) && !changed_flags[i]
             changed_flags[i] = true
             push!(changed_indices, i)
         end
@@ -288,7 +288,7 @@ function OptimalBranchingCore.apply_branch(
     if has_contradiction(propagated_doms)
         # UNSAT: contradiction detected during propagation
         @debug "apply_branch: Clause $(clause) Contradiction detected during propagation"
-        doms_zero = fill(DomainMask(0x00), length(propagated_doms))
+        doms_zero = fill(DM_NONE, length(propagated_doms))
         store_branch_cache!(problem, clause, variables, doms_zero, problem.n_unfixed, 0)
         return (TNProblem(problem.static, doms_zero, problem.n_unfixed, problem.ws), 0, Int[])
     end
@@ -301,7 +301,7 @@ function OptimalBranchingCore.apply_branch(
     # Safety check: problem must have gotten smaller OR we fixed at least one variable
     if new_n_unfixed == problem.n_unfixed && n_fixed == 0
         @debug "apply_branch: No progress made (n_unfixed same and n_fixed=0)"
-        doms_zero = fill(DomainMask(0x00), length(propagated_doms))
+        doms_zero = fill(DM_NONE, length(propagated_doms))
         store_branch_cache!(problem, clause, variables, doms_zero, 0, 0)
         return (TNProblem(problem.static, doms_zero, 0, problem.ws), 0, Int[])
     end

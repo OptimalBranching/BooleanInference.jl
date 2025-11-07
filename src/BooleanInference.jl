@@ -36,11 +36,11 @@ include("branching/branch.jl")
 include("interface.jl")
 
 export Variable, EdgeRef, BoolTensor, TNStatic, DomainMask, TNProblem
-export DM_BOTH, DM_0, DM_1
+export DM_BOTH, DM_0, DM_1, DM_NONE
 export Region, RegionCacheEntry, RegionCacheState
 export DynamicWorkspace
 
-export is_fixed, has0, has1, init_doms, get_var_value
+export is_fixed, has0, has1, init_doms, get_var_value, bits
 
 export setup_problem, setup_from_tensor_network, setup_from_cnf, setup_from_circuit, setup_from_sat
 

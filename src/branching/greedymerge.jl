@@ -1,7 +1,7 @@
 # Calculate size reduction after applying a clause to the problem
 function OptimalBranchingCore.size_reduction(p::TNProblem, m::OptimalBranchingCore.AbstractMeasure, cl::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}) where {INT<:Integer}
     subproblem, _, _ = OptimalBranchingCore.apply_branch(p, cl, variables)
-    if any(dm -> dm.bits == 0x00, subproblem.doms)
+    if has_contradiction(subproblem.doms)
         return -Inf
     end
     reduction = OptimalBranchingCore.measure(p, m) - OptimalBranchingCore.measure(subproblem, m)
