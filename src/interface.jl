@@ -40,25 +40,14 @@ function solve_sat_problem(
     verbose::Bool = false,
     show_stats::Bool=false
 )
-    verbose = verbose || show_stats
     tn_problem = setup_from_sat(sat; verbose=verbose)
     result, depth, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
     satisfiable = !isnothing(result)
     return satisfiable, result, depth, stats
 end
 
-function solve_sat_with_assignments(
-    sat::ConstraintSatisfactionProblem;
-    bsconfig::BranchingStrategy=BranchingStrategy(
-        table_solver=TNContractionSolver(1,2),
-        selector=MostOccurrenceSelector(),
-        measure=NumUnfixedVars()
-    ),
-    reducer::AbstractReducer=NoReducer(),
-    verbose::Bool = false,
-    show_stats::Bool=false
-)
-    satisfiable, result, depth, stats = solve_sat_problem(sat; bsconfig, reducer, verbose=verbose, show_stats=show_stats)
+function solve_sat_with_assignments(sat::ConstraintSatisfactionProblem; kwargs...)
+    satisfiable, result, depth, stats = solve_sat_problem(sat; kwargs...)
     if satisfiable && !isnothing(result)
         # Convert TNProblem result to variable assignments
         assignments = Dict{Symbol, Int}()
@@ -81,10 +70,8 @@ function solve_factoring(
         set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
-    verbose::Bool=false,
-    show_stats::Bool=false
+    verbose::Bool=false, show_stats::Bool=false
 )
-    verbose = verbose || show_stats
     fproblem = Factoring(n, m, N)
     circuit_sat = reduceto(CircuitSAT, fproblem)
     problem = CircuitSAT(circuit_sat.circuit.circuit; use_constraints=true)
