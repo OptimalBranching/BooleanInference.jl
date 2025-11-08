@@ -1,5 +1,5 @@
 """
-    benchmark_dataset(problem_type, dataset_path; solver=nothing, warmup=true)
+    benchmark_dataset(problem_type, dataset_path; solver=nothing, verify=true)
 
 Run benchmark on a single dataset file/directory.
 
@@ -7,10 +7,10 @@ Run benchmark on a single dataset file/directory.
 - `problem_type::Type{<:AbstractBenchmarkProblem}`: The type of problem to benchmark
 - `dataset_path::String`: Path to the dataset file or directory
 - `solver`: The solver to use (defaults to the problem type's default solver)
-- `warmup::Bool`: Whether to perform warmup/tuning (default: true). Set to false for solvers
-  implemented in non-Julia languages (e.g., C++), which don't benefit from Julia's JIT compilation.
+- `verify::Bool`: Whether to verify solution correctness (default: true). Set to false to skip
+  verification and only measure performance. When false, all runs are considered successful.
 """
-function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem}, dataset_path::String; solver=nothing)
+function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem}, dataset_path::String; solver=nothing, verify::Bool=true)
     actual_solver = isnothing(solver) ? default_solver(problem_type) : solver
     warmup = actual_solver.warmup
     solver_info = solver_name(actual_solver)
@@ -57,14 +57,16 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem}, datas
         for (i, instance) in enumerate(instances)
             try
                 result = solve_instance(problem_type, instance, solver)
-                is_correct = verify_solution(problem_type, instance, result)
                 
-                if !is_correct
-                    @warn "  Instance $i: Incorrect solution"
-                    incorrect_runs += 1
-                    continue
-                end
-                
+                # Verify solution if requested
+                if verify
+                    is_correct = verify_solution(problem_type, instance, result)
+                    if !is_correct
+                        @warn "  Instance $i: Incorrect solution"
+                        incorrect_runs += 1
+                        continue
+                    end
+                end   
                 correct_runs += 1
                 
                 trial_fn = () -> solve_instance(problem_type, instance, solver)
@@ -72,7 +74,7 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem}, datas
                 if warmup && !isnothing(b)
                     b_instance.params = b.params
                 end
-                timing_result = run(b_instance, samples=1)
+                timing_result = BenchmarkTools.run(b_instance, samples=1)
                 
                 push!(all_times, median(timing_result).time / 1e9)
                 push!(all_memory, median(timing_result).memory)

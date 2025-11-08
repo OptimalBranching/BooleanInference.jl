@@ -33,8 +33,8 @@ OptimalBranching.jl/
 /benchmarks/third-party/**/build/
 /benchmarks/third-party/**/bin/
 /benchmarks/third-party/**/CMakeFiles/
-/benchmarks/third-party/**/Makefile
 /benchmarks/third-party/**/cmake_install.cmake
+/benchmarks/third-party/**/build/**
 
 # === Logs ===
 *.log

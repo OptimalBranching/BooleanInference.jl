@@ -43,7 +43,7 @@ function solve_sat_problem(
     tn_problem = setup_from_sat(sat; verbose=verbose)
     result, depth, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
     satisfiable = !isnothing(result)
-    return satisfiable, result, depth, stats
+    return satisfiable, stats
 end
 
 function solve_sat_with_assignments(sat::ConstraintSatisfactionProblem; kwargs...)
@@ -54,9 +54,9 @@ function solve_sat_with_assignments(sat::ConstraintSatisfactionProblem; kwargs..
         for (i, symbol) in enumerate(sat.symbols)
             assignments[symbol] = get_var_value(result, i)
         end
-        return satisfiable, assignments, depth, stats
+        return satisfiable, assignments, stats
     else
-        return false, Dict{Symbol, Int}(), depth, stats
+        return false, Dict{Symbol, Int}(), stats
     end
 end
 
@@ -81,7 +81,7 @@ function solve_factoring(
         total_tensors = length(tn_problem.static.tensors)
         println("Unique tensor types: $unique_tensors (out of $total_tensors total)")
     end
-    res, _, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
+    res, depth, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
     isnothing(res) && return nothing, nothing, stats
     a = get_var_value(res, circuit_sat.q)
     b = get_var_value(res, circuit_sat.p)
@@ -89,12 +89,19 @@ function solve_factoring(
 end
 
 
-# function solve_circuit_sat(
-#     circuit::CircuitSAT;
-#     bsconfig::BranchingStrategy=BranchingStrategy(table_solver=TNContractionSolver(), selector=LeastOccurrenceSelector(1, 2), measure=NumUnfixedVars()), 
-#     reducer::AbstractReducer=NoReducer()
-# )
-#     tn_problem = setup_from_circuit(circuit.circuit)
-#     res, _, stats = solve(tn_problem, bsconfig, reducer)
-#     return res, stats
-# end
+function solve_circuit_sat(
+    circuit::Circuit;
+    bsconfig::BranchingStrategy=BranchingStrategy(
+        table_solver=TNContractionSolver(1,2),
+        selector=MostOccurrenceSelector(),
+        measure=NumUnfixedVars()
+    ),
+    reducer::AbstractReducer=NoReducer(),
+    verbose::Bool=false,
+    show_stats::Bool=false
+)
+    tn_problem = setup_from_circuit(circuit; verbose=verbose)
+    res, depth, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
+    satisfiable = !isnothing(res)
+    return satisfiable, stats
+end

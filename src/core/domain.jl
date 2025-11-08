@@ -24,3 +24,9 @@ end
 init_doms(static::TNStatic) = fill(DM_BOTH, length(static.vars))
 
 @inline has_contradiction(doms::Vector{DomainMask}) = any(dm -> dm == DM_NONE, doms)
+
+const DOMAIN_MASK_NAMES = ("NONE", "0", "1", "BOTH")
+
+function Base.show(io::IO, dm::DomainMask)
+    @inbounds print(io, DOMAIN_MASK_NAMES[bits(dm) + 1])
+end

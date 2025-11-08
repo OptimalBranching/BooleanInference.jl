@@ -5,7 +5,7 @@ module CircuitIO
     include("aig.jl")
     include("verilog.jl")
 
-    export aig_to_circuit
+    export read_aag, aig_to_circuit
 
     export write_verilog, circuit_to_verilog
 

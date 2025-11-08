@@ -1,4 +1,4 @@
-function findmin_ip(problem::AbstractProblem, tag::Bool; optimizer, env)
+function findmin_ip(problem::CircuitSAT, tag::Bool; optimizer, env)
     cons = constraints(problem)
     nsc = ProblemReductions.num_variables(problem)
     maxN = maximum([length(c.variables) for c in cons])
