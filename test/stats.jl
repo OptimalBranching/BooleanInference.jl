@@ -52,7 +52,12 @@ using BooleanInference: NumUnfixedVars
     @test d.depth_at_selection == [2, 1, 0]
     @test d.variable_selection_sequence == [5, 5, 7]
 
-    record_solved_leaf!(stats, 3, [1, 2, 3])
+    # Create a mock trail for testing
+    trail = BooleanInference.Trail(10)
+    for var in [1, 2, 3]
+        BooleanInference.assign_var!(trail, var, true, 1, nothing)
+    end
+    record_solved_leaf!(stats, 3, trail)
     @test !isempty(d.successful_paths)
     @test d.successful_paths[1] == [1, 2, 3]
 

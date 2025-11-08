@@ -3,7 +3,7 @@ using BooleanInference
 using BooleanInference: TNProblem, TNContractionSolver, MostOccurrenceSelector, NumUnfixedVars, setup_from_tensor_network, setup_problem, select_variables, get_cached_region, last_branch_problem, reset_last_branch_problem!, has_last_branch_problem, get_var_value, bits_to_int
 using BooleanInference: BranchingStrategy, NoReducer
 using OptimalBranchingCore: Clause
-using OptimalBranchingCore: branching_table, branch_and_reduce, apply_branch
+using OptimalBranchingCore: branching_table, branch_and_reduce
 using ProblemReductions: Factoring, reduceto, CircuitSAT, read_solution
 using GenericTensorNetworks
 using TropicalNumbers: Tropical
@@ -43,6 +43,7 @@ end
 	@bools a b c d e f g
 	cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c))
 	tn_problem = BooleanInference.setup_from_cnf(cnf)
-	new_problem, _ = apply_branch(tn_problem, Clause(0b110, 0b100), [1, 2, 3])
+	temp_doms = Vector{BooleanInference.DomainMask}(undef, length(tn_problem.doms))
+	new_problem, _ = BooleanInference.apply_branch!(tn_problem, Clause(0b110, 0b100), [1, 2, 3], temp_doms)
     @test new_problem.n_unfixed == 5
 end

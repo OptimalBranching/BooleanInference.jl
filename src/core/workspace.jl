@@ -24,8 +24,9 @@ mutable struct DynamicWorkspace
     prop_buffers::Union{Nothing, PropagationBuffers}
     # Cache of branch applications to avoid recomputing apply_branch
     branch_cache::Dict{UInt, Dict{Tuple{UInt, Any}, Any}}
-    # Current search path (tracked only when verbose=true)
-    current_path::Vector{Int}
+    trail::Trail
+    # Temporary buffer for apply_branch! to avoid allocating new_doms on each call
+    temp_doms::Vector{DomainMask}
 end
 
 DynamicWorkspace(var_num::Int, verbose::Bool = false) = DynamicWorkspace(
@@ -37,7 +38,8 @@ DynamicWorkspace(var_num::Int, verbose::Bool = false) = DynamicWorkspace(
     Int[],
     nothing,
     Dict{UInt, Dict{Tuple{UInt, Any}, Any}}(),
-    Int[]
+    Trail(var_num),
+    Vector{DomainMask}(undef, var_num)
 )
 
 @inline function clear_branch_cache!(ws::DynamicWorkspace, doms_id::UInt)
