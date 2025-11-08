@@ -46,8 +46,22 @@ function solve_sat_problem(
     return satisfiable, stats
 end
 
-function solve_sat_with_assignments(sat::ConstraintSatisfactionProblem; kwargs...)
-    satisfiable, result, depth, stats = solve_sat_problem(sat; kwargs...)
+function solve_sat_with_assignments(
+    sat::ConstraintSatisfactionProblem; 
+    bsconfig::BranchingStrategy=BranchingStrategy(
+        table_solver=TNContractionSolver(1,2), 
+        selector=MostOccurrenceSelector(), 
+        measure=NumUnfixedVars()
+    ), 
+    reducer::AbstractReducer=NoReducer(),
+    verbose::Bool = false,
+    show_stats::Bool=false
+)
+    # Solve directly to get result
+    tn_problem = setup_from_sat(sat; verbose=verbose)
+    result, depth, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
+    satisfiable = !isnothing(result)
+    
     if satisfiable && !isnothing(result)
         # Convert TNProblem result to variable assignments
         assignments = Dict{Symbol, Int}()
