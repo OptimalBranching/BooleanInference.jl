@@ -14,3 +14,7 @@
 	path = benchmarks/third-party/CnC
 	url = https://github.com/marijnheule/CnC.git
 	ignore = all
+[submodule "benchmarks/third-party/cir_bench"]
+	path = benchmarks/third-party/cir_bench
+	url = https://github.com/santoshsmalagi/Benchmarks.git
+	ignore = all

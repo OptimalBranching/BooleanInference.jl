@@ -3,8 +3,8 @@ Pkg.activate(joinpath(@__DIR__, ".."))
 
 using BooleanInferenceBenchmarks
 using Random
-using Gurobi
 
+using Gurobi
 const env = Gurobi.Env()
 
 # ----------------------------------------
@@ -16,13 +16,13 @@ println("Generating Factoring Datasets")
 println("=" ^80)
 
 configs = [
-    # FactoringConfig(10, 10),
+    FactoringConfig(10, 10),
     # FactoringConfig(12, 12),
     # FactoringConfig(14, 14),
     # FactoringConfig(16, 16),
     # FactoringConfig(18, 18),
     # FactoringConfig(20, 20),
-    FactoringConfig(22, 22),
+    # FactoringConfig(22, 22),
     # FactoringConfig(24, 24)
 ]
 

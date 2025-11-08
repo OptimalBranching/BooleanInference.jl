@@ -22,14 +22,17 @@ include("comparison.jl")
 include("circuitIO/circuitIO.jl")
 using .CircuitIO
 
+include("solver/solver_ip.jl")
+include("solver/solver_xsat.jl")
+include("solver/solver_cnfsat.jl")
+
 # Factoring problem
 include("factoring/types.jl")
 include("factoring/interface.jl")
 include("factoring/generators.jl")
-include("factoring/solver_ip.jl")
 include("factoring/solvers.jl")
 include("factoring/dataset.jl")
-include("factoring/solver_xsat.jl")
+
 
 export AbstractBenchmarkProblem, AbstractProblemConfig, AbstractInstance, AbstractSolver
 export solve_instance, verify_solution, read_instances
@@ -39,5 +42,7 @@ export list_available_solvers, print_solver_comparison_summary, compare_solver_r
 export FactoringProblem, FactoringConfig, FactoringInstance, generate_factoring_datasets
 export CircuitSATProblem, CircuitSATConfig, CircuitSATInstance
 export BooleanInferenceSolver, IPSolver, XSATSolver
+export CNFSolver, KissatSolver, MinisatSolver
+export CNFSolverResult, run_cnf_solver
 
 end

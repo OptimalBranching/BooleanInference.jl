@@ -154,13 +154,7 @@ function OptimalBranchingCore.optimal_branching_rule(tbl::OptimalBranchingCore.B
     return OptimalBranchingCore.greedymerge(candidates, problem, variables, measure)
 end
 
-function OptimalBranchingCore.optimal_branching_rule(
-    tbl::OptimalBranchingCore.BranchingTable{INT},
-    variables::Vector{T},
-    problem::TNProblem,
-    measure::OptimalBranchingCore.AbstractMeasure,
-    solver::OptimalBranchingCore.AbstractSetCoverSolver
-) where {INT<:Integer, T}
+function OptimalBranchingCore.optimal_branching_rule(tbl::OptimalBranchingCore.BranchingTable{INT}, variables::Vector{T}, problem::TNProblem, measure::OptimalBranchingCore.AbstractMeasure, solver::OptimalBranchingCore.AbstractSetCoverSolver) where {INT<:Integer, T}
     candidates = OptimalBranchingCore.candidate_clauses(tbl)
     valid_clauses = Vector{OptimalBranchingCore.Clause{INT}}()
     reductions = Float64[]

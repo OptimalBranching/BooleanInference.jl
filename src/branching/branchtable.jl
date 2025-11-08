@@ -161,6 +161,8 @@ function filter_branching_table(region::Region, table::BranchingTable, problem::
     
     unfixed_var_ids = [var_ids[i] for i in unfixed_positions]
     
+    @debug "filter_branching_table: Region has $(n_unfixed) unfixed variables"
+    
     return BranchingTable(n_unfixed, filtered_table), unfixed_var_ids
 end
 
@@ -185,11 +187,13 @@ function OptimalBranchingCore.branching_table(problem::TNProblem, solver::TNCont
     
     stats = problem.ws.branch_stats
     contraction_start_time = time_ns()
+
     contracted_tensor, output_vars = contract_region(problem.static, region, all_unfixed_doms)
+
     contraction_time = (time_ns() - contraction_start_time) / 1e9
     record_contraction_time!(stats, contraction_time)
-    axismap = _build_axismap(output_vars)
 
+    axismap = _build_axismap(output_vars)
     inner_output_vars = Int[]
     @inbounds for var_id in output_vars
         if var_id in region.inner_vars

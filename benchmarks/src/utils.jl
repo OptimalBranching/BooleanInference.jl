@@ -5,18 +5,22 @@ function resolve_data_dir(parts::AbstractString...)
     return dir
 end
 
-function write_jsonl(io::IO, obj)
-    JSON3.write(io, obj)
-    write(io, '\n')
+# Helper function for finding executables in PATH
+function find_executable_in_path(cmd::String, name::String)
+    try
+        return strip(read(`which $cmd`, String))
+    catch
+        error("$name not found in PATH. Please provide explicit path or install it.")
+    end
 end
 
-function read_jsonl(path::AbstractString)
-    objs = Any[]
-    open(path, "r") do io
-        for line in eachline(io)
-            isempty(strip(line)) && continue
-            push!(objs, JSON3.read(line))
-        end
+# Helper function for validating executable path
+function validate_executable_path(path::Union{String, Nothing}, name::String)
+    if isnothing(path)
+        return nothing
+    elseif !isfile(path)
+        error("File $path for $name does not exist")
+    else
+        return path
     end
-    return objs
 end

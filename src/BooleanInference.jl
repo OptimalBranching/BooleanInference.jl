@@ -47,9 +47,7 @@ export setup_problem, setup_from_tensor_network, setup_from_cnf, setup_from_circ
 export is_solved, cache_branch_solution!, reset_last_branch_problem!, has_last_branch_problem, last_branch_problem
 
 export solve, solve_sat_problem, solve_sat_with_assignments, solve_factoring
-export solve_sat_problem_lookahead, solve_sat_problem_hybrid
-export solve_sat_problem_region, solve_sat_problem_region_lookahead
-export solve_sat_problem_cdcl
+export solve_circuit_sat
 
 export NumUnfixedVars
 
