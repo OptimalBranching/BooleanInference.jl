@@ -34,7 +34,7 @@ using TropicalNumbers: Tropical
         a = get_var_value(res, circuit_sat.q)
         b = get_var_value(res, circuit_sat.p)
         # @show a, b
-        @show bits_to_int(a), bits_to_int(b)
+        @test bits_to_int(a) * bits_to_int(b) == 559619
     end
     clear_all_region_caches!()
 end

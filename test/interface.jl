@@ -48,7 +48,7 @@ end
     @bools a b c d e f g
     cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c), ∨(¬a))
     sat = Satisfiability(cnf; use_constraints=true)
-    res, dict, _, stats = solve_sat_with_assignments(sat)
+    res, dict, stats = solve_sat_with_assignments(sat)
     @test res == true
     @test satisfiable(cnf, dict) == true
     # Test that stats are recorded
@@ -57,7 +57,7 @@ end
 
     cnf = ∧(∨(a), ∨(a,¬c), ∨(d,¬b), ∨(¬c,¬d), ∨(a,e), ∨(a,e,¬c), ∨(¬a))
     sat = Satisfiability(cnf; use_constraints=true)
-    res, dict, _, stats = solve_sat_with_assignments(sat)
+    res, dict, stats = solve_sat_with_assignments(sat)
     @test res == false
     # @test satisfiable(cnf, dict) == false
     @test isempty(dict)
