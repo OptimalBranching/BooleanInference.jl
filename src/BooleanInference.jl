@@ -16,6 +16,7 @@ using Statistics: median
 include("core/types.jl")
 include("core/static.jl")
 include("core/domain.jl")
+include("core/trail.jl")
 include("core/stats.jl")
 include("core/workspace.jl")
 include("core/region.jl")
@@ -30,8 +31,10 @@ include("algorithms/propagate.jl")
 include("branching/measure.jl")
 include("branching/selector.jl")
 include("branching/branchtable.jl")
+include("branching/branch_cache.jl")
 include("branching/greedymerge.jl")
-include("branching/branch.jl")
+include("branching/optimal_branching.jl")
+include("branching/branch_and_reduce.jl")
 
 include("interface.jl")
 
@@ -82,7 +85,7 @@ export get_branching_stats, reset_branching_stats!, print_branching_stats
 
 export BranchingStats, DetailedStats
 export record_depth!, record_branch!, record_unsat_leaf!, record_solved_leaf!, record_skipped_subproblem!
-export record_propagation!, record_propagation_fixpoint!, record_domain_reduction!, record_early_unsat!
+export record_propagation!, record_domain_reduction!, record_early_unsat!
 export record_branching_time!, record_contraction_time!, record_filtering_time!, record_cache_hit!, record_cache_miss!
 export record_variable_selection!
 export print_stats_summary

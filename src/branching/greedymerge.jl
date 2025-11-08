@@ -1,6 +1,6 @@
 # Calculate size reduction after applying a clause to the problem
 function OptimalBranchingCore.size_reduction(p::TNProblem, m::OptimalBranchingCore.AbstractMeasure, cl::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}) where {INT<:Integer}
-    subproblem, _, _ = OptimalBranchingCore.apply_branch(p, cl, variables)
+    subproblem, _, _ = apply_branch!(p, cl, variables, p.ws.temp_doms)
     if has_contradiction(subproblem.doms)
         return -Inf
     end
@@ -26,13 +26,7 @@ function cached_size_reduction!(
 end
 
 # Select the best representative clause from each row based on size reduction
-function select_representatives!(
-    cls::Vector{Vector{Clause{INT}}},
-    cache::Dict{Tuple{INT,INT},Float64},
-    problem::OptimalBranchingCore.AbstractProblem,
-    variables::Vector{Int},
-    m::OptimalBranchingCore.AbstractMeasure
-) where {INT}
+function select_representatives!(cls::Vector{Vector{Clause{INT}}}, cache::Dict{Tuple{INT,INT},Float64},problem::OptimalBranchingCore.AbstractProblem, variables::Vector{Int}, m::OptimalBranchingCore.AbstractMeasure) where {INT}
     size_reductions = Vector{Float64}(undef, length(cls))
     @inbounds for (idx, row) in pairs(cls)
         best_val = -Inf

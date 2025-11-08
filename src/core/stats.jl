@@ -163,11 +163,13 @@ end
     return nothing
 end
 
-@inline function record_solved_leaf!(stats::BranchingStats, depth::Int, current_path::Vector{Int} = Int[])
+@inline function record_solved_leaf!(stats::BranchingStats, depth::Int, trail::Union{Trail, Nothing} = nothing)
     stats.solved_leaves += 1
     record_depth!(stats, depth)
-    if stats.detailed !== nothing && !isempty(current_path)
-        push!(stats.detailed.successful_paths, copy(current_path))
+    if stats.detailed !== nothing && trail !== nothing && !isempty(trail.stack)
+        # Extract variable path from trail
+        path = [a.var for a in trail.stack]
+        push!(stats.detailed.successful_paths, path)
     end
     return nothing
 end

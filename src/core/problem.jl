@@ -8,7 +8,8 @@ end
 function TNProblem(static::TNStatic; verbose::Bool = false)::TNProblem
     doms = init_doms(static)
     ws = DynamicWorkspace(length(static.vars), verbose)
-    doms = propagate(static, doms, collect(1:length(static.vars)), ws)
+    # Initial propagation at level 0 (no decisions yet)
+    doms = propagate(static, doms, collect(1:length(static.vars)), ws, ws.trail, 0)
     n_unfixed = count_unfixed(doms)
     return TNProblem(static, doms, n_unfixed, ws)
 end
