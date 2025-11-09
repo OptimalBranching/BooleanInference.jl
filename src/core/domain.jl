@@ -28,5 +28,26 @@ init_doms(static::TNStatic) = fill(DM_BOTH, length(static.vars))
 const DOMAIN_MASK_NAMES = ("NONE", "0", "1", "BOTH")
 
 function Base.show(io::IO, dm::DomainMask)
-    @inbounds print(io, DOMAIN_MASK_NAMES[bits(dm) + 1])
+    if 1 <= bits(dm) + 1 <= length(DOMAIN_MASK_NAMES)
+        @inbounds print(io, DOMAIN_MASK_NAMES[bits(dm) + 1])
+    else
+        print(io, "UNDEF")
+    end
+end
+
+function Base.show(io::IO, ::MIME"text/plain", dm::DomainMask)
+    if 1 <= bits(dm) + 1 <= length(DOMAIN_MASK_NAMES)
+        @inbounds print(io, DOMAIN_MASK_NAMES[bits(dm) + 1])
+    else
+        print(io, "UNDEF")
+    end
+end
+
+# Concrete type for cached branch results (used in DynamicWorkspace)
+# This must be defined before workspace.jl is loaded
+struct BranchCacheEntry
+    doms::Vector{DomainMask}
+    n_unfixed::Int
+    local_value::Int
+    assignments::Vector{Tuple{Int,Bool}}  # Branching decisions (clause assignments)
 end

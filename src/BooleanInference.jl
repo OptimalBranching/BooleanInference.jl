@@ -15,8 +15,8 @@ using Statistics: median
 
 include("core/types.jl")
 include("core/static.jl")
-include("core/domain.jl")
 include("core/trail.jl")
+include("core/domain.jl")
 include("core/stats.jl")
 include("core/workspace.jl")
 include("core/region.jl")
@@ -34,7 +34,7 @@ include("branching/branchtable.jl")
 include("branching/branch_cache.jl")
 include("branching/greedymerge.jl")
 include("branching/optimal_branching.jl")
-include("branching/branch_and_reduce.jl")
+include("branching/branch.jl")
 
 include("interface.jl")
 
@@ -56,8 +56,6 @@ export NumUnfixedVars
 
 export MostOccurrenceSelector, MinGammaSelector, AbstractSelector
 export RegionAwareSelector, PropagationAwareSelector
-export RegionQualityMetrics, evaluate_region_quality, score_region_quality
-export evaluate_propagation_power, compute_propagation_score, evaluate_propagation_for_branch
 
 export TNContractionSolver, AbstractTableSolver
 
@@ -65,15 +63,6 @@ export contract_region, contract_tensors, slicing, tensor_unwrapping
 
 export propagate, get_active_tensors, build_tensor_masks
 export TensorMasks, PropagationBuffers
-export look_ahead_propagation, look_ahead_score, LookAheadResult
-
-export propagate_incremental, propagate_from_assignment, propagate_from_assignments
-export propagate_adaptive, should_use_incremental
-
-export propagate_cdcl, propagate_after_assignment_cdcl, propagate_with_state!
-export CDCLState, LearnedClause, TrailEntry
-export solve_cdcl, get_solution, print_cdcl_stats
-export propagate_bcp!, analyze_conflict!, make_decision!, backtrack!
 
 export cache_region!, get_cached_region, clear_all_region_caches!
 
