@@ -23,9 +23,12 @@ function propagate(static::TNStatic, doms::Vector{DomainMask}, ws::Union{Nothing
     return propagate(static, doms, all_vars, ws, trail, level)
 end
 
-function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vector{Int}, ws::Union{Nothing, DynamicWorkspace}=nothing, trail::Union{Nothing, Trail}=nothing, level::Int=0)
+function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vector{Int}, ws::Union{Nothing, DynamicWorkspace}=nothing, trail::Union{Nothing, Trail}=nothing, level::Int=0, propagated_vars::Union{Nothing, Vector{Int}}=nothing)
     isempty(changed_vars) && return doms
     working_doms = copy(doms)
+
+    # Track which variables were modified during propagation (if requested)
+    modified_vars = propagated_vars
 
     stats = !isnothing(ws) ? ws.branch_stats : nothing
     has_detailed = !isnothing(stats) && !isnothing(stats.detailed)
@@ -71,7 +74,7 @@ function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vec
 
         # Check constraint and propagate
         if !propagate_tensor!(working_doms, tensor, masks, static.v2t,
-                              tensor_queue, in_queue, buffers, trail, level, tensor_idx)
+                              tensor_queue, in_queue, buffers, trail, level, tensor_idx, modified_vars)
             # Contradiction detected
             has_detailed && record_early_unsat!(stats)
             return fill(DM_NONE, length(working_doms))
@@ -94,18 +97,18 @@ function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vec
 end
 
 # Propagate constraints from a single tensor. Returns false if contradiction detected.
-function propagate_tensor!(working_doms::Vector{DomainMask}, tensor::BoolTensor, masks::TensorMasks, v2t::Vector{Vector{Int}}, tensor_queue::Vector{Int}, in_queue::BitVector, buffers::PropagationBuffers, trail::Union{Nothing, Trail}, level::Int, tensor_idx::Int)
+function propagate_tensor!(working_doms::Vector{DomainMask}, tensor::BoolTensor, masks::TensorMasks, v2t::Vector{Vector{Int}}, tensor_queue::Vector{Int}, in_queue::BitVector, buffers::PropagationBuffers, trail::Union{Nothing, Trail}, level::Int, tensor_idx::Int, modified_vars::Union{Nothing, Vector{Int}})
     # Step 1: Compute feasible configurations given current domains
     compute_feasible_configs!(buffers.feasible, working_doms, tensor, masks) || return false
     n_feasible = count(buffers.feasible)
-    
+
     # Step 2: Different propagation strategies based on number of feasible configs
     if n_feasible == 1
         # Only one valid config -> fix all variables to that config
-        return propagate_unit_constraint!(working_doms, tensor, buffers.feasible, v2t, tensor_queue, in_queue, trail, level, tensor_idx)
+        return propagate_unit_constraint!(working_doms, tensor, buffers.feasible, v2t, tensor_queue, in_queue, trail, level, tensor_idx, modified_vars)
     else
         # Multiple configs -> prune unsupported values
-        return propagate_support_pruning!(working_doms, tensor, masks, buffers.feasible, buffers.temp, v2t, tensor_queue, in_queue, trail, level, tensor_idx)
+        return propagate_support_pruning!(working_doms, tensor, masks, buffers.feasible, buffers.temp, v2t, tensor_queue, in_queue, trail, level, tensor_idx, modified_vars)
     end
 end
 
@@ -155,7 +158,7 @@ end
 end
 
 # When tensor has exactly one feasible configuration, fix all its variables to that config.
-@inline function propagate_unit_constraint!(working_doms::Vector{DomainMask}, tensor::BoolTensor, feasible::BitVector, v2t::Vector{Vector{Int}}, tensor_queue::Vector{Int}, in_queue::BitVector, trail::Union{Nothing, Trail}, level::Int, reason::Int)
+@inline function propagate_unit_constraint!(working_doms::Vector{DomainMask}, tensor::BoolTensor, feasible::BitVector, v2t::Vector{Vector{Int}}, tensor_queue::Vector{Int}, in_queue::BitVector, trail::Union{Nothing, Trail}, level::Int, reason::Int, modified_vars::Union{Nothing, Vector{Int}})
     first_idx = findfirst(feasible)
     config = first_idx - 1
 
@@ -175,6 +178,9 @@ end
             working_doms[var_id] = DomainMask(new_bits)
             enqueue_affected_tensors!(tensor_queue, in_queue, v2t, var_id)
 
+            # Track modified variable
+            !isnothing(modified_vars) && push!(modified_vars, var_id)
+
             # Record assignment to trail if variable becomes fixed
             if !isnothing(trail) && new_bits != bits(DM_BOTH)
                 value = new_bits == bits(DM_1)
@@ -186,7 +192,7 @@ end
 end
 
 # Prune domain values that have no support in any feasible configuration.
-@inline function propagate_support_pruning!(working_doms::Vector{DomainMask}, tensor::BoolTensor, masks::TensorMasks, feasible::BitVector, temp::BitVector, v2t::Vector{Vector{Int}}, tensor_queue::Vector{Int}, in_queue::BitVector, trail::Union{Nothing, Trail}, level::Int, reason::Int)
+@inline function propagate_support_pruning!(working_doms::Vector{DomainMask}, tensor::BoolTensor, masks::TensorMasks, feasible::BitVector, temp::BitVector, v2t::Vector{Vector{Int}}, tensor_queue::Vector{Int}, in_queue::BitVector, trail::Union{Nothing, Trail}, level::Int, reason::Int, modified_vars::Union{Nothing, Vector{Int}})
     n_cfg = length(masks.sat)
     n_words = (n_cfg + 63) >> 6
     feas_chunks = feasible.chunks
@@ -206,7 +212,7 @@ end
             end
             if !has_support_0
                 if !update_domain!(working_doms, var_id, dm_bits, bits(DM_1),
-                                  v2t, tensor_queue, in_queue, trail, level, reason)
+                                  v2t, tensor_queue, in_queue, trail, level, reason, modified_vars)
                     return false
                 end
             end
@@ -222,7 +228,7 @@ end
                 end
             end
             if !has_support_1
-                if !update_domain!(working_doms, var_id, dm_bits, bits(DM_0), v2t, tensor_queue, in_queue, trail, level, reason)
+                if !update_domain!(working_doms, var_id, dm_bits, bits(DM_0), v2t, tensor_queue, in_queue, trail, level, reason, modified_vars)
                     return false
                 end
             end
@@ -258,7 +264,8 @@ end
     in_queue::BitVector,
     trail::Union{Nothing, Trail},
     level::Int,
-    reason::Int
+    reason::Int,
+    modified_vars::Union{Nothing, Vector{Int}}
 )
     new_bits = old_bits & keep_bits
 
@@ -269,6 +276,9 @@ end
     if new_bits != old_bits
         working_doms[var_id] = DomainMask(new_bits)
         enqueue_affected_tensors!(tensor_queue, in_queue, v2t, var_id)
+
+        # Track modified variable
+        !isnothing(modified_vars) && push!(modified_vars, var_id)
 
         # Record assignment to trail if variable becomes fixed
         if !isnothing(trail) && new_bits != bits(DM_BOTH)

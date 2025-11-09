@@ -1,13 +1,3 @@
-# Calculate size reduction after applying a clause to the problem
-function OptimalBranchingCore.size_reduction(p::TNProblem, m::OptimalBranchingCore.AbstractMeasure, cl::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}) where {INT<:Integer}
-    subproblem, _, _ = apply_branch!(p, cl, variables, p.ws.temp_doms)
-    if has_contradiction(subproblem.doms)
-        return -Inf
-    end
-    reduction = OptimalBranchingCore.measure(p, m) - OptimalBranchingCore.measure(subproblem, m)
-    return reduction
-end
-
 # Generate a key for a clause based on its fields
 @inline clause_key(cl::Clause{INT}) where {INT} = (getfield(cl, 1), getfield(cl, 2))
 

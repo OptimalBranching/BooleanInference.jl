@@ -16,16 +16,17 @@ mutable struct DynamicWorkspace
     has_cached_solution::Bool
     # Branching statistics
     branch_stats::BranchingStats
-    var_values::PriorityQueue{Int, Float64}
     # O(1) membership test to avoid O(n) scans
     changed_vars_flags::BitVector
     changed_vars_indices::Vector{Int}
     # Temporary BitVector cache for propagation to avoid reallocations
     prop_buffers::Union{Nothing, PropagationBuffers}
     # Cache of branch applications to avoid recomputing apply_branch
-    branch_cache::Dict{UInt, Dict{Tuple{UInt, Any}, Any}}
+    # Inner dict maps (variables_id, clause_key) -> BranchCacheEntry
+    # Note: clause_key type varies (Tuple{INT,INT}), so we can't fully type the key
+    branch_cache::Dict{UInt, Dict}
     trail::Trail
-    # Temporary buffer for apply_branch! to avoid allocating new_doms on each call
+    # Temporary buffer for evaluate_branch/commit_branch to avoid allocating new_doms on each call
     temp_doms::Vector{DomainMask}
 end
 
@@ -33,11 +34,10 @@ DynamicWorkspace(var_num::Int, verbose::Bool = false) = DynamicWorkspace(
     Vector{DomainMask}(undef, var_num),
     false,
     BranchingStats(verbose),
-    PriorityQueue{Int, Float64}(),
     falses(var_num),
     Int[],
     nothing,
-    Dict{UInt, Dict{Tuple{UInt, Any}, Any}}(),
+    Dict{UInt, Dict}(),
     Trail(var_num),
     Vector{DomainMask}(undef, var_num)
 )

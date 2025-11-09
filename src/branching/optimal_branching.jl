@@ -1,5 +1,14 @@
 # Optimal branching rule selection for different solver types
 
+# Calculate size reduction after applying a clause to the problem
+# Uses evaluate_branch for trial evaluation and caching
+function OptimalBranchingCore.size_reduction(p::TNProblem, m::OptimalBranchingCore.AbstractMeasure, cl::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}) where {INT<:Integer}
+    subproblem, _, _ = evaluate_branch(p, cl, variables, p.ws.temp_doms)
+    has_contradiction(subproblem.doms) && return -Inf
+    reduction = OptimalBranchingCore.measure(p, m) - OptimalBranchingCore.measure(subproblem, m)
+    return reduction
+end
+
 # GreedyMerge solver: use greedy merge algorithm
 function OptimalBranchingCore.optimal_branching_rule(tbl::OptimalBranchingCore.BranchingTable, variables::Vector{T}, problem::TNProblem, measure::OptimalBranchingCore.AbstractMeasure, solver::OptimalBranchingCore.GreedyMerge) where T
     candidates = OptimalBranchingCore.bit_clauses(tbl)
@@ -22,11 +31,7 @@ function OptimalBranchingCore.optimal_branching_rule(tbl::OptimalBranchingCore.B
 
     if isempty(valid_clauses)
         empty_clauses = Vector{OptimalBranchingCore.Clause{INT}}()
-        return OptimalBranchingCore.OptimalBranchingResult(
-            OptimalBranchingCore.DNF(empty_clauses),
-            Float64[],
-            Inf,
-        )
+        return OptimalBranchingCore.OptimalBranchingResult(OptimalBranchingCore.DNF(empty_clauses), Float64[], Inf)
     end
 
     covered_mask = BitVector(undef, length(tbl.table))
@@ -39,11 +44,7 @@ function OptimalBranchingCore.optimal_branching_rule(tbl::OptimalBranchingCore.B
     if !all(covered_mask)
         if !any(covered_mask)
             empty_clauses = Vector{OptimalBranchingCore.Clause{INT}}()
-            return OptimalBranchingCore.OptimalBranchingResult(
-                OptimalBranchingCore.DNF(empty_clauses),
-                Float64[],
-                Inf,
-            )
+            return OptimalBranchingCore.OptimalBranchingResult(OptimalBranchingCore.DNF(empty_clauses), Float64[], Inf)
         end
         filtered_groups = tbl.table[findall(covered_mask)]
         tbl = OptimalBranchingCore.BranchingTable{INT}(tbl.bit_length, filtered_groups)

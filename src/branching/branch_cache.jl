@@ -1,13 +1,17 @@
 # Branch application caching infrastructure
 
 # Look up cached result of applying a branch
-@inline function lookup_branch_cache(problem::TNProblem, clause::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}) where {INT}
+@inline function lookup_branch_cache(problem::TNProblem, clause::OptimalBranchingCore.Clause{INT}, variables::Vector{Int})::Union{Nothing, BranchCacheEntry} where {INT}
     ws = problem.ws
     doms_id = Base.objectid(problem.doms)
-    inner = get(ws.branch_cache, doms_id, nothing)
-    inner === nothing && return nothing
+    inner_dict = get(ws.branch_cache, doms_id, nothing)
+    inner_dict === nothing && return nothing
+
+    # Type-assert the inner dict to help inference
+    inner = inner_dict::Dict{Any, BranchCacheEntry}
     key = (Base.objectid(variables), clause_key(clause))
-    return get(inner, key, nothing)
+    result = get(inner, key, nothing)
+    return result::Union{Nothing, BranchCacheEntry}
 end
 
 # Store result of applying a branch in cache
@@ -15,10 +19,13 @@ end
 @inline function store_branch_cache!(problem::TNProblem, clause::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}, doms::Vector{DomainMask}, n_unfixed::Int, local_value::Int, assignments::Vector{Tuple{Int,Bool}}) where {INT}
     ws = problem.ws
     doms_id = Base.objectid(problem.doms)
-    inner = get!(ws.branch_cache, doms_id) do
-        Dict{Tuple{UInt, Any}, Any}()
+    inner_dict = get!(ws.branch_cache, doms_id) do
+        Dict{Any, BranchCacheEntry}()
     end
+    # Type-assert to help inference
+    inner = inner_dict::Dict{Any, BranchCacheEntry}
     key = (Base.objectid(variables), clause_key(clause))
-    inner[key] = (doms=doms, n_unfixed=n_unfixed, local_value=local_value, assignments=assignments)
+    entry = BranchCacheEntry(doms, n_unfixed, local_value, assignments)
+    inner[key] = entry
     return nothing
 end
