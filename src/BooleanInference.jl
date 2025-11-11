@@ -15,7 +15,6 @@ using Statistics: median
 
 include("core/types.jl")
 include("core/static.jl")
-include("core/trail.jl")
 include("core/domain.jl")
 include("core/stats.jl")
 include("core/workspace.jl")
@@ -24,13 +23,18 @@ include("core/problem.jl")
 
 include("utils/utils.jl")
 
-include("algorithms/knn.jl")
-include("algorithms/contraction.jl")
-include("algorithms/propagate.jl")
+include("branching/propagate.jl")
 
 include("branching/measure.jl")
 include("branching/selector.jl")
-include("branching/branchtable.jl")
+
+include("branch_table/TNContraction/knn.jl")
+include("branch_table/TNContraction/contraction.jl")
+include("branch_table/TNContraction/branchtable.jl")
+
+include("branch_table/LocalTensor/branchtable.jl")
+
+
 include("branching/branch_cache.jl")
 include("branching/greedymerge.jl")
 include("branching/optimal_branching.jl")
@@ -69,6 +73,7 @@ export cache_region!, get_cached_region, clear_all_region_caches!
 export k_neighboring, KNNWorkspace
 
 export get_unfixed_vars, count_unfixed, bits_to_int
+export circuit_output_distances
 
 export get_branching_stats, reset_branching_stats!, print_branching_stats
 

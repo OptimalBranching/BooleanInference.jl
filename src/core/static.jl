@@ -60,6 +60,8 @@ function setup_problem(var_num::Int,
     # Dictionary keyed by hash for fast lookup
     hash_to_masks = Dict{UInt, TensorMasks}()
     hash_to_tensor = Dict{UInt, Vector{Tropical{Float64}}}()
+    # Statistics: count how many tensors share each hash
+    hash_to_count = Dict{UInt, Int}()
 
     for (i, tensor) in enumerate(tensors)
         # Compute the hash of the tensor contents
@@ -70,6 +72,8 @@ function setup_problem(var_num::Int,
             if hash_to_tensor[tensor_hash] == tensor.tensor
                 # Reuse the previously computed masks
                 tensor_to_masks[i] = hash_to_masks[tensor_hash]
+                # Increment count for this hash
+                hash_to_count[tensor_hash] = get(hash_to_count, tensor_hash, 0) + 1
             else
                 error("Hash collision: $tensor_hash")
             end
@@ -79,7 +83,19 @@ function setup_problem(var_num::Int,
             hash_to_masks[tensor_hash] = masks
             hash_to_tensor[tensor_hash] = tensor.tensor
             tensor_to_masks[i] = masks
+            # Initialize count for this hash
+            hash_to_count[tensor_hash] = 1
         end
+    end
+
+    # Print statistics
+    unique_tensors = length(hash_to_count)
+    total_tensors = length(tensors)
+    if unique_tensors < total_tensors
+        @info "Tensor statistics: $unique_tensors unique tensor types (out of $total_tensors total)"
+        # Show distribution if there are duplicates
+        counts = sort(collect(values(hash_to_count)), rev=true)
+        @show "Tensor type distribution: $(counts)"
     end
 
     # Build the precomputed_masks dictionary for statistics (from unique tensors)

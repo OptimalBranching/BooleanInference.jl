@@ -3,7 +3,7 @@ function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, s
 end
 
 function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, solver::IPSolver)
-    return factoring_ip(instance.m, instance.n, Int(instance.N); solver)
+    return factoring_ip(instance.m, instance.n, Int(instance.N), solver)
 end
 
 function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, solver::XSATSolver)
@@ -19,7 +19,7 @@ function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, s
     
         run(`$(solver.yosys_path) -q -p "read_verilog $vfile; prep -top circuit; aigmap; write_aiger -symbols $aig"`)
     
-        res = run_xsat_and_parse(solver.csat_path, aig)
+        res = run_xsat_and_parse(solver.csat_path, aig, solver.timeout)
         res.status != :sat && return :unsat
         
         model = res.model::Dict{Int,Bool}
@@ -32,21 +32,6 @@ function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, s
 
         return (p_val, q_val)
     end
-end
-
-# Helper function to convert circuit to CNF using ABC
-function circuit_to_cnf(circuit::Circuit, abc_path::Union{String, Nothing}, dir::String)
-    vfile = joinpath(dir, "circuit.v")
-    cnf_file = joinpath(dir, "circuit.cnf")
-    
-    write_verilog(vfile, circuit)
-    
-    if !isnothing(abc_path)
-        run(`$abc_path -c "read_verilog $vfile; strash; &get; &write_cnf -K 8 $cnf_file"`)
-    else
-        error("ABC path is required for CNF conversion but not provided")
-    end
-    return cnf_file
 end
 
 # Generic implementation for CNF solvers
@@ -82,4 +67,3 @@ function verify_solution(::Type{FactoringProblem}, instance::FactoringInstance, 
         return false
     end
 end
-

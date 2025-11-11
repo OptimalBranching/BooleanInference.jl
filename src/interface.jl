@@ -89,7 +89,11 @@ function solve_factoring(
     fproblem = Factoring(n, m, N)
     circuit_sat = reduceto(CircuitSAT, fproblem)
     problem = CircuitSAT(circuit_sat.circuit.circuit; use_constraints=true)
+    # @show circuit_sat.circuit.circuit
+    # distances = circuit_output_distances(circuit_sat.circuit.circuit)
+    # @show distances
     tn_problem = setup_from_sat(problem; verbose=verbose)
+    @show tn_problem
     if verbose
         unique_tensors = length(tn_problem.static.precomputed_masks)
         total_tensors = length(tn_problem.static.tensors)
@@ -114,7 +118,7 @@ function solve_circuit_sat(
     verbose::Bool=false,
     show_stats::Bool=false
 )
-    tn_problem = setup_from_circuit(circuit; verbose=verbose)
+    tn_problem = setup_from_circuit(circuit; verbose)
     res, depth, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
     satisfiable = !isnothing(res)
     return satisfiable, stats

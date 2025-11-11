@@ -1,7 +1,6 @@
 # Main branch-and-reduce algorithm and branch application logic
 
 # Apply a clause to domain masks, fixing variables according to the clause's mask and values
-# Two versions: one for evaluate (lightweight), one for commit (with trail/tracking)
 
 # Lightweight version for evaluation - just applies the clause without tracking
 function apply_clause_to_doms_eval!(new_doms::Vector{DomainMask}, clause::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}, original_doms::Vector{DomainMask}, changed_indices::Vector{Int}) where {INT<:Integer}
@@ -57,12 +56,6 @@ end
 # Evaluate a branching clause (trial evaluation for size reduction)
 # Returns (subproblem, local_value, changed_vars)
 function evaluate_branch(problem::TNProblem, clause::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}, temp_doms::Vector{DomainMask}) where {INT<:Integer}
-    # Check cache first
-    if (cached = lookup_branch_cache(problem, clause, variables)) !== nothing
-        subproblem = TNProblem(problem.static, cached.doms, cached.n_unfixed, problem.ws)
-        return (subproblem, cached.local_value, Int[])
-    end
-
     # Use pre-allocated buffer
     copyto!(temp_doms, problem.doms)
     new_doms = temp_doms
@@ -73,8 +66,8 @@ function evaluate_branch(problem::TNProblem, clause::OptimalBranchingCore.Clause
     # Apply clause: fix variables according to mask and values (lightweight version)
     n_fixed = apply_clause_to_doms_eval!(new_doms, clause, variables, problem.doms, changed_indices)
 
-    # Propagate without trail recording (to save memory)
-    propagated_doms = propagate(problem.static, new_doms, changed_indices, problem.ws, nothing, 0, nothing)
+    # Propagate
+    propagated_doms = propagate(problem.static, new_doms, changed_indices, problem.ws)
 
     if has_contradiction(propagated_doms)
         # UNSAT: contradiction detected
@@ -110,50 +103,17 @@ function evaluate_branch(problem::TNProblem, clause::OptimalBranchingCore.Clause
         end
     end
 
-    # Store in cache (without trail entries to save memory)
+    # Store in cache
     store_branch_cache!(problem, clause, variables, propagated_doms, new_n_unfixed, 1, assignments)
 
     return (new_problem, 1, Int[])
 end
 
-# Rebuild trail by re-executing the branch application with trail recording
-function rebuild_trail!(problem::TNProblem, cached::BranchCacheEntry, temp_doms::Vector{DomainMask})
-    trail = problem.ws.trail
-    current_level = isempty(trail.stack) ? 0 : trail.stack[end].level
-    decision_level = current_level + 1
-
-    # Apply clause assignments to temp_doms
-    copyto!(temp_doms, problem.doms)
-    changed_flags = problem.ws.changed_vars_flags
-    changed_indices = problem.ws.changed_vars_indices
-    empty!(changed_indices)
-
-    # Apply cached assignments
-    for (var_id, value) in cached.assignments
-        if problem.doms[var_id] == DM_BOTH
-            temp_doms[var_id] = value ? DM_1 : DM_0
-            changed_flags[var_id] = true
-            push!(changed_indices, var_id)
-            # Record decision to trail
-            assign_var!(trail, var_id, value, decision_level, nothing)
-        end
-    end
-
-    # Re-run propagation with trail recording
-    propagate(problem.static, temp_doms, changed_indices, problem.ws, trail, decision_level)
-
-    # Clear changed flags
-    @inbounds for idx in changed_indices
-        changed_flags[idx] = false
-    end
-
-    return nothing
-end
 
 # Commit a branching decision by applying a cached branch evaluation
 # Assumes the branch was already evaluated by evaluate_branch() and cached
 # Returns (subproblem, local_value, changed_vars)
-function commit_branch(problem::TNProblem, clause::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}, temp_doms::Vector{DomainMask}; record_trail::Bool=true) where {INT<:Integer}
+function commit_branch(problem::TNProblem, clause::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}, temp_doms::Vector{DomainMask}) where {INT<:Integer}
     # Get cached result (should always exist since size_reduction already called evaluate_branch)
     cached = lookup_branch_cache(problem, clause, variables)
 
@@ -164,8 +124,6 @@ function commit_branch(problem::TNProblem, clause::OptimalBranchingCore.Clause{I
         cached = lookup_branch_cache(problem, clause, variables)
         @assert cached !== nothing "Cache should exist after evaluate_branch"
     end
-
-    record_trail && rebuild_trail!(problem, cached, temp_doms)
 
     subproblem = TNProblem(problem.static, cached.doms, cached.n_unfixed, problem.ws)
     return (subproblem, cached.local_value, Int[])
@@ -186,7 +144,7 @@ function OptimalBranchingCore.branch_and_reduce(
 
         # Step 1: Check if problem is solved (all variables fixed)
         if is_solved(problem)
-            record_solved_leaf!(stats, current_depth, needs_path_tracking(stats) ? problem.ws.trail : nothing)
+            record_solved_leaf!(stats, current_depth)
             @debug "problem is solved at depth $current_depth"
             cache_branch_solution!(problem)
             return one(result_type)
@@ -210,6 +168,7 @@ function OptimalBranchingCore.branch_and_reduce(
 
         # Step 4: Compute branching table
         tbl, variables = OptimalBranchingCore.branching_table(problem, config.table_solver, variable)
+        @debug "Branching table: $tbl"
 
         # Check if table is empty (UNSAT - no valid configurations)
         if isempty(tbl.table)
@@ -236,23 +195,16 @@ function OptimalBranchingCore.branch_and_reduce(
             show_progress && (OptimalBranchingCore.print_sequence(stdout, tag); println(stdout))
             @debug "branch=$branch, n_unfixed=$(problem.n_unfixed)"
 
-            # Save trail state before applying branch
-            trail_level_before = length(problem.ws.trail.level_start)
-            trail_size_before = length(problem.ws.trail.stack)
-
-            # Commit branch to get subproblem (record_trail=true for real branching decisions)
-            subproblem, local_value, _ = commit_branch(problem, branch, variables, problem.ws.temp_doms; record_trail=true)
+            # Commit branch to get subproblem
+            subproblem, local_value, _ = commit_branch(problem, branch, variables, problem.ws.temp_doms)
 
             @debug "local_value=$local_value, n_unfixed=$(subproblem.n_unfixed)"
-            @show problem.ws.trail
 
             # If branch led to contradiction (UNSAT), skip this branch
             if local_value == 0 || subproblem.n_unfixed == 0 && has_contradiction(subproblem.doms)
                 @debug "Skipping branch: local_value=$local_value, n_unfixed=$(subproblem.n_unfixed), has_contradiction=$(has_contradiction(subproblem.doms))"
                 record_skipped_subproblem!(stats)
                 record_unsat_leaf!(stats, current_depth + 1)
-                # Backtrack trail to before this branch
-                backtrack_trail!(problem.ws.trail, trail_level_before, trail_size_before)
                 continue  # Skip to next branch instead of creating zero value
             end
 
@@ -262,9 +214,6 @@ function OptimalBranchingCore.branch_and_reduce(
             push!(tag, (i, length(clauses)))
             sub_result = OptimalBranchingCore.branch_and_reduce(subproblem, config, reducer, result_type; tag=tag, show_progress=show_progress)
             pop!(tag)
-
-            # Backtrack trail after recursion (even if solution found, for next branch)
-            backtrack_trail!(problem.ws.trail, trail_level_before, trail_size_before)
 
             # Combine results
             accum = accum + sub_result * result_type(local_value)

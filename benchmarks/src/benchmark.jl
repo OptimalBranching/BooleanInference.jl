@@ -5,12 +5,15 @@ Run benchmark on a single dataset file/directory.
 
 # Arguments
 - `problem_type::Type{<:AbstractBenchmarkProblem}`: The type of problem to benchmark
-- `dataset_path::String`: Path to the dataset file or directory
+- `dataset_path::AbstractString`: Path to the dataset file or directory
 - `solver`: The solver to use (defaults to the problem type's default solver)
 - `verify::Bool`: Whether to verify solution correctness (default: true). Set to false to skip
   verification and only measure performance. When false, all runs are considered successful.
 """
-function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem}, dataset_path::String; solver=nothing, verify::Bool=true)
+function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem},
+                           dataset_path::AbstractString;
+                           solver::Union{AbstractSolver, Nothing}=nothing,
+                           verify::Bool=true)
     actual_solver = isnothing(solver) ? default_solver(problem_type) : solver
     warmup = actual_solver.warmup
     solver_info = solver_name(actual_solver)
@@ -39,14 +42,11 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem}, datas
         successful_runs = 0
         failed_runs = 0
         
-        # Warmup and tune benchmark parameters if requested
-        b = nothing
+        # Warmup if requested
         if warmup
-            @info "  Performing warmup and tuning..."
-            sample_trial_fn = () -> solve_instance(problem_type, instances[1], solver)
-            b = @benchmarkable $sample_trial_fn()
-            tune!(b)
-            @info "  Benchmark tuned, starting verification and timing..."
+            @info "  Performing warmup..."
+            solve_instance(problem_type, instances[1], actual_solver)
+            @info "  Warmup completed, starting verification and timing..."
         else
             @info "  Skipping warmup (non-Julia solver), starting verification and timing..."
         end
@@ -56,7 +56,18 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem}, datas
         
         for (i, instance) in enumerate(instances)
             try
-                result = solve_instance(problem_type, instance, solver)
+                # Measure time directly while solving
+                result = nothing
+                elapsed_time = @elapsed begin
+                    result = solve_instance(problem_type, instance, actual_solver)
+                end
+                
+                # For CircuitSAT, print SAT/UNSAT result
+                if problem_type == CircuitSATProblem && result !== nothing
+                    satisfiable, _ = result
+                    instance_name = hasfield(typeof(instance), :name) ? instance.name : "Instance $i"
+                    println("  $instance_name: ", satisfiable ? "SAT" : "UNSAT", " ($(round(elapsed_time, digits=4))s)")
+                end
                 
                 # Verify solution if requested
                 if verify
@@ -69,16 +80,10 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem}, datas
                 end   
                 correct_runs += 1
                 
-                trial_fn = () -> solve_instance(problem_type, instance, solver)
-                b_instance = @benchmarkable $trial_fn()
-                if warmup && !isnothing(b)
-                    b_instance.params = b.params
-                end
-                timing_result = BenchmarkTools.run(b_instance, samples=1)
-                
-                push!(all_times, median(timing_result).time / 1e9)
-                push!(all_memory, median(timing_result).memory)
-                push!(all_gc_times, median(timing_result).gctime / 1e9)
+                push!(all_times, elapsed_time)
+                # Memory and GC time not available without BenchmarkTools, set to 0
+                push!(all_memory, 0)
+                push!(all_gc_times, 0.0)
                 successful_runs += 1
                 
                 if i % 10 == 0 || i == length(instances)
@@ -112,4 +117,3 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem}, datas
         return nothing
     end
 end
-

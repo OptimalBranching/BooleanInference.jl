@@ -44,6 +44,31 @@ end
     @test tnproblem.n_unfixed == 0
 end
 
+@testset "circuit_output_distances" begin
+    circuit = @circuit begin
+        t1 = x ∧ y
+        t2 = t1 ∨ z
+        t3 = ¬t2
+        t4 = t3 ∧ w
+        out = ¬t4
+    end
+    distances = circuit_output_distances(circuit)
+    sat = CircuitSAT(circuit; use_constraints=true)
+    sym_to_dist = Dict{Symbol, Int}()
+    for (idx, sym) in enumerate(sat.symbols)
+        sym_to_dist[sym] = distances[idx]
+    end
+    @test sym_to_dist[:out] == 0
+    @test sym_to_dist[:t4] == 1
+    @test sym_to_dist[:t3] == 2
+    @test sym_to_dist[:t2] == 3
+    @test sym_to_dist[:t1] == 4
+    @test sym_to_dist[:x] == 5
+    @test sym_to_dist[:y] == 5
+    @test sym_to_dist[:z] == 4
+    @test sym_to_dist[:w] == 2
+end
+
 @testset "solve_sat_with_assignments" begin
     @bools a b c d e f g
     cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c), ∨(¬a))

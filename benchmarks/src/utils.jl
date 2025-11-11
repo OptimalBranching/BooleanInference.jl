@@ -24,3 +24,18 @@ function validate_executable_path(path::Union{String, Nothing}, name::String)
         return path
     end
 end
+
+# Helper function to convert circuit to CNF using ABC
+function circuit_to_cnf(circuit::Circuit, abc_path::Union{String, Nothing}, dir::String)
+    vfile = joinpath(dir, "circuit.v")
+    cnf_file = joinpath(dir, "circuit.cnf")
+    
+    write_verilog(vfile, circuit)
+    
+    if !isnothing(abc_path)
+        run(`$abc_path -c "read_verilog $vfile; strash; &get; &write_cnf -K 8 $cnf_file"`)
+    else
+        error("ABC path is required for CNF conversion but not provided")
+    end
+    return cnf_file
+end
