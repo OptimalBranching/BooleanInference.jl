@@ -33,14 +33,22 @@ include("factoring/generators.jl")
 include("factoring/solvers.jl")
 include("factoring/dataset.jl")
 
+# CircuitSAT problem
+include("circuitSAT/types.jl")
+include("circuitSAT/interface.jl")
+include("circuitSAT/dataset.jl")
+include("circuitSAT/solvers.jl")
 
 export AbstractBenchmarkProblem, AbstractProblemConfig, AbstractInstance, AbstractSolver
-export solve_instance, verify_solution, read_instances
-export available_solvers, default_solver, solver_name
+export solve_instance, verify_solution, read_instances, generate_instance
+export available_solvers, default_solver, solver_name, problem_id
 export benchmark_dataset, run_solver_comparison
 export list_available_solvers, print_solver_comparison_summary, compare_solver_results
 export FactoringProblem, FactoringConfig, FactoringInstance, generate_factoring_datasets
 export CircuitSATProblem, CircuitSATConfig, CircuitSATInstance
+export load_circuit_instance, load_verilog_dataset, load_aag_dataset
+export load_circuit_datasets, discover_circuit_files, create_circuitsat_configs
+export is_satisfiable
 export BooleanInferenceSolver, IPSolver, XSATSolver
 export CNFSolver, KissatSolver, MinisatSolver
 export CNFSolverResult, run_cnf_solver

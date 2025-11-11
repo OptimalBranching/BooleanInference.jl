@@ -93,5 +93,22 @@ using BooleanInference: NumUnfixedVars
     @test isempty(d.successful_paths)
 
     plain_stats = BranchingStats()
-    @test !BooleanInference.needs_path_tracking(plain_stats)
+@test !BooleanInference.needs_path_tracking(plain_stats)
+end
+
+@testset "Trail toggles" begin
+    ws = DynamicWorkspace(4; record_trail=false)
+    @test !trail_enabled(ws)
+    @test ws.trail === nothing
+
+    enable_trail!(ws)
+    @test trail_enabled(ws)
+    @test ws.trail !== nothing
+
+    disable_trail!(ws)
+    @test !trail_enabled(ws)
+    @test ws.trail === nothing
+
+    set_trail_recording!(ws, true)
+    @test trail_enabled(ws)
 end

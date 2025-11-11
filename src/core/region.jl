@@ -5,9 +5,9 @@ struct Region
     boundary_vars::Vector{Int}
 end
 
-function Base.show(io::IO, region::Region)
-    print(io, "Region(focus=$(region.id), tensors=$(length(region.tensors)), inner_vars=$(region.inner_vars), boundary_vars=$(region.boundary_vars))")
-end
+# function Base.show(io::IO, region::Region)
+#     print(io, "Region(focus=$(region.id), tensors=$(length(region.tensors)), inner_vars=$(region.inner_vars), boundary_vars=$(region.boundary_vars))")
+# end
 
 struct RegionCacheEntry
     region::Region

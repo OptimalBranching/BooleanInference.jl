@@ -25,7 +25,6 @@ mutable struct DynamicWorkspace
     # Inner dict maps (variables_id, clause_key) -> BranchCacheEntry
     # Note: clause_key type varies (Tuple{INT,INT}), so we can't fully type the key
     branch_cache::Dict{UInt, Dict}
-    trail::Trail
     # Temporary buffer for evaluate_branch/commit_branch to avoid allocating new_doms on each call
     temp_doms::Vector{DomainMask}
 end
@@ -38,7 +37,6 @@ DynamicWorkspace(var_num::Int, verbose::Bool = false) = DynamicWorkspace(
     Int[],
     nothing,
     Dict{UInt, Dict}(),
-    Trail(var_num),
     Vector{DomainMask}(undef, var_num)
 )
 
@@ -49,3 +47,4 @@ DynamicWorkspace(var_num::Int, verbose::Bool = false) = DynamicWorkspace(
     end
     return nothing
 end
+

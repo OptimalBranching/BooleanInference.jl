@@ -39,3 +39,5 @@ OptimalBranching.jl/
 # === Logs ===
 *.log
 *.out
+*.history
+/discs/

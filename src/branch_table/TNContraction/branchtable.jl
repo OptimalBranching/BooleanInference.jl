@@ -171,6 +171,7 @@ function OptimalBranchingCore.branching_table(problem::TNProblem, solver::TNCont
     
     cached_region, cached_table = get_cached_region(variable)
     if !isnothing(cached_region) && !isnothing(cached_table)
+        @debug "cached_region: $cached_region"
         record_cache_hit!(stats)
         filtered_table, unfixed_vars = filter_branching_table(cached_region, cached_table, problem)
         return filtered_table, unfixed_vars
@@ -178,6 +179,7 @@ function OptimalBranchingCore.branching_table(problem::TNProblem, solver::TNCont
 
     record_cache_miss!(stats)
     region = create_region(problem, variable, solver)
+    @debug "region: $region"
     n_boundary = length(region.boundary_vars)
     n_inner = length(region.inner_vars)
     n_total = n_boundary + n_inner
