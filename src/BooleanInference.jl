@@ -12,6 +12,10 @@ import ProblemReductions: CircuitSAT, Circuit, Factoring, reduceto, Satisfiabili
 using DataStructures
 using DataStructures: PriorityQueue
 using Statistics: median
+using Graphs, GraphMakie, Colors
+using GraphMakie
+using CairoMakie: Figure, Axis, save, hidespines!, hidedecorations!, DataAspect
+using NetworkLayout: SFDP, Spring, Stress, Spectral
 
 include("core/types.jl")
 include("core/static.jl")
@@ -32,8 +36,6 @@ include("branch_table/TNContraction/knn.jl")
 include("branch_table/TNContraction/contraction.jl")
 include("branch_table/TNContraction/branchtable.jl")
 
-include("branch_table/LocalTensor/branchtable.jl")
-
 
 include("branching/branch_cache.jl")
 include("branching/greedymerge.jl")
@@ -41,8 +43,9 @@ include("branching/optimal_branching.jl")
 include("branching/branch.jl")
 
 include("interface.jl")
+include("utils/visualization.jl")
 
-export Variable, EdgeRef, BoolTensor, TNStatic, DomainMask, TNProblem
+export Variable, EdgeRef, BoolTensor, BipartiteGraph, DomainMask, TNProblem
 export DM_BOTH, DM_0, DM_1, DM_NONE
 export Region, RegionCacheEntry, RegionCacheState
 export DynamicWorkspace
@@ -50,6 +53,7 @@ export DynamicWorkspace
 export is_fixed, has0, has1, init_doms, get_var_value, bits
 
 export setup_problem, setup_from_tensor_network, setup_from_cnf, setup_from_circuit, setup_from_sat
+export factoring_problem, factoring_circuit
 
 export is_solved, cache_branch_solution!, reset_last_branch_problem!, has_last_branch_problem, last_branch_problem
 
@@ -58,8 +62,7 @@ export solve_circuit_sat
 
 export NumUnfixedVars
 
-export MostOccurrenceSelector, MinGammaSelector, AbstractSelector
-export RegionAwareSelector, PropagationAwareSelector
+export MostOccurrenceSelector, LeastOccurrenceSelector, MinGammaSelector, AbstractSelector
 
 export TNContractionSolver, AbstractTableSolver
 
@@ -77,15 +80,11 @@ export circuit_output_distances
 
 export get_branching_stats, reset_branching_stats!, print_branching_stats
 
-export BranchingStats, DetailedStats
-export record_depth!, record_branch!, record_unsat_leaf!, record_solved_leaf!, record_skipped_subproblem!
-export record_propagation!, record_domain_reduction!, record_early_unsat!
-export record_branching_time!, record_contraction_time!, record_filtering_time!, record_cache_hit!, record_cache_miss!
-export record_variable_selection!
+export BranchingStats
 export print_stats_summary
-export reset!
 
 export extract_inner_configs, combine_configs, slice_region_contraction
 export handle_no_boundary_case_unfixed
 
+export to_graph, visualize_problem
 end

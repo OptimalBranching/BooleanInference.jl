@@ -3,7 +3,7 @@ function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, s
 end
 
 function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, solver::IPSolver)
-    return factoring_ip(instance.m, instance.n, Int(instance.N), solver)
+    return factoring_ip(instance.m, instance.n, instance.N, solver)
 end
 
 function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, solver::XSATSolver)

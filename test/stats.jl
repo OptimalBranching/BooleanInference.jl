@@ -1,6 +1,11 @@
 using Test
 using BooleanInference
-using BooleanInference: NumUnfixedVars
+using BooleanInference: NumUnfixedVars, DetailedStats
+using BooleanInference: record_depth!, record_branch!, record_unsat_leaf!, record_solved_leaf!, record_skipped_subproblem!
+using BooleanInference: record_propagation!, record_domain_reduction!, record_early_unsat!
+using BooleanInference: record_branching_time!, record_contraction_time!, record_filtering_time!, record_cache_hit!, record_cache_miss!
+using BooleanInference: record_variable_selection!, record_successful_path!
+using BooleanInference: reset!
 
 @testset "BranchingStats detailed metrics" begin
     stats = BranchingStats(true)
@@ -52,12 +57,7 @@ using BooleanInference: NumUnfixedVars
     @test d.depth_at_selection == [2, 1, 0]
     @test d.variable_selection_sequence == [5, 5, 7]
 
-    # Create a mock trail for testing
-    trail = BooleanInference.Trail(10)
-    for var in [1, 2, 3]
-        BooleanInference.assign_var!(trail, var, true, 1, nothing)
-    end
-    record_solved_leaf!(stats, 3, trail)
+    record_successful_path!(stats, [1, 2, 3])
     @test !isempty(d.successful_paths)
     @test d.successful_paths[1] == [1, 2, 3]
 
@@ -94,21 +94,4 @@ using BooleanInference: NumUnfixedVars
 
     plain_stats = BranchingStats()
 @test !BooleanInference.needs_path_tracking(plain_stats)
-end
-
-@testset "Trail toggles" begin
-    ws = DynamicWorkspace(4; record_trail=false)
-    @test !trail_enabled(ws)
-    @test ws.trail === nothing
-
-    enable_trail!(ws)
-    @test trail_enabled(ws)
-    @test ws.trail !== nothing
-
-    disable_trail!(ws)
-    @test !trail_enabled(ws)
-    @test ws.trail === nothing
-
-    set_trail_recording!(ws, true)
-    @test trail_enabled(ws)
 end

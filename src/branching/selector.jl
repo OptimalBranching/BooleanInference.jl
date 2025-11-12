@@ -1,4 +1,5 @@
 struct MostOccurrenceSelector <: AbstractSelector end
+struct LeastOccurrenceSelector <: AbstractSelector end
 
 function OptimalBranchingCore.select_variables(
     problem::TNProblem,
@@ -12,23 +13,24 @@ function OptimalBranchingCore.select_variables(
     return unfixed_vars[least_show_var_idx]
 end
 
-"""
-    MinGammaSelector <: AbstractSelector
+function OptimalBranchingCore.select_variables(
+    problem::TNProblem,
+    measure::AbstractMeasure,
+    selector::LeastOccurrenceSelector
+)
+    unfixed_vars = get_unfixed_vars(problem.doms)
+    isempty(unfixed_vars) && return Int[]
+    least_show_var_idx = argmin(length(problem.static.v2t[u]) for u in unfixed_vars)
 
-Selector that chooses the variable with minimum branching gamma.
-For each unfixed variable, it computes the branching gamma on the corresponding
-region and selects the variable with the smallest gamma value.
+    return unfixed_vars[least_show_var_idx]
+end
 
-This selector does not consider performance optimization and will iterate through
-all unfixed variables to find the best one.
-"""
 struct MinGammaSelector <: AbstractSelector
     table_solver::AbstractTableSolver
     set_cover_solver::OptimalBranchingCore.AbstractSetCoverSolver
 end
 
 # Constructor will be defined after TNContractionSolver is available
-
 function OptimalBranchingCore.select_variables(
     problem::TNProblem,
     measure::AbstractMeasure,
@@ -85,3 +87,40 @@ function OptimalBranchingCore.select_variables(
     return best_var
 end
 
+# struct LocalTensorSelector <: AbstractSelector end
+
+# function OptimalBranchingCore.select_variables(
+#     problem::TNProblem,
+#     measure::AbstractMeasure,
+#     selector::LocalTensorSelector
+# )
+#     # Select tensor with the most unfixed variables (and has more than 1 unfixed variables)
+#     best_tensor_id = nothing
+#     max_unfixed = 0
+    
+#     for (tensor_id, tensor) in enumerate(problem.static.tensors)
+#         # Get the variables for this tensor
+#         tensor_vars = tensor.var_axes
+        
+#         # Partition variables into fixed and unfixed
+#         fixed_positions, unfixed_positions, unfixed_var_ids = 
+#             partition_tensor_variables(tensor_vars, problem.doms)
+        
+#         n_unfixed = length(unfixed_var_ids)
+        
+#         # Update best tensor if this one has more unfixed variables
+#         # Only consider tensors with more than 1 unfixed variable
+#         if n_unfixed > 1 && n_unfixed > max_unfixed
+#             max_unfixed = n_unfixed
+#             best_tensor_id = tensor_id
+#         end
+#     end
+    
+#     if best_tensor_id !== nothing
+#         @info "Selecting tensor $(best_tensor_id) with $max_unfixed unfixed variables"
+#         return best_tensor_id
+#     end
+    
+#     # If no tensor satisfies the conditions, return empty array
+#     return Int[]
+# end

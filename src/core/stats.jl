@@ -243,6 +243,13 @@ end
     return nothing
 end
 
+@inline function record_successful_path!(stats::BranchingStats, path::Vector{Int})
+    if stats.detailed !== nothing
+        push!(stats.detailed.successful_paths, copy(path))
+    end
+    return nothing
+end
+
 # Check if we need to track paths (only when detailed stats are enabled)
 @inline needs_path_tracking(stats::BranchingStats) = !isnothing(stats.detailed)
 

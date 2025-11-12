@@ -1,4 +1,4 @@
-# function get_active_tensors(static::TNStatic, doms::Vector{DomainMask})
+# function get_active_tensors(static::BipartiteGraph, doms::Vector{DomainMask})
 #     active = Int[]
 #     sizehint!(active, length(static.tensors))
 #     @inbounds for (tid, tensor) in enumerate(static.tensors)
@@ -15,13 +15,13 @@
 # end
 
 # Backward compatible interface: propagate all tensors when changed_vars not specified
-function propagate(static::TNStatic, doms::Vector{DomainMask}, ws::Union{Nothing, DynamicWorkspace}=nothing)
+function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, ws::Union{Nothing, DynamicWorkspace}=nothing)
     # When no changed_vars specified, propagate all tensors
     all_vars = collect(1:length(doms))
     return propagate(static, doms, all_vars, ws)
 end
 
-function propagate(static::TNStatic, doms::Vector{DomainMask}, changed_vars::Vector{Int}, ws::Union{Nothing, DynamicWorkspace}=nothing, propagated_vars::Union{Nothing, Vector{Int}}=nothing)
+function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, changed_vars::Vector{Int}, ws::Union{Nothing, DynamicWorkspace}=nothing, propagated_vars::Union{Nothing, Vector{Int}}=nothing)
     isempty(changed_vars) && return doms
     working_doms = copy(doms)
 

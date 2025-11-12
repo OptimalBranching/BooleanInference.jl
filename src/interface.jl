@@ -74,6 +74,14 @@ function solve_sat_with_assignments(
     end
 end
 
+@inline factoring_circuit(n::Int, m::Int, N::Int) = reduceto(CircuitSAT, Factoring(n, m, N)).circuit.circuit
+
+function factoring_problem(n::Int, m::Int, N::Int; verbose::Bool=false)
+    problem = CircuitSAT(factoring_circuit(n, m, N); use_constraints=true)
+    tn_problem = setup_from_sat(problem; verbose=verbose)
+    return tn_problem
+end
+
 function solve_factoring(
     n::Int, m::Int, N::Int;
     bsconfig::BranchingStrategy=BranchingStrategy(

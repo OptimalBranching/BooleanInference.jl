@@ -1,4 +1,4 @@
-function contract_region(tn::TNStatic, region::Region, doms::Vector{DomainMask})
+function contract_region(tn::BipartiteGraph, region::Region, doms::Vector{DomainMask})
     # @show region.id
     # println(union(region.boundary_vars, region.inner_vars))
     n_tensors = length(region.tensors)
