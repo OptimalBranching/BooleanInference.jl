@@ -39,7 +39,7 @@ end
 end
 
 function expand_one_var!(
-    tn::TNStatic,
+    tn::BipartiteGraph,
     ws::KNNWorkspace,
     doms::Vector{DomainMask},
     max_tensors::Int
@@ -68,7 +68,7 @@ function expand_one_var!(
     return false
 end
 
-function classify_inner_boundary!(tn::TNStatic, ws::KNNWorkspace, vars::Vector{Int})
+function classify_inner_boundary!(tn::BipartiteGraph, ws::KNNWorkspace, vars::Vector{Int})
     inner = Int[]
     boundary = Int[]
     @inbounds for vid in vars
@@ -88,7 +88,7 @@ end
 
 
 function k_neighboring(
-    tn::TNStatic,
+    tn::BipartiteGraph,
     doms::Vector{DomainMask},
     focus_var::Int;
     max_tensors::Int,

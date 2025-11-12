@@ -21,7 +21,7 @@ function get_var_value(dms::Vector{DomainMask}, var_id::Int)
     return -1  # not fixed
 end
 
-init_doms(static::TNStatic) = fill(DM_BOTH, length(static.vars))
+init_doms(static::BipartiteGraph) = fill(DM_BOTH, length(static.vars))
 
 @inline has_contradiction(doms::Vector{DomainMask}) = any(dm -> dm == DM_NONE, doms)
 

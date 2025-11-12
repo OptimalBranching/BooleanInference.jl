@@ -1,4 +1,4 @@
-struct TNStatic
+struct BipartiteGraph
     vars::Vector{Variable}
     tensors::Vector{BoolTensor}
     v2t::Vector{Vector{Int}}
@@ -11,12 +11,12 @@ struct TNStatic
     tensor_to_masks::Vector{TensorMasks}
 end
 
-function Base.show(io::IO, tn::TNStatic)
-    print(io, "TNStatic(vars=$(length(tn.vars)), tensors=$(length(tn.tensors)))")
+function Base.show(io::IO, tn::BipartiteGraph)
+    print(io, "BipartiteGraph(vars=$(length(tn.vars)), tensors=$(length(tn.tensors)))")
 end
 
-function Base.show(io::IO, ::MIME"text/plain", tn::TNStatic)
-    println(io, "TNStatic:")
+function Base.show(io::IO, ::MIME"text/plain", tn::BipartiteGraph)
+    println(io, "BipartiteGraph:")
     println(io, "  variables: $(length(tn.vars))")
     println(io, "  tensors: $(length(tn.tensors))")
     println(io, "  variable-tensor incidence: $(length(tn.v2t))")
@@ -87,15 +87,16 @@ function setup_problem(var_num::Int,
             hash_to_count[tensor_hash] = 1
         end
     end
-
+    
     # Print statistics
     unique_tensors = length(hash_to_count)
     total_tensors = length(tensors)
     if unique_tensors < total_tensors
         @info "Tensor statistics: $unique_tensors unique tensor types (out of $total_tensors total)"
         # Show distribution if there are duplicates
-        counts = sort(collect(values(hash_to_count)), rev=true)
-        @show "Tensor type distribution: $(counts)"
+        for (hash, count) in hash_to_count
+            @info "Tensor $(hash_to_tensor[hash]) has $count instances"
+        end
     end
 
     # Build the precomputed_masks dictionary for statistics (from unique tensors)
@@ -103,10 +104,10 @@ function setup_problem(var_num::Int,
         hash_to_tensor[h] => hash_to_masks[h] for h in keys(hash_to_masks)
     )
 
-    return TNStatic(vars, tensors, vars_to_tensors, tensors_to_edges, axis_of_t, precomputed_masks, tensor_to_masks)
+    return BipartiteGraph(vars, tensors, vars_to_tensors, tensors_to_edges, axis_of_t, precomputed_masks, tensor_to_masks)
 end
 
-function setup_from_tensor_network(tn)::TNStatic
+function setup_from_tensor_network(tn)::BipartiteGraph
     t2v = getixsv(tn.code)
     tensors = GenericTensorNetworks.generate_tensors(Tropical(1.0), tn)
     vec_tensors = [vec(t) for t in tensors]

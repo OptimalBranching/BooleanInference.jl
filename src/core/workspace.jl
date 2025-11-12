@@ -4,7 +4,7 @@ mutable struct PropagationBuffers
     max_configs::Int
 end
 
-function PropagationBuffers(static::TNStatic)
+function PropagationBuffers(static::BipartiteGraph)
     max_nvars = maximum(length(t.var_axes) for t in static.tensors; init=0)
     max_configs = max_nvars > 0 ? (1 << max_nvars) : 1
     return PropagationBuffers(falses(max_configs), falses(max_configs), max_configs)

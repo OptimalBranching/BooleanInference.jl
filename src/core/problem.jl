@@ -1,12 +1,18 @@
 struct TNProblem <: AbstractProblem
-    static::TNStatic
+    static::BipartiteGraph
     doms::Vector{DomainMask}
     n_unfixed::Int
     ws::DynamicWorkspace
 end
 
-function TNProblem(static::TNStatic; verbose::Bool = false)::TNProblem
+function TNProblem(static::BipartiteGraph; verbose::Bool = false, precontract::Bool = false)::TNProblem
     doms = init_doms(static)
+
+    # Optional: pre-contract non-XOR connected components
+    if precontract
+        static, doms = precontract_non_xor_components(static, doms; verbose=verbose)
+    end
+
     ws = DynamicWorkspace(length(static.vars), verbose)
     # Initial propagation at level 0 (no decisions yet)
     doms = propagate(static, doms, collect(1:length(static.vars)), ws)
