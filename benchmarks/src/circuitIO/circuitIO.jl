@@ -8,7 +8,6 @@ module CircuitIO
 
     export read_aag, aig_to_circuit
 
-    export verilog_to_circuit, parse_verilog_to_circuit
+    export verilog_to_circuit
     export write_verilog, circuit_to_verilog
-
 end

@@ -1,30 +1,18 @@
-struct Variable 
-    id::Int
-    dom_size::Int
+struct Variable
     deg::Int
 end
 
 function Base.show(io::IO, v::Variable)
-    print(io, "Variable($(v.id), dom_size=$(v.dom_size), deg=$(v.deg))")
-end
-
-struct EdgeRef
-    var::Int
-    axis::Int
-end
-
-function Base.show(io::IO, e::EdgeRef)
-    print(io, "EdgeRef($(e.var), axis=$(e.axis))")
+    print(io, "Variable(deg=$(v.deg))")
 end
 
 struct BoolTensor
-    id::Int
     var_axes::Vector{Int}
     tensor::Vector{Tropical{Float64}}
 end
 
 function Base.show(io::IO, f::BoolTensor)
-    print(io, "BoolTensor($(f.id), vars=[$(join(f.var_axes, ", "))], size=$(length(f.tensor)))")
+    print(io, "BoolTensor(vars=[$(join(f.var_axes, ", "))], size=$(length(f.tensor)))")
 end
 
 struct TensorMasks

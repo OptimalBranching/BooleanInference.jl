@@ -20,11 +20,7 @@ circuit = verilog_to_circuit("data/iscas85/c17.v")
 """
 function verilog_to_circuit(path::String)
     content = read(path, String)
-    return parse_verilog_to_circuit(content)
-end
-
-function parse_verilog_to_circuit(verilog_code::String)
-    mod = parse_verilog_module(verilog_code)
+    mod = parse_verilog_module(content)
     return verilog_module_to_circuit(mod)
 end
 

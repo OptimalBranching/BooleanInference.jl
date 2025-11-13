@@ -3,15 +3,23 @@
 # This disables all detailed statistics collection (timing, path tracking, etc.)
 # and only collects basic counters.
 
-function setup_from_cnf(cnf::CNF; verbose::Bool = false)
-    return setup_from_sat(Satisfiability(cnf; use_constraints=true); verbose=verbose)
+function setup_from_cnf(cnf::CNF; verbose::Bool=false)
+    return setup_from_sat(Satisfiability(cnf; use_constraints=true); verbose)
 end
 
-function setup_from_circuit(cir::Circuit; verbose::Bool = false)
-    return setup_from_sat(CircuitSAT(cir; use_constraints=true); verbose=verbose)
+function setup_from_circuit(cir::Circuit; verbose::Bool=false)
+    return setup_from_sat(CircuitSAT(cir; use_constraints=true); verbose)
 end
 
-function setup_from_sat(sat::ConstraintSatisfactionProblem; verbose::Bool = false)
+# Use multiple dispatch for different SAT types
+function setup_from_sat(sat::CircuitSAT; verbose::Bool=false)
+    tn = GenericTensorNetwork(sat)
+    tn_info = tensor_network_info(tn, sat)
+    static = setup_from_tn_info(tn_info)
+    TNProblem(static; verbose=verbose)
+end
+
+function setup_from_sat(sat::ConstraintSatisfactionProblem; verbose::Bool=false)
     tn = GenericTensorNetwork(sat)
     static = setup_from_tensor_network(tn)
     TNProblem(static; verbose=verbose)
@@ -75,12 +83,8 @@ function solve_sat_with_assignments(
 end
 
 @inline factoring_circuit(n::Int, m::Int, N::Int) = reduceto(CircuitSAT, Factoring(n, m, N)).circuit.circuit
-
-function factoring_problem(n::Int, m::Int, N::Int; verbose::Bool=false)
-    problem = CircuitSAT(factoring_circuit(n, m, N); use_constraints=true)
-    tn_problem = setup_from_sat(problem; verbose=verbose)
-    return tn_problem
-end
+@inline factoring_csp(n::Int, m::Int, N::Int) = CircuitSAT(factoring_circuit(n, m, N); use_constraints=true)
+@inline factoring_problem(n::Int, m::Int, N::Int; verbose::Bool=false) = setup_from_sat(factoring_csp(n, m, N); verbose=verbose)
 
 function solve_factoring(
     n::Int, m::Int, N::Int;
@@ -102,11 +106,6 @@ function solve_factoring(
     # @show distances
     tn_problem = setup_from_sat(problem; verbose=verbose)
     @show tn_problem
-    if verbose
-        unique_tensors = length(tn_problem.static.precomputed_masks)
-        total_tensors = length(tn_problem.static.tensors)
-        println("Unique tensor types: $unique_tensors (out of $total_tensors total)")
-    end
     res, depth, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
     isnothing(res) && return nothing, nothing, stats
     a = get_var_value(res, circuit_sat.q)

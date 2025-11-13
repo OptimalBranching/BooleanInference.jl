@@ -54,10 +54,9 @@ function expand_one_var!(
                     return true
                 end
             end
-            for e in tn.t2v[tensor_id]
-                var_id = e.var
+            for var_id in tn.tensors[tensor_id].var_axes
                 # Only expand to unfixed variables
-                if !_check_seen_var(ws, var_id) 
+                if !_check_seen_var(ws, var_id)
                     _mark_var!(ws, var_id)
                     push!(ws.collected_vars, var_id)
                     push!(ws.next_frontier, var_id)
