@@ -36,3 +36,7 @@ end
 @testset "greedymerge.jl" begin
     include("greedymerge.jl")
 end
+
+@testset "circuit_analysis.jl" begin
+    include("circuit_analysis.jl")
+end

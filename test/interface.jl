@@ -11,12 +11,8 @@ using BooleanInference.OptimalBranchingCore: BranchingStrategy
 
     he2v = []
     tnproblem = setup_from_cnf(cnf)
-    for tensors in tnproblem.static.t2v
-        list = []
-        for item in tensors
-            push!(list, item.var)
-        end
-        push!(he2v, list)
+    for tensor in tnproblem.static.tensors
+        push!(he2v, tensor.var_axes)
     end
     @test he2v == [[1, 2, 3, 4], [1, 3, 4, 5], [5, 6], [2, 7], [1]]
     @show tnproblem.static.tensors[3].tensor[1] == zero(Tropical{Float64})
@@ -30,43 +26,14 @@ end
     push!(circuit.exprs, Assignment([:c],BooleanExpr(true)))
     tnproblem = setup_from_circuit(circuit)
     he2v = []
-    for tensors in tnproblem.static.t2v
-        list = []
-        for item in tensors
-            push!(list, item.var)
-        end
-        push!(he2v, list)
+    for tensor in tnproblem.static.tensors
+        push!(he2v, tensor.var_axes)
     end
     @test he2v == [[1, 2, 3],[1]]
     @test tnproblem.static.tensors[1].tensor == vec(Tropical.([0.0 0.0; -Inf -Inf;;; 0.0 -Inf; -Inf 0.0]))
     @test tnproblem.static.tensors[2].tensor == [Tropical(-Inf), Tropical(0.0)]
     # After initial propagation, all variables are fixed (problem is solved)
     @test tnproblem.n_unfixed == 0
-end
-
-@testset "circuit_output_distances" begin
-    circuit = @circuit begin
-        t1 = x ∧ y
-        t2 = t1 ∨ z
-        t3 = ¬t2
-        t4 = t3 ∧ w
-        out = ¬t4
-    end
-    distances = circuit_output_distances(circuit)
-    sat = CircuitSAT(circuit; use_constraints=true)
-    sym_to_dist = Dict{Symbol, Int}()
-    for (idx, sym) in enumerate(sat.symbols)
-        sym_to_dist[sym] = distances[idx]
-    end
-    @test sym_to_dist[:out] == 0
-    @test sym_to_dist[:t4] == 1
-    @test sym_to_dist[:t3] == 2
-    @test sym_to_dist[:t2] == 3
-    @test sym_to_dist[:t1] == 4
-    @test sym_to_dist[:x] == 5
-    @test sym_to_dist[:y] == 5
-    @test sym_to_dist[:z] == 4
-    @test sym_to_dist[:w] == 2
 end
 
 @testset "solve_sat_with_assignments" begin

@@ -26,6 +26,7 @@ include("core/region.jl")
 include("core/problem.jl")
 
 include("utils/utils.jl")
+include("utils/circuit_analysis.jl")
 
 include("branching/propagate.jl")
 
@@ -53,7 +54,7 @@ export DynamicWorkspace
 export is_fixed, has0, has1, init_doms, get_var_value, bits
 
 export setup_problem, setup_from_tensor_network, setup_from_cnf, setup_from_circuit, setup_from_sat
-export factoring_problem, factoring_circuit
+export factoring_problem, factoring_circuit, factoring_csp
 
 export is_solved, cache_branch_solution!, reset_last_branch_problem!, has_last_branch_problem, last_branch_problem
 
@@ -77,6 +78,8 @@ export k_neighboring, KNNWorkspace
 
 export get_unfixed_vars, count_unfixed, bits_to_int
 export circuit_output_distances
+export compute_circuit_info, map_tensor_to_circuit_info
+export TensorNetworkInfo, setup_from_tn_info, tensor_network_info
 
 export get_branching_stats, reset_branching_stats!, print_branching_stats
 
