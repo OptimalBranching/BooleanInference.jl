@@ -79,7 +79,6 @@ export k_neighboring, KNNWorkspace
 export get_unfixed_vars, count_unfixed, bits_to_int
 export circuit_output_distances
 export compute_circuit_info, map_tensor_to_circuit_info
-export TensorNetworkInfo, setup_from_tn_info, tensor_network_info
 
 export get_branching_stats, reset_branching_stats!, print_branching_stats
 
