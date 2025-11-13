@@ -14,9 +14,23 @@ end
 # Use multiple dispatch for different SAT types
 function setup_from_sat(sat::CircuitSAT; verbose::Bool=false)
     tn = GenericTensorNetwork(sat)
-    tn_info = tensor_network_info(tn, sat)
-    static = setup_from_tn_info(tn_info)
-    TNProblem(static; verbose=verbose)
+    t2v = getixsv(tn.code)
+    tensors = GenericTensorNetworks.generate_tensors(Tropical(1.0), tn)
+    # Merge vec + replace to avoid intermediate allocation
+    tensor_data = [replace(vec(t), Tropical(1.0) => zero(Tropical{Float64})) for t in tensors]
+
+    # Extract circuit metadata and symbols
+    circuit = sat.circuit
+    n_tensors = length(t2v)
+    tensor_symbols = [circuit.exprs[i].expr.head for i in 1:min(n_tensors, length(circuit.exprs))]
+
+    # Compute circuit topology (depths, fanin, fanout)
+    circuit_info = compute_circuit_info(sat)
+    tensor_info = map_tensor_to_circuit_info(tn, circuit_info, sat)
+
+    # Build BipartiteGraph
+    static = setup_problem(length(sat.symbols), t2v, tensor_data; tensor_depths=tensor_info.depths, tensor_fanin=tensor_info.fanin, tensor_fanout=tensor_info.fanout, tensor_symbols=tensor_symbols)
+    TNProblem(static; verbose)
 end
 
 function setup_from_sat(sat::ConstraintSatisfactionProblem; verbose::Bool=false)
@@ -31,9 +45,7 @@ function solve(problem::TNProblem, bsconfig::BranchingStrategy, reducer::Abstrac
     res = last_branch_problem(problem)
     stats = get_branching_stats(problem)
     clear_all_region_caches!()
-    if show_stats
-        print_stats_summary(stats)
-    end
+    show_stats && print_stats_summary(stats)
     return (res, depth, stats)
 end
 
@@ -45,8 +57,7 @@ function solve_sat_problem(
         measure=NumUnfixedVars()
     ), 
     reducer::AbstractReducer=NoReducer(),
-    verbose::Bool = false,
-    show_stats::Bool=false
+    verbose::Bool=false, show_stats::Bool=false
 )
     tn_problem = setup_from_sat(sat; verbose=verbose)
     result, depth, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
@@ -62,8 +73,7 @@ function solve_sat_with_assignments(
         measure=NumUnfixedVars()
     ), 
     reducer::AbstractReducer=NoReducer(),
-    verbose::Bool = false,
-    show_stats::Bool=false
+    verbose::Bool=false, show_stats::Bool=false
 )
     # Solve directly to get result
     tn_problem = setup_from_sat(sat; verbose=verbose)
@@ -122,8 +132,7 @@ function solve_circuit_sat(
         measure=NumUnfixedVars()
     ),
     reducer::AbstractReducer=NoReducer(),
-    verbose::Bool=false,
-    show_stats::Bool=false
+    verbose::Bool=false, show_stats::Bool=false
 )
     tn_problem = setup_from_circuit(circuit; verbose)
     res, depth, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
