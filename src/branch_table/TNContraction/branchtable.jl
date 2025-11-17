@@ -70,11 +70,7 @@ function slice_region_contraction(
     return @view tensor[indices...]
 end
 
-function handle_no_boundary_case_unfixed(
-    region::Region,
-    contracted::AbstractArray{Tropical{Float64}},
-    inner_output_vars::Vector{Int},
-)
+function handle_no_boundary_case_unfixed(region::Region, contracted::AbstractArray{Tropical{Float64}}, inner_output_vars::Vector{Int})
     n_inner = length(region.inner_vars)
     free_inner_configs = extract_inner_configs(contracted, length(inner_output_vars))
     
@@ -97,9 +93,8 @@ function filter_branching_table(region::Region, table::BranchingTable, problem::
     stats = problem.ws.branch_stats
     has_detailed = !isnothing(stats) && !isnothing(stats.detailed)
     filtering_start_time = has_detailed ? time_ns() : 0
-    
+
     var_ids = vcat(region.boundary_vars, region.inner_vars)
-    n_vars = length(var_ids)
 
     fixed_positions = Tuple{Int, Bool}[]
     unfixed_positions = Int[]
@@ -171,15 +166,23 @@ function OptimalBranchingCore.branching_table(problem::TNProblem, solver::TNCont
     
     cached_region, cached_table = get_cached_region(variable)
     if !isnothing(cached_region) && !isnothing(cached_table)
-        @debug "cached_region: $cached_region"
-        record_cache_hit!(stats)
-        filtered_table, unfixed_vars = filter_branching_table(cached_region, cached_table, problem)
-        return filtered_table, unfixed_vars
+        # Validate that cached region is compatible with current problem
+        n_vars = length(problem.doms)
+        var_ids = vcat(cached_region.boundary_vars, cached_region.inner_vars)
+        is_valid = all(1 <= var_id <= n_vars for var_id in var_ids)
+        
+        if is_valid
+            record_cache_hit!(stats)
+            @debug "cached region tensor type: $(get_region_tensor_type(problem, cached_region))"
+            filtered_table, unfixed_vars = filter_branching_table(cached_region, cached_table, problem)
+            return filtered_table, unfixed_vars
+        end
+        # If cached region is invalid, treat as cache miss and recompute
     end
 
     record_cache_miss!(stats)
     region = create_region(problem, variable, solver)
-    @debug "region: $region"
+
     n_boundary = length(region.boundary_vars)
     n_inner = length(region.inner_vars)
     n_total = n_boundary + n_inner
@@ -243,10 +246,11 @@ function OptimalBranchingCore.branching_table(problem::TNProblem, solver::TNCont
     
     table = BranchingTable(n_total, valid_config_groups)
     cache_region!(region, table)
+    @debug "region tensor type: $(get_region_tensor_type(problem, region))"
 
     filtered_table, unfixed_vars = filter_branching_table(region, table, problem)
     return filtered_table, unfixed_vars
 end
 
 # Constructor for MinGammaSelector (defined here after TNContractionSolver is available)
-MinGammaSelector() = MinGammaSelector(TNContractionSolver(2,5), OptimalBranchingCore.GreedyMerge())
+# MinGammaSelector() = MinGammaSelector(TNContractionSolver(2,5), OptimalBranchingCore.GreedyMerge())

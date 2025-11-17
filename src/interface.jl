@@ -99,9 +99,11 @@ end
 function solve_factoring(
     n::Int, m::Int, N::Int;
     bsconfig::BranchingStrategy=BranchingStrategy(
-        table_solver=TNContractionSolver(1,2),
-        # selector=MinGammaSelector(TNContractionSolver(1,2), GreedyMerge()),
-        selector=MostOccurrenceSelector(),
+        table_solver=TNContractionSolver(1,10),
+        # table_solver=SingleTensorSolver(),
+        selector=MinGammaSelector(TNContractionSolver(1,10), GreedyMerge()),
+        # selector=MostOccurrenceSelector(),
+        # selector=MostConnectedTensorSelector(),
         measure=NumUnfixedVars(),
         set_cover_solver=GreedyMerge()
     ),
@@ -111,11 +113,7 @@ function solve_factoring(
     fproblem = Factoring(n, m, N)
     circuit_sat = reduceto(CircuitSAT, fproblem)
     problem = CircuitSAT(circuit_sat.circuit.circuit; use_constraints=true)
-    # @show circuit_sat.circuit.circuit
-    # distances = circuit_output_distances(circuit_sat.circuit.circuit)
-    # @show distances
     tn_problem = setup_from_sat(problem; verbose=verbose)
-    @show tn_problem
     res, depth, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
     isnothing(res) && return nothing, nothing, stats
     a = get_var_value(res, circuit_sat.q)
