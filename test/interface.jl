@@ -3,7 +3,7 @@ using BooleanInference.GenericTensorNetworks
 using BooleanInference.GenericTensorNetworks: ∧, ∨, ¬
 using Test
 using BooleanInference.GenericTensorNetworks.ProblemReductions
-using BooleanInference.OptimalBranchingCore: BranchingStrategy
+using BooleanInference.OptimalBranchingCore
 
 @testset "setup_from_cnf" begin
     @bools a b c d e f g

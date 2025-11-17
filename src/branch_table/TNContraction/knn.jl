@@ -38,21 +38,13 @@ end
     ws.epoch += 1
 end
 
-function expand_one_var!(
-    tn::BipartiteGraph,
-    ws::KNNWorkspace,
-    doms::Vector{DomainMask},
-    max_tensors::Int
-)::Bool  # returns `true` if STOPPED EARLY due to limits; `false` otherwise
+function expand_one_var!(tn::BipartiteGraph, ws::KNNWorkspace, doms::Vector{DomainMask}, max_tensors::Int)::Bool  # returns `true` if STOPPED EARLY due to limits; `false` otherwise
     empty!(ws.next_frontier)
     @inbounds for var in ws.frontier
         for tensor_id in tn.v2t[var]
             if !_check_seen_tensor(ws, tensor_id)
                 _mark_tensor!(ws, tensor_id)
                 push!(ws.collected_tensors, tensor_id)
-                if length(ws.collected_tensors) >= max_tensors
-                    return true
-                end
             end
             for var_id in tn.tensors[tensor_id].var_axes
                 # Only expand to unfixed variables
@@ -62,6 +54,7 @@ function expand_one_var!(
                     push!(ws.next_frontier, var_id)
                 end
             end
+            length(ws.collected_tensors) >= max_tensors && return true
         end
     end
     return false
@@ -86,20 +79,13 @@ function classify_inner_boundary!(tn::BipartiteGraph, ws::KNNWorkspace, vars::Ve
 end
 
 
-function k_neighboring(
-    tn::BipartiteGraph,
-    doms::Vector{DomainMask},
-    focus_var::Int;
-    max_tensors::Int,
-    k::Int = 2,
-)
+function k_neighboring(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var::Int; max_tensors::Int, k::Int = 2)
     @debug "k_neighboring: focus_var = $focus_var"
-    @assert k ≥ 0
     @assert !is_fixed(doms[focus_var]) "Focus variable must be unfixed"
-    
+
     # Create local workspace for this call
     ws = KNNWorkspace(length(tn.vars), length(tn.tensors))
-    
+
     # Initialize with focus variable
     _mark_var!(ws, focus_var)
     push!(ws.frontier, focus_var)

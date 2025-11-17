@@ -1,6 +1,25 @@
 # Generate a key for a clause based on its fields
 @inline clause_key(cl::Clause{INT}) where {INT} = (getfield(cl, 1), getfield(cl, 2))
 
+# Format clause content for debug output
+function format_clause(clause::Clause{INT}, variables::Vector{Int}) where {INT}
+    assignments = String[]
+    @inbounds for i in 1:length(variables)
+        mask_bit = OptimalBranchingCore.readbit(clause.mask, i)
+        if mask_bit == 1
+            var_id = variables[i]
+            bit_val = OptimalBranchingCore.readbit(clause.val, i)
+            val_str = bit_val == 1 ? "true" : "false"
+            push!(assignments, "v$(var_id)=$(val_str)")
+        end
+    end
+    if isempty(assignments)
+        return "Clause(mask=$(clause.mask), val=$(clause.val), assignments=[])"
+    else
+        return "Clause(mask=$(clause.mask), val=$(clause.val), assignments=[$(join(assignments, ", "))])"
+    end
+end
+
 # Get size reduction from cache or compute and cache it
 function cached_size_reduction!(
     cache::Dict{Tuple{INT,INT},Float64},
@@ -10,8 +29,15 @@ function cached_size_reduction!(
     clause::Clause{INT}
 ) where {INT}
     key = clause_key(clause)
-    return get!(cache, key) do
-        Float64(OptimalBranchingCore.size_reduction(problem, m, clause, variables))
+    if haskey(cache, key)
+        reduction = cache[key]
+        @debug "Evaluating clause (cached): $(format_clause(clause, variables)), size_reduction=$(reduction)"
+        return reduction
+    else
+        reduction = Float64(OptimalBranchingCore.size_reduction(problem, m, clause, variables))
+        cache[key] = reduction
+        @debug "Evaluating clause: $(format_clause(clause, variables)), size_reduction=$(reduction)"
+        return reduction
     end
 end
 

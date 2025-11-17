@@ -1,19 +1,3 @@
-# function get_active_tensors(static::BipartiteGraph, doms::Vector{DomainMask})
-#     active = Int[]
-#     sizehint!(active, length(static.tensors))
-#     @inbounds for (tid, tensor) in enumerate(static.tensors)
-#         # Check if any variable in this tensor is unfixed
-#         has_unfixed = false
-#         for var_id in tensor.var_axes
-#             dm_bits = doms[var_id].bits
-#             # Unfixed if domain allows both 0 and 1, or is not yet determined
-#             has_unfixed |= dm_bits == 0x03
-#         end
-#         has_unfixed && push!(active, tid)
-#     end
-#     return active
-# end
-
 # Backward compatible interface: propagate all tensors when changed_vars not specified
 function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, ws::Union{Nothing, DynamicWorkspace}=nothing)
     # When no changed_vars specified, propagate all tensors
@@ -30,7 +14,7 @@ function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, changed_var
 
     stats = !isnothing(ws) ? ws.branch_stats : nothing
     has_detailed = !isnothing(stats) && !isnothing(stats.detailed)
-    
+
     # Record propagation time (nanosecond precision)
     propagation_start_time = has_detailed ? time_ns() : 0
 
@@ -83,7 +67,7 @@ function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, changed_var
     if has_detailed
         propagation_time = (time_ns() - propagation_start_time) / 1e9  # Convert to seconds
         record_propagation!(stats, propagation_time)
-        
+
         final_domain_count = sum(count_ones(bits(d) & 0x03) for d in working_doms)
         domain_reduction = initial_domain_count - final_domain_count
         if domain_reduction > 0

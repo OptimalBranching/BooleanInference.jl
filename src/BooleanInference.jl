@@ -22,8 +22,8 @@ include("core/static.jl")
 include("core/domain.jl")
 include("core/stats.jl")
 include("core/workspace.jl")
-include("core/region.jl")
 include("core/problem.jl")
+include("core/region.jl")
 
 include("utils/utils.jl")
 include("utils/circuit_analysis.jl")
@@ -37,14 +37,17 @@ include("branch_table/TNContraction/knn.jl")
 include("branch_table/TNContraction/contraction.jl")
 include("branch_table/TNContraction/branchtable.jl")
 
+include("branch_table/SingleTensor/singletensor.jl")
+
 
 include("branching/branch_cache.jl")
 include("branching/greedymerge.jl")
 include("branching/optimal_branching.jl")
+include("utils/visualization.jl")
 include("branching/branch.jl")
 
 include("interface.jl")
-include("utils/visualization.jl")
+
 
 export Variable, EdgeRef, BoolTensor, BipartiteGraph, DomainMask, TNProblem
 export DM_BOTH, DM_0, DM_1, DM_NONE
@@ -63,9 +66,10 @@ export solve_circuit_sat
 
 export NumUnfixedVars
 
-export MostOccurrenceSelector, LeastOccurrenceSelector, MinGammaSelector, AbstractSelector
+export MostOccurrenceSelector, LeastOccurrenceSelector, MinGammaSelector, LocalTensorSelector, AbstractSelector
 
-export TNContractionSolver, AbstractTableSolver
+export TNContractionSolver, SingleTensorSolver, AbstractTableSolver
+export partition_tensor_variables
 
 export contract_region, contract_tensors, slicing, tensor_unwrapping
 
@@ -88,5 +92,6 @@ export print_stats_summary
 export extract_inner_configs, combine_configs, slice_region_contraction
 export handle_no_boundary_case_unfixed
 
-export to_graph, visualize_problem
+export to_graph, visualize_problem, visualize_highest_degree_vars
+export get_highest_degree_variables, get_tensors_containing_variables
 end

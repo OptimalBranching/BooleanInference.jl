@@ -198,6 +198,8 @@ function OptimalBranchingCore.branch_and_reduce(
             # Commit branch to get subproblem
             subproblem, local_value, _ = commit_branch(problem, branch, variables, problem.ws.temp_doms)
 
+            # visualize_highest_degree_vars(subproblem, "subproblem_$(current_depth)_$(i).png", n_vars=10; nlabels_fontsize=20, show_labels=true)
+
             @debug "local_value=$local_value, n_unfixed=$(subproblem.n_unfixed)"
 
             # If branch led to contradiction (UNSAT), skip this branch

@@ -46,11 +46,11 @@ function tensor_unwrapping(vec::Vector{T}) where T
     return reshape(vec, dims)
 end
 
-ixs = [[1,2,3], [3,4,5], [5,6,7]]
-iy = [1,2,4,6,7]
+ixs = [[1,2,3], [3,4,5]]
+iy = [1,2,3,4,5]
 eincode = EinCode(ixs, iy)
 optcode = optimize_code(eincode, uniformsize(eincode, 2), GreedyMethod())    
-unwrapped_tensors = [tensor_unwrapping(t) for t in [tensor_xor, tensor_xor, tensor_xor]]
+unwrapped_tensors = [tensor_unwrapping(t) for t in [tensor_xor, tensor_xor]]
 result = optcode(unwrapped_tensors...)
 
 findall(result .== T1)

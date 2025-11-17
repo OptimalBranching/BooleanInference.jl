@@ -23,7 +23,9 @@ function OptimalBranchingCore.optimal_branching_rule(tbl::OptimalBranchingCore.B
 
     for clause in candidates
         reduction = Float64(OptimalBranchingCore.size_reduction(problem, measure, clause, variables))
-        if isfinite(reduction) && reduction > 0
+        # Allow reduction >= 0 to ensure at least some progress is made
+        # Even if reduction = 0, we still fix variables which may enable future progress
+        if isfinite(reduction) && reduction >= 0
             push!(valid_clauses, clause)
             push!(reductions, reduction)
         end
@@ -53,17 +55,22 @@ function OptimalBranchingCore.optimal_branching_rule(tbl::OptimalBranchingCore.B
     return OptimalBranchingCore.minimize_γ(tbl, valid_clauses, reductions, solver)
 end
 
-# NaiveBranch solver: delegate to base implementation
+# NaiveBranch solver: filter infeasible branches then use naive branching
 function OptimalBranchingCore.optimal_branching_rule(tbl::OptimalBranchingCore.BranchingTable{INT}, variables::Vector{T}, problem::TNProblem, measure::OptimalBranchingCore.AbstractMeasure, solver::OptimalBranchingCore.NaiveBranch) where {INT<:Integer, T}
-    return invoke(OptimalBranchingCore.optimal_branching_rule,
-        Tuple{
-            OptimalBranchingCore.BranchingTable,
-            Vector,
-            OptimalBranchingCore.AbstractProblem,
-            OptimalBranchingCore.AbstractMeasure,
-            OptimalBranchingCore.NaiveBranch,
-        },
-        tbl, variables, problem, measure, solver)
+    candidates = OptimalBranchingCore.bit_clauses(tbl)
+	size_reductions = [OptimalBranchingCore.size_reduction(problem, measure, candidate[1], variables) for candidate in candidates]
+    # filter the size_reductions that is not -Inf
+    valid_idx = findall(size_reductions .!= -Inf)
+    size_reductions = size_reductions[valid_idx]
+    valid_clauses = [candidate[1] for candidate in candidates[valid_idx]]
+
+    if isempty(valid_clauses)
+        empty_clauses = Vector{OptimalBranchingCore.Clause{INT}}()
+        return OptimalBranchingCore.OptimalBranchingResult(OptimalBranchingCore.DNF(empty_clauses), Float64[], Inf)
+    end
+
+	γ = OptimalBranchingCore.complexity_bv(size_reductions)
+    return OptimalBranchingResult(DNF(valid_clauses), size_reductions, γ)
 end
 
 # No-op reducer (used when no reduction is applied)
