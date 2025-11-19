@@ -21,6 +21,16 @@ function get_var_value(dms::Vector{DomainMask}, var_id::Int)
     return -1  # not fixed
 end
 
+function is_hard(tn::BipartiteGraph, doms::Vector{DomainMask}, tensor_id::Int)
+    vars = tn.tensors[tensor_id].var_axes
+    degree = 0
+    @inbounds for var_id in vars
+        !is_fixed(doms[var_id]) && (degree += 1)
+    end
+    # @show degree
+    return degree > 2
+end
+
 init_doms(static::BipartiteGraph) = fill(DM_BOTH, length(static.vars))
 
 @inline has_contradiction(doms::Vector{DomainMask}) = any(dm -> dm == DM_NONE, doms)

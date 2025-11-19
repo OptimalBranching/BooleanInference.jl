@@ -36,6 +36,7 @@ include("branching/selector.jl")
 include("branch_table/TNContraction/knn.jl")
 include("branch_table/TNContraction/contraction.jl")
 include("branch_table/TNContraction/branchtable.jl")
+include("branch_table/TNContraction/new_branchtable.jl")
 
 include("branch_table/SingleTensor/singletensor.jl")
 
@@ -68,7 +69,7 @@ export NumUnfixedVars
 
 export MostOccurrenceSelector, LeastOccurrenceSelector, MinGammaSelector, LocalTensorSelector, AbstractSelector
 
-export TNContractionSolver, SingleTensorSolver, AbstractTableSolver
+export TNContractionSolver, SingleTensorSolver, AbstractTableSolver, NewTNContractionSolver
 export partition_tensor_variables
 
 export contract_region, contract_tensors, slicing, tensor_unwrapping
@@ -78,7 +79,7 @@ export TensorMasks, PropagationBuffers
 
 export cache_region!, get_cached_region, clear_all_region_caches!
 
-export k_neighboring, KNNWorkspace
+export k_neighboring
 
 export get_unfixed_vars, count_unfixed, bits_to_int
 export circuit_output_distances

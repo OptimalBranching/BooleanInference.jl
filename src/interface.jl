@@ -99,12 +99,12 @@ end
 function solve_factoring(
     n::Int, m::Int, N::Int;
     bsconfig::BranchingStrategy=BranchingStrategy(
-        table_solver=TNContractionSolver(1,10),
+        table_solver=NewTNContractionSolver(1,2),
         # table_solver=SingleTensorSolver(),
-        selector=MinGammaSelector(TNContractionSolver(1,10), GreedyMerge()),
+        selector=MinGammaSelector(NewTNContractionSolver(1,2), GreedyMerge()),
         # selector=MostOccurrenceSelector(),
         # selector=MostConnectedTensorSelector(),
-        measure=NumUnfixedVars(),
+        measure=NumHardTensors(),
         set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),

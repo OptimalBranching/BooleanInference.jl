@@ -64,7 +64,7 @@ end
 
 # Remove rows with invalid (non-finite or non-positive) size reductions
 function drop_invalid_rows!(cls::Vector{Vector{Clause{INT}}}, size_reductions::Vector{Float64}) where {INT}
-    keep = isfinite.(size_reductions) .& (size_reductions .> 0)
+    keep = isfinite.(size_reductions) .& (size_reductions .>= 0)
     all(keep) && return cls, size_reductions
     return cls[keep], size_reductions[keep]
 end

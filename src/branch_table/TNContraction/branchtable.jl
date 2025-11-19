@@ -163,7 +163,6 @@ end
 
 function OptimalBranchingCore.branching_table(problem::TNProblem, solver::TNContractionSolver, variable::Int)
     stats = problem.ws.branch_stats
-    
     cached_region, cached_table = get_cached_region(variable)
     if !isnothing(cached_region) && !isnothing(cached_table)
         # Validate that cached region is compatible with current problem
@@ -192,9 +191,7 @@ function OptimalBranchingCore.branching_table(problem::TNProblem, solver::TNCont
     
     stats = problem.ws.branch_stats
     contraction_start_time = time_ns()
-
     contracted_tensor, output_vars = contract_region(problem.static, region, all_unfixed_doms)
-
     contraction_time = (time_ns() - contraction_start_time) / 1e9
     record_contraction_time!(stats, contraction_time)
 
