@@ -54,39 +54,28 @@ function apply_clause_to_doms!(new_doms::Vector{DomainMask}, clause::OptimalBran
 end
 
 # Evaluate a branching clause (trial evaluation for size reduction)
-# Returns (subproblem, local_value, changed_vars)
-function evaluate_branch(problem::TNProblem, clause::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}, temp_doms::Vector{DomainMask}) where {INT<:Integer}
-    # Use pre-allocated buffer
+# Returns (subproblem, local_value)
+# TODO: remove temp_doms
+function evaluate_branch!(problem::TNProblem, clause::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}, temp_doms::Vector{DomainMask}) where {INT<:Integer}
     copyto!(temp_doms, problem.doms)
-    new_doms = temp_doms
 
     # Use a temporary changed_indices vector (no need to track flags)
     changed_indices = Int[]
 
     # Apply clause: fix variables according to mask and values (lightweight version)
-    n_fixed = apply_clause_to_doms_eval!(new_doms, clause, variables, problem.doms, changed_indices)
+    # `n_fixed` is the number of variables fixed by the clause
+    n_fixed = apply_clause_to_doms_eval!(temp_doms, clause, variables, problem.doms, changed_indices)
+    @assert n_fixed > 0 "Panic: no variables fixed by the clause"
 
     # Propagate
-    propagated_doms = propagate(problem.static, new_doms, changed_indices, problem.ws)
+    propagated_doms = propagate(problem.static, temp_doms, changed_indices, problem.ws)
+    # `propagated_doms` is the domain mask after the clause is applied, i.e. the assignment of each variable: unknown, 0, 1, or conflict
 
-    if has_contradiction(propagated_doms)
-        # UNSAT: contradiction detected
-        @debug "evaluate_branch: Contradiction detected"
-        doms_zero = fill(DM_NONE, length(propagated_doms))
-        store_branch_cache!(problem, clause, variables, doms_zero, problem.n_unfixed, 0, Tuple{Int,Bool}[])
-        return (TNProblem(problem.static, doms_zero, problem.n_unfixed, problem.ws), 0, Int[])
-    end
+    @assert !has_contradiction(propagated_doms) "Contradiction detected"
 
     # Count unfixed variables
     new_n_unfixed = count_unfixed(propagated_doms)
-
-    # Safety check
-    if new_n_unfixed == problem.n_unfixed && n_fixed == 0
-        @debug "evaluate_branch: No progress made"
-        doms_zero = fill(DM_NONE, length(propagated_doms))
-        store_branch_cache!(problem, clause, variables, doms_zero, 0, 0, Tuple{Int,Bool}[])
-        return (TNProblem(problem.static, doms_zero, 0, problem.ws), 0, Int[])
-    end
+    @assert new_n_unfixed < problem.n_unfixed "Panic: no progress made"
 
     new_problem = TNProblem(problem.static, propagated_doms, new_n_unfixed, problem.ws)
 
@@ -106,7 +95,7 @@ function evaluate_branch(problem::TNProblem, clause::OptimalBranchingCore.Clause
     # Store in cache
     store_branch_cache!(problem, clause, variables, propagated_doms, new_n_unfixed, 1, assignments)
 
-    return (new_problem, 1, Int[])
+    return new_problem
 end
 
 

@@ -3,8 +3,7 @@
 # Calculate size reduction after applying a clause to the problem
 # Uses evaluate_branch for trial evaluation and caching
 function OptimalBranchingCore.size_reduction(p::TNProblem, m::OptimalBranchingCore.AbstractMeasure, cl::OptimalBranchingCore.Clause{INT}, variables::Vector{Int}) where {INT<:Integer}
-    subproblem, _, _ = evaluate_branch(p, cl, variables, p.ws.temp_doms)
-    has_contradiction(subproblem.doms) && return -Inf
+    subproblem = evaluate_branch!(p, cl, variables, p.ws.temp_doms)
     reduction = OptimalBranchingCore.measure(p, m) - OptimalBranchingCore.measure(subproblem, m)
     return reduction
 end
