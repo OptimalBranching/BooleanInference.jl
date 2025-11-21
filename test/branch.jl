@@ -43,7 +43,6 @@ end
 	@bools a b c d e f g
 	cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c))
 	tn_problem = BooleanInference.setup_from_cnf(cnf)
-	temp_doms = Vector{BooleanInference.DomainMask}(undef, length(tn_problem.doms))
-	new_problem, _ = BooleanInference.commit_branch(tn_problem, Clause(0b110, 0b100), [1, 2, 3], temp_doms)
+	new_problem, _ = BooleanInference.commit_branch(tn_problem, Clause(0b110, 0b100), [1, 2, 3])
     @test new_problem.n_unfixed == 5
 end

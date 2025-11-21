@@ -1,259 +1,69 @@
 # Backward compatible interface: propagate all tensors when changed_vars not specified
-function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, ws::Union{Nothing, DynamicWorkspace}=nothing)
-    # When no changed_vars specified, propagate all tensors
-    all_vars = collect(1:length(doms))
-    return propagate(static, doms, all_vars, ws)
+function propagate(static::BipartiteGraph, doms::Vector{DomainMask})
+    return propagate(static, doms, collect(1:length(doms)), nothing)
 end
 
-function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, changed_vars::Vector{Int}, ws::Union{Nothing, DynamicWorkspace}=nothing, propagated_vars::Union{Nothing, Vector{Int}}=nothing)
+function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, changed_vars::Vector{Int}, propagated_vars::Union{Nothing, Vector{Int}}=nothing)
     isempty(changed_vars) && return doms
+
     working_doms = copy(doms)
+    tensor_queue = unique(vcat([static.v2t[v] for v in changed_vars]...))
+    queue_index = 1
 
-    # Track which variables were modified during propagation (if requested)
-    modified_vars = propagated_vars
+    while queue_index <= length(tensor_queue)
+        tensor_id = tensor_queue[queue_index]
+        queue_index += 1
 
-    stats = !isnothing(ws) ? ws.branch_stats : nothing
-    has_detailed = !isnothing(stats) && !isnothing(stats.detailed)
+        tensor = static.tensors[tensor_id]
+        masks = static.tensor_to_masks[tensor_id]
+        feasible_configs = find_feasible_configs(working_doms, tensor, masks)
 
-    # Record propagation time (nanosecond precision)
-    propagation_start_time = has_detailed ? time_ns() : 0
+        isempty(feasible_configs) && return fill(DM_NONE, length(working_doms))
 
-    # Build the propagation queue with tensors affected by the changed variables
-    tensor_queue = Int[]
-    in_queue = falses(length(static.tensors))
-    @inbounds for var_id in changed_vars
-        @inbounds for tid in static.v2t[var_id]
-            if !in_queue[tid]
-                push!(tensor_queue, tid)
-                in_queue[tid] = true
-            end
-        end
-    end
+        updated_vars = update_domains_from_configs!(working_doms, tensor, feasible_configs)
+        !isnothing(propagated_vars) && append!(propagated_vars, updated_vars)
 
-    # Reuse propagation buffers to avoid reallocating BitVectors
-    buffers = if !isnothing(ws) && !isnothing(ws.prop_buffers)
-        ws.prop_buffers
-    else
-        buf = PropagationBuffers(static)
-        !isnothing(ws) && (ws.prop_buffers = buf)
-        buf
-    end
-
-    # Count initial domain assignments
-    initial_domain_count = has_detailed ? sum(count_ones(bits(d) & 0x03) for d in doms) : 0
-
-    queue_pos = 1
-    iteration_count = 0
-    while queue_pos <= length(tensor_queue)
-        iteration_count += 1
-        tensor_idx = tensor_queue[queue_pos]
-        queue_pos += 1
-        in_queue[tensor_idx] = false
-
-        tensor = static.tensors[tensor_idx]
-        # Use the precomputed masks directly without cache lookups
-        masks = static.tensor_to_masks[tensor_idx]
-
-        # Check constraint and propagate
-        if !propagate_tensor!(working_doms, tensor, masks, static.v2t,
-                              tensor_queue, in_queue, buffers, tensor_idx, modified_vars)
-            # Contradiction detected
-            has_detailed && record_early_unsat!(stats)
-            return fill(DM_NONE, length(working_doms))
-        end
-    end
-
-    # Record domain reduction counts and elapsed time
-    if has_detailed
-        propagation_time = (time_ns() - propagation_start_time) / 1e9  # Convert to seconds
-        record_propagation!(stats, propagation_time)
-
-        final_domain_count = sum(count_ones(bits(d) & 0x03) for d in working_doms)
-        domain_reduction = initial_domain_count - final_domain_count
-        if domain_reduction > 0
-            record_domain_reduction!(stats, domain_reduction)
-        end
+        new_tensors = unique(vcat([static.v2t[v] for v in updated_vars]...))
+        append!(tensor_queue, filter(t -> t ∉ tensor_queue[queue_index:end], new_tensors))
     end
 
     return working_doms
 end
 
-# Propagate constraints from a single tensor. Returns false if contradiction detected.
-function propagate_tensor!(working_doms::Vector{DomainMask}, tensor::BoolTensor, masks::TensorMasks, v2t::Vector{Vector{Int}}, tensor_queue::Vector{Int}, in_queue::BitVector, buffers::PropagationBuffers, tensor_idx::Int, modified_vars::Union{Nothing, Vector{Int}})
-    # Step 1: Compute feasible configurations given current domains
-    compute_feasible_configs!(buffers.feasible, working_doms, tensor, masks) || return false
-    n_feasible = count(buffers.feasible)
+# Find all configurations of the tensor that are feasible given current variable domains
+function find_feasible_configs(doms::Vector{DomainMask}, tensor::BoolTensor, masks::TensorMasks)
+    num_configs = 1 << length(tensor.var_axes)
 
-    # Step 2: Different propagation strategies based on number of feasible configs
-    if n_feasible == 1
-        # Only one valid config -> fix all variables to that config
-        return propagate_unit_constraint!(working_doms, tensor, buffers.feasible, v2t, tensor_queue, in_queue, tensor_idx, modified_vars)
-    else
-        # Multiple configs -> prune unsupported values
-        return propagate_support_pruning!(working_doms, tensor, masks, buffers.feasible, buffers.temp, v2t, tensor_queue, in_queue, tensor_idx, modified_vars)
-    end
-end
-
-# Compute which tensor configurations are feasible given current variable domains.
-# Returns false if no feasible configuration exists.
-@inline function compute_feasible_configs!(feasible::BitVector, working_doms::Vector{DomainMask}, tensor::BoolTensor, masks::TensorMasks)
-    n_cfg = length(masks.sat)
-
-    copyto!(feasible, 1, masks.sat, 1, n_cfg)
-
-    n_words = (n_cfg + 63) >> 6
-    feas_chunks = feasible.chunks
-
-    # Clear stale bits beyond n_cfg in the final UInt64 to avoid reuse artefacts
-    bits_in_last_word = n_cfg & 63  # n_cfg % 64
-    if bits_in_last_word != 0
-        # Keep only the lowest bits_in_last_word bits in the last word
-        mask_val = (UInt64(1) << bits_in_last_word) - 1
-        feas_chunks[n_words] &= mask_val
-    end
-
-    @inbounds for (axis, var_id) in enumerate(tensor.var_axes)
-        dm = working_doms[var_id]
-        dm_bits = bits(dm)
-
-        # Skip unconstrained variables (both 0 and 1 are allowed)
-        dm == DM_BOTH && continue
-        # Contradiction: variable has no feasible assignment
-        dm == DM_NONE && return false
-
-        # Pick the corresponding mask (0 or 1)
-        mask_chunks = dm == DM_0 ? masks.axis_masks0[axis].chunks : masks.axis_masks1[axis].chunks
-
-        # Apply the mask and ensure a feasible configuration remains
-        # Optimization: merge computation and checking to avoid extra memory traffic
-        has_nonzero = false
-        for i in 1:n_words
-            feas_chunks[i] &= mask_chunks[i]
-            has_nonzero |= (feas_chunks[i] != 0)
-        end
-
-        # No feasible configuration left, exit early
-        has_nonzero || return false
-    end
-
-    return true
-end
-
-# When tensor has exactly one feasible configuration, fix all its variables to that config.
-@inline function propagate_unit_constraint!(working_doms::Vector{DomainMask}, tensor::BoolTensor, feasible::BitVector, v2t::Vector{Vector{Int}}, tensor_queue::Vector{Int}, in_queue::BitVector, reason::Int, modified_vars::Union{Nothing, Vector{Int}})
-    first_idx = findfirst(feasible)
-    config = first_idx - 1
-
-    @inbounds for (axis, var_id) in enumerate(tensor.var_axes)
-        bit_val = (config >> (axis - 1)) & 1
-        # Branchless: avoid conditional for better performance
-        required_bits = ifelse(bit_val == 1, bits(DM_1), bits(DM_0))
-
-        old_bits = bits(working_doms[var_id])
-        new_bits = old_bits & required_bits
-
-        # Check for contradiction
-        new_bits == 0x00 && return false
-
-        # Update domain and enqueue affected tensors
-        if new_bits != old_bits
-            working_doms[var_id] = DomainMask(new_bits)
-            enqueue_affected_tensors!(tensor_queue, in_queue, v2t, var_id)
-
-            # Track modified variable
-            !isnothing(modified_vars) && push!(modified_vars, var_id)
-        end
-    end
-    return true
-end
-
-# Prune domain values that have no support in any feasible configuration.
-@inline function propagate_support_pruning!(working_doms::Vector{DomainMask}, tensor::BoolTensor, masks::TensorMasks, feasible::BitVector, temp::BitVector, v2t::Vector{Vector{Int}}, tensor_queue::Vector{Int}, in_queue::BitVector, reason::Int, modified_vars::Union{Nothing, Vector{Int}})
-    n_cfg = length(masks.sat)
-    n_words = (n_cfg + 63) >> 6
-    feas_chunks = feasible.chunks
-
-    @inbounds for (axis, var_id) in enumerate(tensor.var_axes)
-        dm = working_doms[var_id]
-        dm_bits = bits(dm)
-
-        if (dm_bits & 0x01) != 0
-            has_support_0 = false
-            mask_chunks = masks.axis_masks0[axis].chunks
-            for i in 1:n_words
-                if (feas_chunks[i] & mask_chunks[i]) != 0
-                    has_support_0 = true
-                    break
-                end
-            end
-            if !has_support_0
-                if !update_domain!(working_doms, var_id, dm_bits, bits(DM_1),
-                                  v2t, tensor_queue, in_queue, reason, modified_vars)
-                    return false
-                end
-            end
-        end
-
-        if (dm_bits & 0x02) != 0
-            has_support_1 = false
-            mask_chunks = masks.axis_masks1[axis].chunks
-            for i in 1:n_words
-                if (feas_chunks[i] & mask_chunks[i]) != 0
-                    has_support_1 = true
-                    break
-                end
-            end
-            if !has_support_1
-                if !update_domain!(working_doms, var_id, dm_bits, bits(DM_0), v2t, tensor_queue, in_queue, reason, modified_vars)
-                    return false
-                end
-            end
+    is_config_feasible(config) = begin
+        !masks.sat[config + 1] && return false
+        all(enumerate(tensor.var_axes)) do (axis, var_id)
+            bit_value = (config >> (axis - 1)) & 1
+            domain = doms[var_id]
+            (bit_value == 0 && domain ∉ (DM_1, DM_NONE)) || (bit_value == 1 && domain ∉ (DM_0, DM_NONE))
         end
     end
 
-    return true
+    return filter(is_config_feasible, 0:(num_configs-1))
 end
 
-# Add all tensors containing the variable to the propagation queue.
-@inline function enqueue_affected_tensors!(
-    tensor_queue::Vector{Int},
-    in_queue::BitVector,
-    v2t::Vector{Vector{Int}},
-    var_id::Int
-)
-    @inbounds for tensor_id in v2t[var_id]
-        if !in_queue[tensor_id]
-            push!(tensor_queue, tensor_id)
-            in_queue[tensor_id] = true
+# Update variable domains based on feasible configurations
+function update_domains_from_configs!(doms::Vector{DomainMask}, tensor::BoolTensor, feasible_configs::Vector{Int})
+    updated_vars = Int[]
+
+    for (axis, var_id) in enumerate(tensor.var_axes)
+        current_domain = doms[var_id]
+        (current_domain == DM_0 || current_domain == DM_1) && continue
+
+        bit_values = [(config >> (axis - 1)) & 1 for config in feasible_configs]
+        has_zero, has_one = (0 ∈ bit_values), (1 ∈ bit_values)
+
+        new_domain = has_zero && has_one ? DM_BOTH : has_zero ? DM_0 : has_one ? DM_1 : DM_NONE
+
+        if new_domain != current_domain
+            doms[var_id] = new_domain
+            push!(updated_vars, var_id)
         end
     end
-end
 
-# Update variable domain by intersecting with keep_mask. Returns false if contradiction.
-@inline function update_domain!(
-    working_doms::Vector{DomainMask},
-    var_id::Int,
-    old_bits::UInt8,
-    keep_bits::UInt8,
-    v2t::Vector{Vector{Int}},
-    tensor_queue::Vector{Int},
-    in_queue::BitVector,
-    reason::Int,
-    modified_vars::Union{Nothing, Vector{Int}}
-)
-    new_bits = old_bits & keep_bits
-
-    # Check for contradiction
-    new_bits == 0x00 && return false
-
-    # Update if changed
-    if new_bits != old_bits
-        working_doms[var_id] = DomainMask(new_bits)
-        enqueue_affected_tensors!(tensor_queue, in_queue, v2t, var_id)
-
-        # Track modified variable
-        !isnothing(modified_vars) && push!(modified_vars, var_id)
-    end
-
-    return true
+    return updated_vars
 end

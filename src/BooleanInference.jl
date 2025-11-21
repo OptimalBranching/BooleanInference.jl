@@ -16,12 +16,12 @@ using Graphs, GraphMakie, Colors
 using GraphMakie
 using CairoMakie: Figure, Axis, save, hidespines!, hidedecorations!, DataAspect
 using NetworkLayout: SFDP, Spring, Stress, Spectral
+import ProblemReductions: BooleanExpr, simple_form, extract_symbols!
 
 include("core/types.jl")
 include("core/static.jl")
 include("core/domain.jl")
 include("core/stats.jl")
-include("core/workspace.jl")
 include("core/problem.jl")
 include("core/region.jl")
 
@@ -29,20 +29,13 @@ include("utils/utils.jl")
 include("utils/circuit_analysis.jl")
 
 include("branching/propagate.jl")
-
 include("branching/measure.jl")
-include("branching/selector.jl")
 
-include("branch_table/TNContraction/knn.jl")
-include("branch_table/TNContraction/contraction.jl")
-include("branch_table/TNContraction/branchtable.jl")
-include("branch_table/TNContraction/new_branchtable.jl")
+include("branch_table/knn.jl")
+include("branch_table/selector.jl")
+include("branch_table/contraction.jl")
+include("branch_table/branchtable.jl")
 
-include("branch_table/SingleTensor/singletensor.jl")
-
-
-include("branching/branch_cache.jl")
-include("branching/greedymerge.jl")
 include("branching/optimal_branching.jl")
 include("utils/visualization.jl")
 include("branching/branch.jl")
@@ -53,14 +46,13 @@ include("interface.jl")
 export Variable, EdgeRef, BoolTensor, BipartiteGraph, DomainMask, TNProblem
 export DM_BOTH, DM_0, DM_1, DM_NONE
 export Region, RegionCacheEntry, RegionCacheState
-export DynamicWorkspace
 
 export is_fixed, has0, has1, init_doms, get_var_value, bits
 
 export setup_problem, setup_from_tensor_network, setup_from_cnf, setup_from_circuit, setup_from_sat
 export factoring_problem, factoring_circuit, factoring_csp
 
-export is_solved, cache_branch_solution!, reset_last_branch_problem!, has_last_branch_problem, last_branch_problem
+export is_solved
 
 export solve, solve_sat_problem, solve_sat_with_assignments, solve_factoring
 export solve_circuit_sat
@@ -75,7 +67,7 @@ export partition_tensor_variables
 export contract_region, contract_tensors, slicing, tensor_unwrapping
 
 export propagate, get_active_tensors, build_tensor_masks
-export TensorMasks, PropagationBuffers
+export TensorMasks
 
 export cache_region!, get_cached_region, clear_all_region_caches!
 
@@ -95,4 +87,6 @@ export handle_no_boundary_case_unfixed
 
 export to_graph, visualize_problem, visualize_highest_degree_vars
 export get_highest_degree_variables, get_tensors_containing_variables
+
+export branching_table
 end

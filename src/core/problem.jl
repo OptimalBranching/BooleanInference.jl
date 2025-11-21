@@ -2,17 +2,18 @@ struct TNProblem <: AbstractProblem
     static::BipartiteGraph
     doms::Vector{DomainMask}
     n_unfixed::Int
-    ws::DynamicWorkspace
+    stats::BranchingStats
+    propagated_cache::Dict{Clause{UInt64}, Vector{DomainMask}}
+
+    function TNProblem(static::BipartiteGraph, doms::Vector{DomainMask}, stats::BranchingStats=BranchingStats(), propagated_cache::Dict{Clause{UInt64}, Vector{DomainMask}}=Dict{Clause{UInt64}, Vector{DomainMask}}())
+        n_unfixed = count_unfixed(doms)
+        new(static, doms, n_unfixed, stats, propagated_cache)
+    end
 end
 
-function TNProblem(static::BipartiteGraph; verbose::Bool = false)::TNProblem
-    doms = init_doms(static)
-
-    ws = DynamicWorkspace(length(static.vars), verbose)
-    # Initial propagation at level 0 (no decisions yet)
-    doms = propagate(static, doms, collect(1:length(static.vars)), ws)
-    n_unfixed = count_unfixed(doms)
-    return TNProblem(static, doms, n_unfixed, ws)
+function TNProblem(static::BipartiteGraph)
+    doms = propagate(static, init_doms(static))
+    return TNProblem(static, doms)
 end
 
 function Base.show(io::IO, problem::TNProblem)
@@ -24,33 +25,6 @@ get_var_value(problem::TNProblem, var_ids::Vector{Int}) = Bool[get_var_value(pro
 
 is_solved(problem::TNProblem) = problem.n_unfixed == 0
 
-function cache_branch_solution!(problem::TNProblem)
-    ws = problem.ws
-    copyto!(ws.cached_doms, problem.doms)
-    ws.has_cached_solution = true
-    return nothing
-end
+get_branching_stats(problem::TNProblem) = copy(problem.stats)
 
-function reset_last_branch_problem!(problem::TNProblem)
-    problem.ws.has_cached_solution = false
-    return nothing
-end
-
-@inline has_last_branch_problem(problem::TNProblem) = problem.ws.has_cached_solution
-
-function last_branch_problem(problem::TNProblem)
-    has_last_branch_problem(problem) || return nothing
-    doms = copy(problem.ws.cached_doms)
-    fixed = count(x -> is_fixed(x), doms)
-    @assert fixed == length(doms)
-    return TNProblem(problem.static, doms, 0, problem.ws)
-end
-
-function get_branching_stats(problem::TNProblem)
-    return copy(problem.ws.branch_stats)
-end
-
-function reset_branching_stats!(problem::TNProblem)
-    reset!(problem.ws.branch_stats)
-    return nothing
-end
+reset_branching_stats!(problem::TNProblem) = reset!(problem.stats)
