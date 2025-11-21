@@ -39,7 +39,7 @@ function _k_neighboring(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var:
         for var in frontier
             for tensor_id in tn.v2t[var]
                 visited_tensors[tensor_id] && continue
-                hard_only && !is_hard(tn, doms, tensor_id) && continue
+                hard_only && (!is_hard(tn, doms)[tensor_id]; continue)
 
                 visited_tensors[tensor_id] = true
                 push!(collected_tensors, tensor_id)
@@ -68,18 +68,10 @@ function _k_neighboring(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var:
     return Region(focus_var, collected_tensors, inner, boundary)
 end
 
-function k_neighboring(tn::BipartiteGraph,
-                       doms::Vector{DomainMask},
-                       focus_var::Int;
-                       max_tensors::Int,
-                       k::Int = 2)
+function k_neighboring(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var::Int; max_tensors::Int, k::Int = 2)
     return _k_neighboring(tn, doms, focus_var; max_tensors = max_tensors, k = k, hard_only = false)
 end
 
-function k_neighboring_hard(tn::BipartiteGraph,
-                            doms::Vector{DomainMask},
-                            focus_var::Int;
-                            max_tensors::Int,
-                            k::Int = 2)
+function k_neighboring_hard(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var::Int; max_tensors::Int, k::Int = 2)
     return _k_neighboring(tn, doms, focus_var; max_tensors = max_tensors, k = k, hard_only = true)
 end

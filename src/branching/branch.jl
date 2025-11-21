@@ -38,61 +38,30 @@ end
 # Main branch-and-reduce algorithm
 function branch_and_reduce!(problem::TNProblem, config::OptimalBranchingCore.BranchingStrategy, reducer::OptimalBranchingCore.AbstractReducer, result_type::Type{TR}; show_progress::Bool=false, tag::Vector{Tuple{Int,Int}}=Tuple{Int,Int}[]) where TR
     stats = problem.stats
-    current_depth = length(tag)
     empty!(problem.propagated_cache)
 
-    if is_solved(problem)
-        record_solved_leaf!(stats, current_depth)
-        return result_type(true, problem.doms)
-    end
-
-    record_depth!(stats, current_depth)
-
-    # Select region for branching
+    is_solved(problem) && return result_type(true, problem.doms, copy(stats))
     region = select_region(problem, config.measure, config.selector)
 
-    # Compute branching table
     tbl, variables = branching_table!(problem, config.table_solver, region)
+    isempty(tbl.table) && return result_type(false, nothing, copy(stats))
 
-    # Check if table is empty (UNSAT)
-    if isempty(tbl.table)
-        record_unsat_leaf!(stats, current_depth)
-        return zero(result_type)
-    end
-
-    # Compute optimal branching rule
     result = OptimalBranchingCore.optimal_branching_rule(tbl, variables, problem, config.measure, config.set_cover_solver)
-    # Branch and recurse
     clauses = OptimalBranchingCore.get_clauses(result)
-    record_branch!(stats, length(clauses), current_depth)
+    record_branch!(stats, length(clauses))
 
-    accum = zero(result_type)
-    for (i, clause) in enumerate(clauses)
+    accum = result_type(false, nothing, copy(stats))
+    @inbounds for (i, clause) in enumerate(clauses)
         show_progress && (OptimalBranchingCore.print_sequence(stdout, tag); println(stdout))
-
-        # Read the propagated domains from the cache
         propagated_doms = problem.propagated_cache[clause]
 
-        if count_unfixed(propagated_doms) == 0
-            record_solved_leaf!(stats, current_depth)
-            return result_type(true, propagated_doms)
-        end
-
         subproblem = TNProblem(problem.static, propagated_doms, problem.stats, Dict{Clause{UInt64}, Vector{DomainMask}}())
-
-        # Recursively solve subproblem
         push!(tag, (i, length(clauses)))
         sub_result = branch_and_reduce!(subproblem, config, reducer, result_type; tag, show_progress)
         pop!(tag)
 
-        # Combine results
         accum = accum + sub_result
-
-        # Early exit if found solution
-        if accum > zero(result_type)
-            return accum
-        end
+        accum.found && return accum
     end
-
     return accum
 end

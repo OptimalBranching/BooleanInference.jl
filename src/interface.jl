@@ -37,9 +37,8 @@ end
 function solve(problem::TNProblem, bsconfig::BranchingStrategy, reducer::AbstractReducer; show_stats::Bool=false)
     reset_problem!(problem)  # Reset stats before solving
     result = branch_and_reduce!(problem, bsconfig, reducer, Result; show_progress=false)
-    stats = get_branching_stats(problem)
-    show_stats && print_stats_summary(stats)
-    return (result, stats)
+    show_stats && print_stats_summary(result.stats)
+    return result
 end
 
 function solve_sat_problem(
@@ -53,8 +52,8 @@ function solve_sat_problem(
     show_stats::Bool=false
 )
     tn_problem = setup_from_sat(sat)
-    result, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
-    return result.found, stats
+    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
+    return result.found, result.stats
 end
 
 function solve_sat_with_assignments(
@@ -69,7 +68,7 @@ function solve_sat_with_assignments(
 )
     # Solve directly to get result
     tn_problem = setup_from_sat(sat)
-    result, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
+    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
 
     if result.found && !isnothing(result.solution)
         # Convert Result to variable assignments
@@ -77,9 +76,9 @@ function solve_sat_with_assignments(
         for (i, symbol) in enumerate(sat.symbols)
             assignments[symbol] = get_var_value(result.solution, i)
         end
-        return true, assignments, stats
+        return true, assignments, result.stats
     else
-        return false, Dict{Symbol, Int}(), stats
+        return false, Dict{Symbol, Int}(), result.stats
     end
 end
 
@@ -92,10 +91,10 @@ function solve_factoring(
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
         # table_solver=SingleTensorSolver(),
-        selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
-        # selector=MostOccurrenceSelector(),
+        # selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
+        selector=MostOccurrenceSelector(1,3),
         # selector=MostConnectedTensorSelector(),
-        measure=NumHardTensors(),
+        measure=NumUnfixedVars(),
         set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
@@ -105,13 +104,13 @@ function solve_factoring(
     circuit_sat = reduceto(CircuitSAT, fproblem)
     problem = CircuitSAT(circuit_sat.circuit.circuit; use_constraints=true)
     tn_problem = setup_from_sat(problem)
-    result, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
+    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
     if !result.found || isnothing(result.solution)
-        return nothing, nothing, stats
+        return nothing, nothing, result.stats
     end
     a = get_var_value(result.solution, circuit_sat.q)
     b = get_var_value(result.solution, circuit_sat.p)
-    return bits_to_int(a), bits_to_int(b), stats
+    return bits_to_int(a), bits_to_int(b), result.stats
 end
 
 
@@ -126,6 +125,6 @@ function solve_circuit_sat(
     show_stats::Bool=false
 )
     tn_problem = setup_from_circuit(circuit)
-    result, stats = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
-    return result.found, stats
+    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
+    return result.found, result.stats
 end
