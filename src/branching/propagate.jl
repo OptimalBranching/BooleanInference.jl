@@ -15,8 +15,7 @@ function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, changed_var
         queue_index += 1
 
         tensor = static.tensors[tensor_id]
-        masks = static.tensor_to_masks[tensor_id]
-        feasible_configs = find_feasible_configs(working_doms, tensor, masks)
+        feasible_configs = find_feasible_configs(working_doms, tensor)
 
         isempty(feasible_configs) && return fill(DM_NONE, length(working_doms))
 
@@ -31,11 +30,14 @@ function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, changed_var
 end
 
 # Find all configurations of the tensor that are feasible given current variable domains
-function find_feasible_configs(doms::Vector{DomainMask}, tensor::BoolTensor, masks::TensorMasks)
+function find_feasible_configs(doms::Vector{DomainMask}, tensor::BoolTensor)
     num_configs = 1 << length(tensor.var_axes)
 
     is_config_feasible(config) = begin
-        !masks.sat[config + 1] && return false
+        # Check if this configuration satisfies the tensor constraint
+        tensor.tensor[config + 1] != Tropical(0.0) && return false
+        
+        # Check if configuration is compatible with current variable domains
         all(enumerate(tensor.var_axes)) do (axis, var_id)
             bit_value = (config >> (axis - 1)) & 1
             domain = doms[var_id]

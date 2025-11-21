@@ -2,7 +2,6 @@ struct BipartiteGraph
     vars::Vector{Variable}
     tensors::Vector{BoolTensor}
     v2t::Vector{Vector{Int}}
-    tensor_to_masks::Vector{TensorMasks}
     tensor_depths::Vector{Int}
     tensor_fanin::Vector{Vector{Int}}
     tensor_fanout::Vector{Vector{Int}}
@@ -44,28 +43,6 @@ function setup_problem(var_num::Int,
         vars[i] = Variable(length(vars_to_tensors[i]))
     end
 
-    # Precompute masks for every unique tensor
-    # Strategy: use hash values to quickly find identical tensors and avoid recomputation
-    tensor_to_masks = Vector{TensorMasks}(undef, F)
-
-    # Dictionary keyed by hash for fast lookup during construction
-    hash_to_masks = Dict{UInt, TensorMasks}()
-
-    for (i, tensor) in enumerate(tensors)
-        # Compute the hash of the tensor contents
-        tensor_hash = hash(tensor.tensor)
-
-        if haskey(hash_to_masks, tensor_hash)
-            # Reuse the previously computed masks
-            tensor_to_masks[i] = hash_to_masks[tensor_hash]
-        else
-            # First time we see this hash, compute the masks
-            masks = build_tensor_masks(tensor)
-            hash_to_masks[tensor_hash] = masks
-            tensor_to_masks[i] = masks
-        end
-    end
-
     if isempty(tensor_depths)
         tensor_depths = zeros(Int, F)
     end
@@ -79,7 +56,7 @@ function setup_problem(var_num::Int,
         tensor_symbols = fill(:unknown, F)
     end
 
-    return BipartiteGraph(vars, tensors, vars_to_tensors, tensor_to_masks, tensor_depths, tensor_fanin, tensor_fanout, tensor_symbols)
+    return BipartiteGraph(vars, tensors, vars_to_tensors, tensor_depths, tensor_fanin, tensor_fanout, tensor_symbols)
 end
 
 function setup_from_tensor_network(tn; tensor_depths::Vector{Int}=Int[], tensor_fanin::Vector{Vector{Int}}=Vector{Int}[], tensor_fanout::Vector{Vector{Int}}=Vector{Int}[], tensor_symbols::Vector{Symbol}=Symbol[])::BipartiteGraph

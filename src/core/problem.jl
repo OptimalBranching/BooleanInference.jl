@@ -35,6 +35,7 @@ end
 
 function TNProblem(static::BipartiteGraph, ::Type{INT}=UInt64) where {INT<:Integer}
     doms = propagate(static, init_doms(static))
+    has_contradiction(doms) && error("Domain has contradiction")
     return TNProblem{INT}(static, doms)
 end
 

@@ -1,9 +1,9 @@
 using BooleanInference
-using BooleanInference.GenericTensorNetworks
-using BooleanInference.GenericTensorNetworks: ∧, ∨, ¬
+using GenericTensorNetworks
+using GenericTensorNetworks: ∧, ∨, ¬
 using Test
-using BooleanInference.GenericTensorNetworks.ProblemReductions
-using BooleanInference.OptimalBranchingCore
+using GenericTensorNetworks.ProblemReductions
+using OptimalBranchingCore
 
 @testset "setup_from_cnf" begin
     @bools a b c d e f g
@@ -49,11 +49,7 @@ end
 
     cnf = ∧(∨(a), ∨(a,¬c), ∨(d,¬b), ∨(¬c,¬d), ∨(a,e), ∨(a,e,¬c), ∨(¬a))
     sat = Satisfiability(cnf; use_constraints=true)
-    res, dict, stats = solve_sat_with_assignments(sat)
-    @test res == false
-    # @test satisfiable(cnf, dict) == false
-    @test isempty(dict)
-    @test stats.total_branches >= 0
+    @test_throws ErrorException setup_from_sat(sat)
 end
 
 @testset "solve_factoring" begin

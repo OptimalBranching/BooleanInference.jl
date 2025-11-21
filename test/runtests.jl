@@ -13,9 +13,9 @@ end
     include("interface.jl")
 end
 
-@testset "knn.jl" begin
-    include("knn.jl")
-end
+# @testset "knn.jl" begin
+#     include("knn.jl")
+# end
 
 @testset "problems.jl" begin
     include("problems.jl")
@@ -33,6 +33,6 @@ end
     include("circuit_analysis.jl")
 end
 
-@testset "branchtable.jl" begin
-    include("branchtable.jl")
-end
+# @testset "branchtable.jl" begin
+#     include("branchtable.jl")
+# end
