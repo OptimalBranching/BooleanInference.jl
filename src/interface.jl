@@ -92,7 +92,7 @@ function solve_factoring(
         table_solver=TNContractionSolver(),
         # table_solver=SingleTensorSolver(),
         # selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
-        selector=MostOccurrenceSelector(1,3),
+        selector=MostOccurrenceSelector(1,2),
         # selector=MostConnectedTensorSelector(),
         measure=NumUnfixedVars(),
         set_cover_solver=GreedyMerge()

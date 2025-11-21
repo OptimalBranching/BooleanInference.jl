@@ -15,17 +15,13 @@ function apply_clause(clause::Clause, variables::Vector{Int}, original_doms::Vec
     return doms, changed_vars
 end
 
-# Apply a clause to domains and propagate (internal helper)
 function apply_branch!(problem::TNProblem, clause::OptimalBranchingCore.Clause, variables::Vector{Int})
-    # Try to use cached propagated domains
     haskey(problem.propagated_cache, clause) && (return problem.propagated_cache[clause])
 
-    # Cache miss: compute from scratch
     doms, changed_vars = apply_clause(clause, variables, problem.doms)
     propagated_doms = propagate(problem.static, doms, changed_vars)
 
     @assert !has_contradiction(propagated_doms) "Contradiction found when applying clause $clause"
-    # Cache the result for future use
     problem.propagated_cache[clause] = propagated_doms
     return propagated_doms
 end
@@ -42,6 +38,7 @@ function branch_and_reduce!(problem::TNProblem, config::OptimalBranchingCore.Bra
 
     is_solved(problem) && return result_type(true, problem.doms, copy(stats))
     region = select_region(problem, config.measure, config.selector)
+    isnothing(region) && return result_type(false, nothing, copy(stats))
 
     tbl, variables = branching_table!(problem, config.table_solver, region)
     isempty(tbl.table) && return result_type(false, nothing, copy(stats))
