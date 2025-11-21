@@ -18,7 +18,7 @@ end
 # Apply a clause to domains and propagate (internal helper)
 function apply_branch!(problem::TNProblem, clause::OptimalBranchingCore.Clause, variables::Vector{Int})
     # Try to use cached propagated domains
-    haskey(problem.propagated_cache, clause) && return problem.propagated_cache[clause]
+    haskey(problem.propagated_cache, clause) && (return problem.propagated_cache[clause])
 
     # Cache miss: compute from scratch
     doms, changed_vars = apply_clause(clause, variables, problem.doms)
@@ -30,19 +30,20 @@ function apply_branch!(problem::TNProblem, clause::OptimalBranchingCore.Clause, 
     return propagated_doms
 end
 
-function OptimalBranchingCore.size_reduction(p::TNProblem, m::AbstractMeasure, cl::Clause{INT}, variables::Vector{Int}) where {INT}
+function OptimalBranchingCore.size_reduction(p::TNProblem{INT}, m::AbstractMeasure, cl::Clause{INT}, variables::Vector{Int}) where {INT}
     new_doms = apply_branch!(p, cl, variables)
-    return measure(p, m) - measure(TNProblem(p.static, new_doms), m)
+    return measure(p, m) - measure(TNProblem(p.static, new_doms, INT), m)
 end
 
 # Main branch-and-reduce algorithm
-function OptimalBranchingCore.branch_and_reduce(problem::TNProblem, config::OptimalBranchingCore.BranchingStrategy, reducer::OptimalBranchingCore.AbstractReducer, result_type::Type{TR}; show_progress::Bool=false, tag::Vector{Tuple{Int,Int}}=Tuple{Int,Int}[]) where TR
+function branch_and_reduce!(problem::TNProblem, config::OptimalBranchingCore.BranchingStrategy, reducer::OptimalBranchingCore.AbstractReducer, result_type::Type{TR}; show_progress::Bool=false, tag::Vector{Tuple{Int,Int}}=Tuple{Int,Int}[]) where TR
     stats = problem.stats
     current_depth = length(tag)
+    empty!(problem.propagated_cache)
 
     if is_solved(problem)
         record_solved_leaf!(stats, current_depth)
-        return one(result_type)
+        return result_type(true, problem.doms)
     end
 
     record_depth!(stats, current_depth)
@@ -61,7 +62,6 @@ function OptimalBranchingCore.branch_and_reduce(problem::TNProblem, config::Opti
 
     # Compute optimal branching rule
     result = OptimalBranchingCore.optimal_branching_rule(tbl, variables, problem, config.measure, config.set_cover_solver)
-
     # Branch and recurse
     clauses = OptimalBranchingCore.get_clauses(result)
     record_branch!(stats, length(clauses), current_depth)
@@ -72,18 +72,17 @@ function OptimalBranchingCore.branch_and_reduce(problem::TNProblem, config::Opti
 
         # Read the propagated domains from the cache
         propagated_doms = problem.propagated_cache[clause]
-        
+
         if count_unfixed(propagated_doms) == 0
             record_solved_leaf!(stats, current_depth)
-            @show problem.stats
-            return one(result_type)
+            return result_type(true, propagated_doms)
         end
 
-        subproblem = TNProblem(problem.static, propagated_doms, problem.stats)
+        subproblem = TNProblem(problem.static, propagated_doms, problem.stats, Dict{Clause{UInt64}, Vector{DomainMask}}())
 
         # Recursively solve subproblem
         push!(tag, (i, length(clauses)))
-        sub_result = OptimalBranchingCore.branch_and_reduce(subproblem, config, reducer, result_type; tag, show_progress)
+        sub_result = branch_and_reduce!(subproblem, config, reducer, result_type; tag, show_progress)
         pop!(tag)
 
         # Combine results

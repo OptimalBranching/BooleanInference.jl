@@ -25,18 +25,14 @@ end
     include("propagate.jl")
 end
 
-@testset "selector.jl" begin
-    include("selector.jl")
-end
-
-@testset "stats.jl" begin
-    include("stats.jl")
-end
-
 @testset "greedymerge.jl" begin
     include("greedymerge.jl")
 end
 
 @testset "circuit_analysis.jl" begin
     include("circuit_analysis.jl")
+end
+
+@testset "branchtable.jl" begin
+    include("branchtable.jl")
 end

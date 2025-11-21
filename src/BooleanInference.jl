@@ -36,14 +36,13 @@ include("branch_table/selector.jl")
 include("branch_table/contraction.jl")
 include("branch_table/branchtable.jl")
 
-include("branching/optimal_branching.jl")
 include("utils/visualization.jl")
 include("branching/branch.jl")
 
 include("interface.jl")
 
 
-export Variable, EdgeRef, BoolTensor, BipartiteGraph, DomainMask, TNProblem
+export Variable, EdgeRef, BoolTensor, BipartiteGraph, DomainMask, TNProblem, Result
 export DM_BOTH, DM_0, DM_1, DM_NONE
 export Region, RegionCacheEntry, RegionCacheState
 
@@ -77,7 +76,7 @@ export get_unfixed_vars, count_unfixed, bits_to_int
 export circuit_output_distances
 export compute_circuit_info, map_tensor_to_circuit_info
 
-export get_branching_stats, reset_branching_stats!, print_branching_stats
+export get_branching_stats, reset_problem!, print_branching_stats
 
 export BranchingStats
 export print_stats_summary
@@ -88,5 +87,5 @@ export handle_no_boundary_case_unfixed
 export to_graph, visualize_problem, visualize_highest_degree_vars
 export get_highest_degree_variables, get_tensors_containing_variables
 
-export branching_table
+export branching_table!, branch_and_reduce!
 end

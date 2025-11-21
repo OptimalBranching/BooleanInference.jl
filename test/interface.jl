@@ -78,9 +78,9 @@ end
     @test initial_stats.max_depth == 0
     
     # Solve and check stats are recorded
-    result, depth, stats = BooleanInference.solve(tn_problem, 
-        BranchingStrategy(table_solver=TNContractionSolver(1, 2), 
-                         selector=MostOccurrenceSelector(), 
+    result, stats = BooleanInference.solve(tn_problem, 
+        BranchingStrategy(table_solver=TNContractionSolver(), 
+                         selector=MostOccurrenceSelector(1,2), 
                          measure=NumUnfixedVars()), 
         NoReducer())
     
@@ -95,29 +95,9 @@ end
     print_stats_summary(stats)
     
     # Test reset functionality
-    reset_branching_stats!(tn_problem)
+    reset_problem!(tn_problem)
     reset_stats = get_branching_stats(tn_problem)
     @test reset_stats.total_branches == 0
     @test reset_stats.total_subproblems == 0
     @test reset_stats.max_depth == 0
 end
-
-# @testset "benchmark" begin
-# 	table_solver = TNContractionSolver()
-# 	reducer = NoReducer()
-# 	for selector in []
-# 		for measure in [NumOfVertices(), NumOfClauses(), NumOfDegrees()]
-#             println("$measure,$selector")
-# 			solve_factoring(8, 8, 1019 * 1021; bsconfig = BranchingStrategy(; table_solver, selector, measure), reducer)
-# 		end
-# 	end
-# end
-
-# @testset "interface" begin
-#     solve_factoring(8, 8, 1019 * 1021; bsconfig = BranchingStrategy(; table_solver= TNContractionSolver(), selector=KNeighborSelector(1, 1), measure=NumOfDegrees()), reducer= NoReducer())
-#     solve_factoring(5, 5, 899; bsconfig = BranchingStrategy(; table_solver= TNContractionSolver(), selector=KNeighborSelector(1, 1), measure=NumOfDegrees()), reducer= NoReducer())
-	
-# 	bs = BranchingStrategy(table_solver = TNContractionSolver(), selector = KNeighborSelector(1, 1), set_cover_solver = BooleanInference.OptimalBranchingCore.GreedyMerge(),measure=NumOfDegrees())
-
-# 	solve_factoring(8, 8, 1019 * 1021; bsconfig = bs, reducer= NoReducer())
-# end

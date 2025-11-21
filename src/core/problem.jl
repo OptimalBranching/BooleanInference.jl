@@ -1,19 +1,50 @@
-struct TNProblem <: AbstractProblem
+# Result type for branch-and-reduce solving
+struct Result
+    found::Bool
+    solution::Union{Nothing, Vector{DomainMask}}
+end
+
+# Interface required by OptimalBranchingCore
+Base.one(::Type{Result}) = Result(true, nothing)
+Base.zero(::Type{Result}) = Result(false, nothing)
+Base.:+(a::Result, b::Result) = a.found ? a : b
+Base.:>(a::Result, b::Result) = a.found && !b.found
+
+function Base.show(io::IO, r::Result)
+    if r.found
+        has_sol = !isnothing(r.solution)
+        print(io, "Result(found=true, solution=$(has_sol ? "available" : "none"))")
+    else
+        print(io, "Result(found=false)")
+    end
+end
+
+struct TNProblem{INT<:Integer} <: AbstractProblem
     static::BipartiteGraph
     doms::Vector{DomainMask}
     n_unfixed::Int
     stats::BranchingStats
-    propagated_cache::Dict{Clause{UInt64}, Vector{DomainMask}}
+    propagated_cache::Dict{Clause{INT}, Vector{DomainMask}}
 
-    function TNProblem(static::BipartiteGraph, doms::Vector{DomainMask}, stats::BranchingStats=BranchingStats(), propagated_cache::Dict{Clause{UInt64}, Vector{DomainMask}}=Dict{Clause{UInt64}, Vector{DomainMask}}())
+    function TNProblem{INT}(static::BipartiteGraph, doms::Vector{DomainMask}, stats::BranchingStats=BranchingStats(), propagated_cache::Dict{Clause{INT}, Vector{DomainMask}}=Dict{Clause{INT}, Vector{DomainMask}}()) where {INT<:Integer}
         n_unfixed = count_unfixed(doms)
-        new(static, doms, n_unfixed, stats, propagated_cache)
+        new{INT}(static, doms, n_unfixed, stats, propagated_cache)
     end
 end
 
-function TNProblem(static::BipartiteGraph)
+function TNProblem(static::BipartiteGraph, ::Type{INT}=UInt64) where {INT<:Integer}
     doms = propagate(static, init_doms(static))
-    return TNProblem(static, doms)
+    return TNProblem{INT}(static, doms)
+end
+
+# Constructor with explicit domains
+function TNProblem(static::BipartiteGraph, doms::Vector{DomainMask}, ::Type{INT}=UInt64) where {INT<:Integer}
+    return TNProblem{INT}(static, doms)
+end
+
+# Constructor with all parameters (for internal use)
+function TNProblem(static::BipartiteGraph, doms::Vector{DomainMask}, stats::BranchingStats, propagated_cache::Dict{Clause{INT}, Vector{DomainMask}}) where {INT<:Integer}
+    return TNProblem{INT}(static, doms, stats, propagated_cache)
 end
 
 function Base.show(io::IO, problem::TNProblem)
@@ -27,4 +58,4 @@ is_solved(problem::TNProblem) = problem.n_unfixed == 0
 
 get_branching_stats(problem::TNProblem) = copy(problem.stats)
 
-reset_branching_stats!(problem::TNProblem) = reset!(problem.stats)
+reset_problem!(problem::TNProblem) = (reset!(problem.stats); empty!(problem.propagated_cache))
