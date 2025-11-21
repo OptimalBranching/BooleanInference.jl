@@ -5,6 +5,7 @@
     DM_BOTH = 0x03
 end
 
+init_doms(static::BipartiteGraph) = fill(DM_BOTH, length(static.vars))
 # Get the underlying bits value
 @inline bits(dm::DomainMask)::UInt8 = UInt8(dm)
 
@@ -21,17 +22,15 @@ function get_var_value(dms::Vector{DomainMask}, var_id::Int)
     return -1  # not fixed
 end
 
-function is_hard(tn::BipartiteGraph, doms::Vector{DomainMask}, tensor_id::Int)
-    vars = tn.tensors[tensor_id].var_axes
-    degree = 0
-    @inbounds for var_id in vars
-        !is_fixed(doms[var_id]) && (degree += 1)
+function active_degree(tn::BipartiteGraph, doms::Vector{DomainMask})
+    degree = zeros(Int, length(tn.tensors))
+    @inbounds for (tensor_id, tensor) in enumerate(tn.tensors)
+        vars = tensor.var_axes
+        degree[tensor_id] = sum(!is_fixed(doms[var_id]) for var_id in vars)
     end
-    # @show degree
-    return degree > 2
+    return degree
 end
-
-init_doms(static::BipartiteGraph) = fill(DM_BOTH, length(static.vars))
+is_hard(tn::BipartiteGraph, doms::Vector{DomainMask}) = active_degree(tn, doms) .> 2
 
 @inline has_contradiction(doms::Vector{DomainMask}) = any(dm -> dm == DM_NONE, doms)
 
@@ -53,11 +52,9 @@ function Base.show(io::IO, ::MIME"text/plain", dm::DomainMask)
     end
 end
 
-# Concrete type for cached branch results (used in DynamicWorkspace)
-# This must be defined before workspace.jl is loaded
+# Concrete type for cached branch results
 struct BranchCacheEntry
     doms::Vector{DomainMask}
     n_unfixed::Int
     local_value::Int
-    assignments::Vector{Tuple{Int,Bool}}  # Branching decisions (clause assignments)
 end

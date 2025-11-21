@@ -1,8 +1,3 @@
-# Performance Note:
-# For maximum performance on large problems, set verbose=false and show_stats=false.
-# This disables all detailed statistics collection (timing, path tracking, etc.)
-# and only collects basic counters.
-
 function setup_from_cnf(cnf::CNF; verbose::Bool=false)
     return setup_from_sat(Satisfiability(cnf; use_constraints=true); verbose)
 end
@@ -99,9 +94,9 @@ end
 function solve_factoring(
     n::Int, m::Int, N::Int;
     bsconfig::BranchingStrategy=BranchingStrategy(
-        table_solver=NewTNContractionSolver(1,2),
+        table_solver=TNContractionSolver(),
         # table_solver=SingleTensorSolver(),
-        selector=MinGammaSelector(NewTNContractionSolver(1,2), GreedyMerge()),
+        selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
         # selector=MostOccurrenceSelector(),
         # selector=MostConnectedTensorSelector(),
         measure=NumHardTensors(),

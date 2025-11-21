@@ -26,13 +26,3 @@ function OptimalBranchingCore.measure(problem::TNProblem, ::NumHardTensors)
     end
     return hard_tensor_num
 end
-
-# struct VarDegree <: AbstractMeasure end
-# function OptimalBranchingCore.measure(problem::TNProblem, ::VarDegree)
-#     unfixed_vars = get_unfixed_vars(problem)
-#     degree = 0
-#     for var in unfixed_vars
-#         degree += problem.static.vars[var].deg
-#     end
-#     return degree
-# end

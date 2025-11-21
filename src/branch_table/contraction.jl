@@ -1,6 +1,4 @@
 function contract_region(tn::BipartiteGraph, region::Region, doms::Vector{DomainMask})
-    # @show region.id
-    # println(union(region.boundary_vars, region.inner_vars))
     n_tensors = length(region.tensors)
     
     sliced_tensors = Vector{Vector{Tropical{Float64}}}(undef, n_tensors)
