@@ -15,11 +15,15 @@ Base.convert(::Type{DomainMask}, bits::UInt8) = reinterpret(DomainMask, bits)
 @inline is_fixed(dm::DomainMask) = (dm == DM_0) || (dm == DM_1)
 @inline has0(dm::DomainMask)::Bool = (bits(dm) & 0x01) != 0
 @inline has1(dm::DomainMask)::Bool = (bits(dm) & 0x02) != 0
+
 function get_var_value(dms::Vector{DomainMask}, var_id::Int)
     dm = dms[var_id]
     dm == DM_0 && return 0
     dm == DM_1 && return 1
-    return -1  # not fixed
+    @assert false "Variable $var_id is not fixed"
+end
+function get_var_value(dms::Vector{DomainMask}, var_ids::Vector{Int})
+    return Bool[get_var_value(dms, var_id) for var_id in var_ids]
 end
 
 function active_degree(tn::BipartiteGraph, doms::Vector{DomainMask})

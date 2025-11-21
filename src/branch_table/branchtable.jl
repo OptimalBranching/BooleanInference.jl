@@ -3,8 +3,7 @@ struct TNContractionSolver <: AbstractTableSolver end
 function branching_table!(problem::TNProblem, ::TNContractionSolver, region::Region)
     contracted_tensor, output_var_ids = contract_region(problem.static, region, problem.doms)
     # Scan the contracted tensor: every entry equal to one(Tropical)
-    @show contracted_tensor
-    configs = map(ci -> packint(ci.I .- 1), findall(isone, contracted_tensor))
+    configs = map(packint, findall(isone, contracted_tensor))
     # propagate the configurations to get the feasible solutions
     feasible_configs = collect_feasible!(problem, region, configs)
     table = BranchingTable(length(output_var_ids), [[c] for c in feasible_configs])
@@ -12,6 +11,8 @@ function branching_table!(problem::TNProblem, ::TNContractionSolver, region::Reg
 end
 
 packint(bits::NTuple{N, Int}) where {N} = reduce(|, (UInt64(b) << (i - 1) for (i, b) in enumerate(bits)); init = UInt64(0))
+packint(i::Int) = packint((i - 1,))
+packint(ci::CartesianIndex{N}) where {N} = packint(ntuple(j -> ci.I[j] - 1, N))
 
 # Apply a clause to domain masks, fixing variables according to the clause's mask and values
 function apply_config!(config::UInt64, variables::Vector{Int}, original_doms::Vector{DomainMask})
