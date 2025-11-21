@@ -45,7 +45,7 @@ end
     @test satisfiable(cnf, dict) == true
     # Test that stats are recorded
     @test stats.total_branches >= 0
-    @test stats.max_depth >= 0
+    @test stats.total_subproblems >= 0
 
     cnf = ∧(∨(a), ∨(a,¬c), ∨(d,¬b), ∨(¬c,¬d), ∨(a,e), ∨(a,e,¬c), ∨(¬a))
     sat = Satisfiability(cnf; use_constraints=true)
@@ -61,7 +61,7 @@ end
     @test a*b == 31*29
     @test stats.total_branches >= 0
     @test stats.total_subproblems >= 0
-    println("Factoring stats: branches=$(stats.total_branches), subproblems=$(stats.total_subproblems), max_depth=$(stats.max_depth)")
+    println("Factoring stats: branches=$(stats.total_branches), subproblems=$(stats.total_subproblems)")
 end
 
 @testset "branching_statistics" begin
@@ -75,29 +75,26 @@ end
     initial_stats = get_branching_stats(tn_problem)
     @test initial_stats.total_branches == 0
     @test initial_stats.total_subproblems == 0
-    @test initial_stats.max_depth == 0
-    
+
     # Solve and check stats are recorded
-    result, stats = BooleanInference.solve(tn_problem, 
-        BranchingStrategy(table_solver=TNContractionSolver(), 
-                         selector=MostOccurrenceSelector(1,2), 
-                         measure=NumUnfixedVars()), 
+    result = BooleanInference.solve(tn_problem,
+        BranchingStrategy(table_solver=TNContractionSolver(),
+                         selector=MostOccurrenceSelector(1,2),
+                         measure=NumUnfixedVars()),
         NoReducer())
-    
+
     # Stats should have been recorded
-    @test stats.total_branches > 0 || result !== nothing  # Either branched or solved immediately
-    @test stats.total_subproblems >= 0  # Each branch creates at least 2 subproblems
-    @test stats.max_depth >= 0
-    @test stats.avg_branching_factor >= 0.0
-    
+    @test result.stats.total_branches >= 0
+    @test result.stats.total_subproblems >= 0
+    @test result.stats.avg_branching_factor >= 0.0
+
     # Print stats for debugging
     println("\nBranching Statistics:")
-    print_stats_summary(stats)
+    print_stats_summary(result.stats)
     
     # Test reset functionality
     reset_problem!(tn_problem)
     reset_stats = get_branching_stats(tn_problem)
     @test reset_stats.total_branches == 0
     @test reset_stats.total_subproblems == 0
-    @test reset_stats.max_depth == 0
 end

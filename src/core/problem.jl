@@ -2,20 +2,21 @@
 struct Result
     found::Bool
     solution::Union{Nothing, Vector{DomainMask}}
+    stats::BranchingStats
 end
 
 # Interface required by OptimalBranchingCore
-Base.one(::Type{Result}) = Result(true, nothing)
-Base.zero(::Type{Result}) = Result(false, nothing)
+Base.one(::Type{Result}) = Result(true, nothing, BranchingStats())
+Base.zero(::Type{Result}) = Result(false, nothing, BranchingStats())
 Base.:+(a::Result, b::Result) = a.found ? a : b
 Base.:>(a::Result, b::Result) = a.found && !b.found
 
 function Base.show(io::IO, r::Result)
     if r.found
         has_sol = !isnothing(r.solution)
-        print(io, "Result(found=true, solution=$(has_sol ? "available" : "none"))")
+        print(io, "Result(found=true, solution=$(has_sol ? "available" : "none"), stats=...)")
     else
-        print(io, "Result(found=false)")
+        print(io, "Result(found=false, stats=...)")
     end
 end
 
