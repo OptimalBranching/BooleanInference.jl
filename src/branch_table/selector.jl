@@ -28,6 +28,7 @@ function select_region(problem::TNProblem, measure::AbstractMeasure, selector::M
 
     @inbounds for var in unfixed_vars
         region = create_region(problem, var, selector)
+        # TODO: improve the performance
         tbl, variables = branching_table!(problem, selector.table_solver, region; cache=false)
         isempty(tbl.table) && continue
 
