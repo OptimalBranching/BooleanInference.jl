@@ -1,122 +1,57 @@
 function contract_region(tn::BipartiteGraph, region::Region, doms::Vector{DomainMask})
-    n_tensors = length(region.tensors)
-    
-    sliced_tensors = Vector{Vector{Tropical{Float64}}}(undef, n_tensors)
-    tensor_indices = Vector{Vector{Int}}(undef, n_tensors)
+    sliced_tensors = Vector{Vector{Tropical{Float64}}}(undef, length(region.tensors))
+    tensor_indices = Vector{Vector{Int}}(undef, length(region.tensors))
     
     @inbounds for (i, tensor_id) in enumerate(region.tensors)
-        # Get original tensor and its variable axes
-        original_tensor = tn.tensors[tensor_id]
-        var_axes = original_tensor.var_axes
-        tensor_data = original_tensor.tensor
-        
-        # Slice tensor according to fixed variables
-        sliced = slicing(tensor_data, doms, var_axes)
-        sliced_tensors[i] = sliced
-        
-        # Determine remaining (unfixed) variable indices
-        # After slicing, only unfixed variables remain as indices
-        remaining_vars = Int[]
-        for var_id in var_axes
-            if !is_fixed(doms[var_id])
-                push!(remaining_vars, var_id)
-            end
-        end
-        tensor_indices[i] = remaining_vars
+        tensor = tn.tensors[tensor_id]
+        sliced_tensors[i] = slicing(tensor.tensor, doms, tensor.var_axes)
+        tensor_indices[i] = filter(v -> !is_fixed(doms[v]), tensor.var_axes)
     end
     
-    # Output: only unfixed variables in the region
-    # (fixed variables have already been sliced out)
-    output_vars = Int[]
+    # Collect unfixed variables from boundary and inner
+    output_vars = filter(v -> !is_fixed(doms[v]), vcat(region.boundary_vars, region.inner_vars))
+    contracted = contract_tensors(sliced_tensors, tensor_indices, output_vars)
     
-    # Collect unfixed variables
-    for var_id in region.boundary_vars
-        if !is_fixed(doms[var_id])
-            push!(output_vars, var_id)
-        end
-    end
-    for var_id in region.inner_vars
-        if !is_fixed(doms[var_id])
-            push!(output_vars, var_id)
-        end
-    end
-    
-    if isempty(output_vars)
-        # if all variables are fixed, output is scalar
-        contracted = contract_tensors(sliced_tensors, tensor_indices, Int[])
-        @assert length(contracted) == 1
-        return contracted, Int[]
-    else
-        contracted = contract_tensors(sliced_tensors, tensor_indices, output_vars)
-        return contracted, output_vars
-    end
+    isempty(output_vars) && @assert length(contracted) == 1
+    return contracted, output_vars
 end
 
 function contract_tensors(tensors::Vector{Vector{T}}, ixs::Vector{Vector{Int}}, iy::Vector{Int}) where T
     eincode = EinCode(ixs, iy)
-    optcode = optimize_code(eincode, uniformsize(eincode, 2), GreedyMethod())    
-    unwrapped_tensors = [tensor_unwrapping(t) for t in tensors]
-    result = optcode(unwrapped_tensors...)
-    return result
+    optcode = optimize_code(eincode, uniformsize(eincode, 2), GreedyMethod())
+    return optcode([tensor_unwrapping(t) for t in tensors]...)
 end
 
-
-@inline function slicing(tensor::Vector{T}, doms::Vector{DomainMask}, axis_vars::Vector{Int}) where T
-    # Number of axes (Boolean => size 2 per axis)
-    k = trailing_zeros(length(tensor)) # log2
-
-    # Pre-allocate with size hints
-    fixed_axes = Int[]
-    fixed_vals = Int[]
-    free_axes = Int[]
-    sizehint!(fixed_axes, k)
-    sizehint!(fixed_vals, k)
-    sizehint!(free_axes, k)
-
+function slicing(tensor::Vector{T}, doms::Vector{DomainMask}, axis_vars::Vector{Int}) where T
+    k = trailing_zeros(length(tensor))  # log2(length)
+    
+    fixed_idx = 0; free_axes = Int[]
+    
     @inbounds for axis in 1:k  # each variable
-        var_id = axis_vars[axis]
-        dom_mask = doms[var_id]
-        if is_fixed(dom_mask)
-            push!(fixed_axes, axis)
-            push!(fixed_vals, ifelse(has1(dom_mask), 1, 0))
+        if is_fixed(doms[axis_vars[axis]])
+            has1(doms[axis_vars[axis]]) && (fixed_idx |= (1 << (axis-1)))
         else
             push!(free_axes, axis)
         end
     end
-
-    n_free = length(free_axes)
-    out_len = 1 << n_free # 2^n_free
-    out = Vector{T}(undef, out_len)
-
-    # Precompute fixed part of the index
-    fixed_idx = 0
-    @inbounds for (axis, val) in zip(fixed_axes, fixed_vals)
-        fixed_idx |= (val << (axis-1))
-    end
-
-    # Iterate over all assignments to free variables
-    @inbounds for free_idx in 0:(out_len-1)
-        # Build full index starting from fixed part
+    
+    out = Vector{T}(undef, 1 << length(free_axes))
+    
+    @inbounds for free_idx in eachindex(out)
         full_idx = fixed_idx
-
-        # Set free variable bits
         for (i, axis) in enumerate(free_axes)
-            bit = (free_idx >> (i-1)) & 0x1  # get the i-th bit of free_idx
-            full_idx |= (bit << (axis-1))  # set free-idx in the full_idx
+            ((free_idx-1) >> (i-1)) & 0x1 == 1 && (full_idx |= (1 << (axis-1)))
         end
-
-        out[free_idx+1] = tensor[full_idx+1]
+        out[free_idx] = tensor[full_idx+1]
     end
-
+    
     return out
 end
 
 
 function tensor_unwrapping(vec::Vector{T}) where T
-    len = length(vec)
-    @assert len > 0
-    k = trailing_zeros(len)
-    @assert (1 << k) == len "vector length is not power-of-two"
+    k = trailing_zeros(length(vec))
+    @assert (1 << k) == length(vec) "vector length is not power-of-two"
     dims = ntuple(_->2, k)
     return reshape(vec, dims)
 end
