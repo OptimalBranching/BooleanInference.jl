@@ -32,29 +32,31 @@ function OptimalBranchingCore.size_reduction(p::TNProblem{INT}, m::AbstractMeasu
 end
 
 # Main branch-and-reduce algorithm
-function branch_and_reduce!(problem::TNProblem, config::OptimalBranchingCore.BranchingStrategy, reducer::OptimalBranchingCore.AbstractReducer, result_type::Type{TR}; show_progress::Bool=false, tag::Vector{Tuple{Int,Int}}=Tuple{Int,Int}[]) where TR
+function bbsat!(problem::TNProblem, config::OptimalBranchingCore.BranchingStrategy, reducer::OptimalBranchingCore.AbstractReducer)
+    cache = init_cache(problem, config.table_solver, config.measure, config.set_cover_solver)
+    return _bbsat!(problem, config, reducer, cache)
+end
+
+function _bbsat!(problem::TNProblem, config::OptimalBranchingCore.BranchingStrategy, reducer::OptimalBranchingCore.AbstractReducer, region_cache::RegionCache; tag::Vector{Tuple{Int,Int}}=Tuple{Int,Int}[], show_progress::Bool=false)
     stats = problem.stats
     empty!(problem.propagated_cache)
 
-    is_solved(problem) && return result_type(true, problem.doms, copy(stats))
-    region = select_region(problem, config.measure, config.selector)
-    isnothing(region) && return result_type(false, nothing, copy(stats))
+    is_solved(problem) && return Result(true, problem.doms, copy(stats))
 
-    tbl, variables = branching_table!(problem, config.table_solver, region)
-    isempty(tbl.table) && return result_type(false, nothing, copy(stats))
-
-    result = OptimalBranchingCore.optimal_branching_rule(tbl, variables, problem, config.measure, config.set_cover_solver)
+    region_vars, result = findbest(region_cache)
     clauses = OptimalBranchingCore.get_clauses(result)
     record_branch!(stats, length(clauses))
 
-    accum = result_type(false, nothing, copy(stats))
+    accum = Result(false, nothing, copy(stats))
     @inbounds for (i, clause) in enumerate(clauses)
-        show_progress && (OptimalBranchingCore.print_sequence(stdout, tag); println(stdout))
         propagated_doms = problem.propagated_cache[clause]
 
         subproblem = TNProblem(problem.static, propagated_doms, problem.stats, Dict{Clause{UInt64}, Vector{DomainMask}}())
+        success, new_region_cache = update(region_cache, subproblem, touched_vars(region_vars, clause), config.table_solver, config.measure, config.set_cover_solver)
+        success || continue
+
         push!(tag, (i, length(clauses)))
-        sub_result = branch_and_reduce!(subproblem, config, reducer, result_type; tag, show_progress)
+        sub_result = _bbsat!(subproblem, config, reducer, new_region_cache; tag, show_progress)
         pop!(tag)
 
         accum = accum + sub_result
@@ -62,3 +64,5 @@ function branch_and_reduce!(problem::TNProblem, config::OptimalBranchingCore.Bra
     end
     return accum
 end
+
+touched_vars(region_vars::Vector{Int}, clause::OptimalBranchingCore.Clause) = [var for (k, var) in enumerate(region_vars) if readbit(clause.mask, k) == 1]

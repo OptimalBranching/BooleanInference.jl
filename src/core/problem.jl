@@ -1,7 +1,7 @@
 # Result type for branch-and-reduce solving
 struct Result
     found::Bool
-    solution::Union{Nothing, Vector{DomainMask}}
+    solution::Union{Nothing, Vector{DomainMask}}   # TODO: check the performance, do not allow nothing
     stats::BranchingStats
 end
 
@@ -21,9 +21,9 @@ function Base.show(io::IO, r::Result)
 end
 
 struct TNProblem{INT<:Integer} <: AbstractProblem
-    static::BipartiteGraph
+    static::BipartiteGraph   # TODO: simplify the graph type
     doms::Vector{DomainMask}
-    n_unfixed::Int
+    n_unfixed::Int           # Do not store the number of unfixed variables.
     stats::BranchingStats
     propagated_cache::Dict{Clause{INT}, Vector{DomainMask}}
 
@@ -39,6 +39,7 @@ function TNProblem(static::BipartiteGraph, ::Type{INT}=UInt64) where {INT<:Integ
     return TNProblem{INT}(static, doms)
 end
 
+### Reduce the number of interfaces
 # Constructor with explicit domains
 function TNProblem(static::BipartiteGraph, doms::Vector{DomainMask}, ::Type{INT}=UInt64) where {INT<:Integer}
     return TNProblem{INT}(static, doms)

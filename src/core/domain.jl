@@ -55,10 +55,3 @@ function Base.show(io::IO, ::MIME"text/plain", dm::DomainMask)
         print(io, "UNDEF")
     end
 end
-
-# Concrete type for cached branch results
-struct BranchCacheEntry
-    doms::Vector{DomainMask}
-    n_unfixed::Int
-    local_value::Int
-end

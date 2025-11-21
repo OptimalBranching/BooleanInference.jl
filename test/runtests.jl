@@ -36,3 +36,7 @@ end
 # @testset "branchtable.jl" begin
 #     include("branchtable.jl")
 # end
+
+@testset "regioncache.jl" begin
+    include("regioncache.jl")
+end
