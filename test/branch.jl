@@ -1,6 +1,6 @@
 using Test
 using BooleanInference
-using BooleanInference: TNProblem, TNContractionSolver, MostOccurrenceSelector, NumUnfixedVars, setup_from_tensor_network, setup_problem, select_variables, get_cached_region, get_var_value, bits_to_int, branch_and_reduce!, Result
+using BooleanInference: TNProblem, TNContractionSolver, MostOccurrenceSelector, NumUnfixedVars, setup_from_tensor_network, setup_problem, select_variables, get_var_value, bits_to_int, branch_and_reduce!, Result
 using BooleanInference: BranchingStrategy, NoReducer
 using ProblemReductions: Factoring, reduceto, CircuitSAT, read_solution
 using GenericTensorNetworks

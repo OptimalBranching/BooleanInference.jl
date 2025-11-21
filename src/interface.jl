@@ -94,7 +94,7 @@ function solve_factoring(
         # selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
         selector=MostOccurrenceSelector(1,2),
         # selector=MostConnectedTensorSelector(),
-        measure=NumUnfixedVars(),
+        measure=NumUnfixedTensors(),
         set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
