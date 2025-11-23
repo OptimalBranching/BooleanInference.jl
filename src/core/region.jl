@@ -1,16 +1,15 @@
 struct Region
     id::Int
     tensors::Vector{Int}
-    inner_vars::Vector{Int}
-    boundary_vars::Vector{Int}
+    vars::Vector{Int}
 end
 
 function Base.show(io::IO, region::Region)
-    print(io, "Region(focus=$(region.id), tensors=$(length(region.tensors)), inner_vars=$(region.inner_vars), boundary_vars=$(region.boundary_vars))")
+    print(io, "Region(focus=$(region.id), tensors=$(length(region.tensors)), vars=$(region.vars))")
 end
 
 function Base.copy(region::Region)
-    return Region(region.id, region.tensors, region.inner_vars, region.boundary_vars)
+    return Region(region.id, region.tensors, region.vars)
 end
 
 function get_region_tensor_type(problem::TNProblem, region::Region)

@@ -36,7 +36,7 @@ end
 
 function solve(problem::TNProblem, bsconfig::BranchingStrategy, reducer::AbstractReducer; show_stats::Bool=false)
     reset_problem!(problem)  # Reset stats before solving
-    result = branch_and_reduce!(problem, bsconfig, reducer, Result; show_progress=false)
+    result = bbsat!(problem, bsconfig, reducer)
     show_stats && print_stats_summary(result.stats)
     return result
 end
@@ -70,7 +70,7 @@ function solve_sat_with_assignments(
     tn_problem = setup_from_sat(sat)
     result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
 
-    if result.found && !isnothing(result.solution)
+    if result.found
         # Convert Result to variable assignments
         assignments = Dict{Symbol, Int}()
         for (i, symbol) in enumerate(sat.symbols)
@@ -91,10 +91,10 @@ function solve_factoring(
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
         # table_solver=SingleTensorSolver(),
-        # selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
-        selector=MostOccurrenceSelector(1,2),
+        selector=MinGammaSelector(1,5,TNContractionSolver(), GreedyMerge()),
+        # selector=MostOccurrenceSelector(1,2),
         # selector=MostConnectedTensorSelector(),
-        measure=NumUnfixedTensors(),
+        measure=NumHardTensors(),
         set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
@@ -105,7 +105,7 @@ function solve_factoring(
     problem = CircuitSAT(circuit_sat.circuit.circuit; use_constraints=true)
     tn_problem = setup_from_sat(problem)
     result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
-    if !result.found || isnothing(result.solution)
+    if !result.found
         return nothing, nothing, result.stats
     end
     a = get_var_value(result.solution, circuit_sat.q)

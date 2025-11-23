@@ -1,22 +1,15 @@
 # Result type for branch-and-reduce solving
 struct Result
     found::Bool
-    solution::Union{Nothing, Vector{DomainMask}}   # TODO: check the performance, do not allow nothing
+    solution::Vector{DomainMask}
     stats::BranchingStats
 end
 
-# Interface required by OptimalBranchingCore
-Base.one(::Type{Result}) = Result(true, nothing, BranchingStats())
-Base.zero(::Type{Result}) = Result(false, nothing, BranchingStats())
-Base.:+(a::Result, b::Result) = a.found ? a : b
-Base.:>(a::Result, b::Result) = a.found && !b.found
-
 function Base.show(io::IO, r::Result)
     if r.found
-        has_sol = !isnothing(r.solution)
-        print(io, "Result(found=true, solution=$(has_sol ? "available" : "none"), stats=...)")
+        print(io, "Result(found=true, solution=available)")
     else
-        print(io, "Result(found=false, stats=...)")
+        print(io, "Result(found=false)")
     end
 end
 
@@ -34,7 +27,7 @@ struct TNProblem{INT<:Integer} <: AbstractProblem
 end
 
 function TNProblem(static::BipartiteGraph, ::Type{INT}=UInt64) where {INT<:Integer}
-    doms = propagate(static, init_doms(static))
+    doms, _ = propagate(static, init_doms(static), collect(1:length(static.tensors)))
     has_contradiction(doms) && error("Domain has contradiction")
     return TNProblem{INT}(static, doms)
 end
@@ -62,3 +55,4 @@ is_solved(problem::TNProblem) = problem.n_unfixed == 0
 get_branching_stats(problem::TNProblem) = copy(problem.stats)
 
 reset_problem!(problem::TNProblem) = (reset!(problem.stats); empty!(problem.propagated_cache))
+reset_propagated_cache!(problem::TNProblem) = empty!(problem.propagated_cache)

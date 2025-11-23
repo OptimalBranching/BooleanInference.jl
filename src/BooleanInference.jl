@@ -3,7 +3,7 @@ module BooleanInference
 using TropicalNumbers
 using SparseArrays
 using OptimalBranchingCore
-using OptimalBranchingCore: AbstractProblem, select_variables, reduce_problem, _vec2int, candidate_clauses, Clause
+using OptimalBranchingCore: AbstractProblem, select_variables, reduce_problem, _vec2int, candidate_clauses, Clause, BranchingStrategy, AbstractReducer, NoReducer
 using OptimalBranchingCore.BitBasis
 using GenericTensorNetworks
 using GenericTensorNetworks.OMEinsum
@@ -45,7 +45,7 @@ include("interface.jl")
 
 export Variable, EdgeRef, BoolTensor, BipartiteGraph, DomainMask, TNProblem, Result
 export DM_BOTH, DM_0, DM_1, DM_NONE
-export Region, RegionCacheEntry, RegionCacheState
+export Region
 
 export is_fixed, has0, has1, init_doms, get_var_value, bits
 
@@ -88,5 +88,6 @@ export handle_no_boundary_case_unfixed
 export to_graph, visualize_problem, visualize_highest_degree_vars
 export get_highest_degree_variables, get_tensors_containing_variables
 
-export branching_table!, branch_and_reduce!
+export branching_table!, branch_and_reduce!, bbsat!
+export BranchingStrategy, AbstractReducer, NoReducer
 end
