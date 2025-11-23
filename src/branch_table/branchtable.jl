@@ -27,14 +27,15 @@ end
 function is_feasible_solution(problem::TNProblem, region::Region, config::UInt64)
     doms = copy(problem.doms)
     @assert !has_contradiction(doms) "Domain has contradiction before applying config $config"
-    changed_indices = apply_config!(config, vcat(region.boundary_vars, region.inner_vars), doms)
-    propagated_doms = propagate(problem.static, doms, changed_indices)
+    changed_indices = apply_config!(config, region.vars, doms)
+    propagated_doms, _ = propagate(problem.static, doms, changed_indices)
     has_contradiction(propagated_doms) && return false, propagated_doms
     return true, propagated_doms
 end
 
 function collect_feasible!(problem::TNProblem, region::Region, configs::Vector{UInt64}; cache::Bool)
     feasible_configs = UInt64[]
+    isempty(configs) && return feasible_configs
     bit_length = UInt64(ndigits(UInt64(configs[end]), base=2))
     @inbounds for config in configs
         feasible, propagated_doms = is_feasible_solution(problem, region, config)

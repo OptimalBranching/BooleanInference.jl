@@ -8,8 +8,8 @@ function contract_region(tn::BipartiteGraph, region::Region, doms::Vector{Domain
         tensor_indices[i] = filter(v -> !is_fixed(doms[v]), tensor.var_axes)
     end
     
-    # Collect unfixed variables from boundary and inner
-    output_vars = filter(v -> !is_fixed(doms[v]), vcat(region.boundary_vars, region.inner_vars))
+    # Collect unfixed variables from the region
+    output_vars = filter(v -> !is_fixed(doms[v]), region.vars)
     contracted = contract_tensors(sliced_tensors, tensor_indices, output_vars)
     
     isempty(output_vars) && @assert length(contracted) == 1

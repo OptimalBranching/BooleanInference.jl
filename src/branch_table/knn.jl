@@ -1,54 +1,54 @@
-function _classify_inner_boundary(tn::BipartiteGraph, visited_tensors::Set{Int}, vars::Vector{Int})
-    inner = Int[]
-    boundary = Int[]
-    @inbounds for vid in vars
-        deg_total = tn.vars[vid].deg
-        deg_in = count(tid -> tid ∈ visited_tensors, tn.v2t[vid])
-        if deg_in == deg_total
-            push!(inner, vid)
-        else
-            push!(boundary, vid)
-        end
-    end
-    return inner, boundary
-end
-
 function _k_neighboring(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var::Int; max_tensors::Int, k::Int = 2, hard_only::Bool = false)
     @assert !is_fixed(doms[focus_var]) "Focus variable must be unfixed"
 
-    visited_vars = Set{Int}(); visited_tensors = Set{Int}()
-    collected_vars = Int[]; collected_tensors = Int[]
-
-    stack = [(focus_var, k)]
-    while !isempty(stack) && length(collected_tensors) < max_tensors
-        var_id, depth = pop!(stack)
-
-        # Mark variable as visited and collect it if depth > 0
-        if var_id ∉ visited_vars
-            push!(visited_vars, var_id)
-            depth > 0 && push!(collected_vars, var_id)
+    visited_vars = Set{Int}()
+    visited_tensors = Set{Int}()
+    collected_vars = Int[focus_var]
+    collected_tensors = Int[]
+    
+    push!(visited_vars, focus_var)
+    
+    # Use BFS with two separate queues for variables and tensors
+    var_queue = [focus_var]
+    
+    for hop in 1:k
+        length(collected_tensors) > max_tensors && break
+        
+        # Step 1: From current variables to tensors
+        tensor_queue = Int[]
+        for var_id in var_queue
+            for tensor_id in tn.v2t[var_id]
+                if tensor_id ∉ visited_tensors
+                    if hard_only && !is_hard(tn, doms)[tensor_id]
+                        continue
+                    end
+                    push!(visited_tensors, tensor_id)
+                    push!(collected_tensors, tensor_id)
+                    push!(tensor_queue, tensor_id)
+                    length(collected_tensors) > max_tensors && break
+                end
+            end
+            length(collected_tensors) > max_tensors && break
         end
-
-        # Skip tensor exploration if depth is 0
-        depth == 0 && continue
-
-        for tensor_id in tn.v2t[var_id]
-            tensor_id ∈ visited_tensors && continue
-            hard_only && !is_hard(tn, doms)[tensor_id] && continue
-
-            push!(visited_tensors, tensor_id)
-            push!(collected_tensors, tensor_id)
-            length(collected_tensors) >= max_tensors && break
-
+        
+        length(collected_tensors) > max_tensors && break
+        
+        # Step 2: From current tensors to next layer variables
+        var_queue = Int[]
+        for tensor_id in tensor_queue
             for next_var in tn.tensors[tensor_id].var_axes
-                next_var ∉ visited_vars && !is_fixed(doms[next_var]) && push!(stack, (next_var, depth - 1))
+                if next_var ∉ visited_vars && !is_fixed(doms[next_var])
+                    push!(visited_vars, next_var)
+                    push!(collected_vars, next_var)
+                    push!(var_queue, next_var)
+                end
             end
         end
     end
 
-    inner, boundary = _classify_inner_boundary(tn, visited_tensors, collected_vars)
-    sort!(inner); sort!(boundary); sort!(collected_tensors)
-    return Region(focus_var, collected_tensors, inner, boundary)
+    sort!(collected_vars)
+    sort!(collected_tensors)
+    return Region(focus_var, collected_tensors, collected_vars)
 end
 
 function k_neighboring(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var::Int; max_tensors::Int, k::Int = 2)

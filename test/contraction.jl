@@ -12,13 +12,11 @@ using GenericTensorNetworks
 @testset "Region constructor" begin
     region = Region(1, 
                     [1, 2],
-                    [3, 4],
-                    [1, 2])
+                    [1, 2, 3, 4])
         
     @test region.id == 1
     @test length(region.tensors) == 2
-    @test length(region.inner_vars) == 2
-    @test length(region.boundary_vars) == 2
+    @test length(region.vars) == 4
 end
 
 @testset "tensor_unwrapping" begin

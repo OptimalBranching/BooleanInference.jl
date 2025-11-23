@@ -29,11 +29,11 @@ end
     doms = BooleanInference.init_doms(problem.static)
     region = k_neighboring(problem.static, doms, 1; max_tensors=100, k=1)
     @test region.tensors == [1, 3]
-    @test Set(union(region.inner_vars, region.boundary_vars)) == Set([1, 4])
+    @test Set(region.vars) == Set([1, 4])
 
     region = k_neighboring(problem.static, doms, 2; max_tensors=100, k=1)
     @test region.tensors == [2, 5, 6]
-    @test Set(union(region.inner_vars, region.boundary_vars)) == Set([2, 3, 5])
+    @test Set(region.vars) == Set([2, 3, 5])
 end
 
 
@@ -45,11 +45,9 @@ end
     doms = BooleanInference.init_doms(problem.static)
     region = k_neighboring(problem.static, doms, 1; max_tensors=100, k=2)
     @test region.tensors == [1, 3, 4]
-    @test Set(union(region.inner_vars, region.boundary_vars)) == Set([1, 3, 4])
-    @test region.boundary_vars == [3]
+    @test Set(region.vars) == Set([1, 3, 4])
 
     region = k_neighboring(problem.static, doms, 2; max_tensors=100, k=2)
     @test region.tensors == [2, 4, 5, 6]
-    @test Set(union(region.inner_vars, region.boundary_vars)) == Set([2, 3, 4, 5])
-    @test region.boundary_vars == [4]
+    @test Set(region.vars) == Set([2, 3, 4, 5])
 end

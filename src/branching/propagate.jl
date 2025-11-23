@@ -1,32 +1,25 @@
-# Backward compatible interface: propagate all tensors when changed_vars not specified
-function propagate(static::BipartiteGraph, doms::Vector{DomainMask})
-    return propagate(static, doms, collect(1:length(doms)), nothing)
-end
+# Main propagate function: returns (new_doms, propagated_vars)
+function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, touched_tensors::Vector{Int})
+    isempty(touched_tensors) && return doms, Int[]
+    
+    working_doms = copy(doms); propagated_vars = Int[]
 
-function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, changed_vars::Vector{Int}, propagated_vars::Union{Nothing, Vector{Int}}=nothing)
-    isempty(changed_vars) && return doms
-
-    working_doms = copy(doms)
-    tensor_queue = unique(vcat([static.v2t[v] for v in changed_vars]...))
     queue_index = 1
-
-    while queue_index <= length(tensor_queue)
-        tensor_id = tensor_queue[queue_index]
+    while queue_index <= length(touched_tensors)
+        tensor_id = touched_tensors[queue_index]
         queue_index += 1
 
         tensor = static.tensors[tensor_id]
         feasible_configs = find_feasible_configs(working_doms, tensor)
-
-        isempty(feasible_configs) && return fill(DM_NONE, length(working_doms))
+        isempty(feasible_configs) && return fill(DM_NONE, length(working_doms)), propagated_vars
 
         updated_vars = update_domains_from_configs!(working_doms, tensor, feasible_configs)
-        !isnothing(propagated_vars) && append!(propagated_vars, updated_vars)
+        append!(propagated_vars, updated_vars)
 
         new_tensors = unique(vcat([static.v2t[v] for v in updated_vars]...))
-        append!(tensor_queue, filter(t -> t ∉ tensor_queue[queue_index:end], new_tensors))
+        append!(touched_tensors, filter(t -> t ∉ touched_tensors[queue_index:end], new_tensors))
     end
-
-    return working_doms
+    return working_doms, propagated_vars
 end
 
 # Find all configurations of the tensor that are feasible given current variable domains
