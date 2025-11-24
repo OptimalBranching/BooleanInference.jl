@@ -6,8 +6,18 @@ abstract type AbstractSolver end
 # CNF-based SAT solvers share common characteristics
 abstract type CNFSolver <: AbstractSolver end
 
-@kwdef struct BooleanInferenceSolver <: AbstractSolver 
-    warmup::Bool = true
+struct BooleanInferenceSolver <: AbstractSolver 
+    warmup::Bool
+    bsconfig::BranchingStrategy
+    reducer::AbstractReducer
+    show_stats::Bool
+    function BooleanInferenceSolver(;warmup=true, bsconfig=BranchingStrategy(
+        table_solver=TNContractionSolver(),
+        selector=MinGammaSelector(1,2, TNContractionSolver(), OptimalBranchingCore.GreedyMerge()),
+        measure=NumUnfixedVars()
+    ), reducer=NoReducer(), show_stats=false)
+        new(warmup, bsconfig, reducer, show_stats)
+    end
 end
 
 struct IPSolver <: AbstractSolver 

@@ -11,8 +11,10 @@ function apply_branch!(problem::TNProblem, clause::OptimalBranchingCore.Clause, 
 end
 
 function OptimalBranchingCore.size_reduction(p::TNProblem{INT}, m::AbstractMeasure, cl::Clause{INT}, variables::Vector{Int}) where {INT}
+    
     newdoms = haskey(p.propagated_cache, cl) ? p.propagated_cache[cl] : apply_branch!(p, cl, variables)
-    return measure(p, m) - measure(TNProblem(p.static, newdoms, INT), m)
+    r = measure(p, m) - measure(TNProblem(p.static, newdoms, INT), m)
+    return r
 end
 
 # Main branch-and-reduce algorithm
@@ -21,17 +23,26 @@ function bbsat!(problem::TNProblem, config::OptimalBranchingCore.BranchingStrate
     return _bbsat!(problem, config, reducer, cache)
 end
 
+# const tmp_measure = Int[]
+# const tmp_count_unfixed = Int[]
+# const tmp_count_unfixed_tensors = Int[]
+
+# reset_temp!() = (empty!(tmp_measure); empty!(tmp_count_unfixed); empty!(tmp_count_unfixed_tensors))
+
 function _bbsat!(problem::TNProblem, config::OptimalBranchingCore.BranchingStrategy, reducer::OptimalBranchingCore.AbstractReducer, region_cache::RegionCache)
     stats = problem.stats
-    # println("================================================")
+    println("================================================")
     is_solved(problem) && return Result(true, problem.doms, copy(stats))
 
     subproblems = findbest(region_cache, problem, config.measure, config.set_cover_solver)
     isempty(subproblems) && return Result(false, DomainMask[], copy(stats))
     record_branch!(stats, length(subproblems))
-    @inbounds for subproblem_doms in subproblems
+    @inbounds for (i, subproblem_doms) in enumerate(subproblems)
         subproblem = TNProblem(problem.static, subproblem_doms, problem.stats, Dict{Clause{UInt64}, Vector{DomainMask}}())
-        # No need to update cache - it's shared and immutable
+        # push!(tmp_measure, measure(subproblem, NumHardTensors()))
+        # push!(tmp_count_unfixed_tensors, measure(subproblem, NumUnfixedTensors()))
+        # push!(tmp_count_unfixed, count_unfixed(subproblem.doms))
+
         result = _bbsat!(subproblem, config, reducer, region_cache)
         result.found && return result
     end

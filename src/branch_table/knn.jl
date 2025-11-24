@@ -12,8 +12,6 @@ function _k_neighboring(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var:
     var_queue = [focus_var]
     
     for hop in 1:k
-        length(collected_tensors) > max_tensors && break
-        
         # Step 1: From current variables to tensors
         tensor_queue = Int[]
         for var_id in var_queue
@@ -25,15 +23,18 @@ function _k_neighboring(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var:
                     push!(visited_tensors, tensor_id)
                     push!(collected_tensors, tensor_id)
                     push!(tensor_queue, tensor_id)
-                    length(collected_tensors) > max_tensors && break
+                    if length(collected_tensors) >= max_tensors
+                        break
+                    end
                 end
             end
-            length(collected_tensors) > max_tensors && break
+            if length(collected_tensors) >= max_tensors
+                break
+            end
         end
         
-        length(collected_tensors) > max_tensors && break
-        
         # Step 2: From current tensors to next layer variables
+        # Always collect variables from the tensors we got, even if max_tensors is reached
         var_queue = Int[]
         for tensor_id in tensor_queue
             for next_var in tn.tensors[tensor_id].var_axes
@@ -43,6 +44,11 @@ function _k_neighboring(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var:
                     push!(var_queue, next_var)
                 end
             end
+        end
+        
+        # Stop after collecting variables if max_tensors is reached
+        if length(collected_tensors) >= max_tensors
+            break
         end
     end
 

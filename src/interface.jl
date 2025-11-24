@@ -45,7 +45,7 @@ function solve_sat_problem(
     sat::ConstraintSatisfactionProblem;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=MostOccurrenceSelector(1,2),
+        selector==MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
         measure=NumUnfixedVars()
     ),
     reducer::AbstractReducer=NoReducer(),
@@ -60,7 +60,7 @@ function solve_sat_with_assignments(
     sat::ConstraintSatisfactionProblem;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=MostOccurrenceSelector(1,2),
+        selector==MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
         measure=NumUnfixedVars()
     ),
     reducer::AbstractReducer=NoReducer(),
@@ -90,11 +90,8 @@ function solve_factoring(
     n::Int, m::Int, N::Int;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        # table_solver=SingleTensorSolver(),
-        selector=MinGammaSelector(1,5,TNContractionSolver(), GreedyMerge()),
-        # selector=MostOccurrenceSelector(1,2),
-        # selector=MostConnectedTensorSelector(),
-        measure=NumHardTensors(),
+        selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
+        measure=NumUnfixedVars(),
         set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
@@ -118,7 +115,7 @@ function solve_circuit_sat(
     circuit::Circuit;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=MostOccurrenceSelector(1,2),
+        selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
         measure=NumUnfixedVars()
     ),
     reducer::AbstractReducer=NoReducer(),

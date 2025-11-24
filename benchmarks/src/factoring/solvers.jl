@@ -1,5 +1,5 @@
 function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, solver::BooleanInferenceSolver)
-    return BooleanInference.solve_factoring(instance.m, instance.n, Int(instance.N))
+    return BooleanInference.solve_factoring(instance.m, instance.n, Int(instance.N); bsconfig=solver.bsconfig, reducer=solver.reducer, show_stats=solver.show_stats)
 end
 
 function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, solver::IPSolver)

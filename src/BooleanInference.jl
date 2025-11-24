@@ -90,4 +90,5 @@ export get_highest_degree_variables, get_tensors_containing_variables
 
 export branching_table!, branch_and_reduce!, bbsat!
 export BranchingStrategy, AbstractReducer, NoReducer
+export NumHardTensors, NumUnfixedVars, NumUnfixedTensors
 end

@@ -1,7 +1,6 @@
 # Main propagate function: returns (new_doms, propagated_vars)
 function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, touched_tensors::Vector{Int})
     isempty(touched_tensors) && return doms, Int[]
-    
     working_doms = copy(doms); propagated_vars = Int[]
 
     queue_index = 1
