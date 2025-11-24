@@ -1,9 +1,9 @@
 using BooleanInference
-using BooleanInference.GenericTensorNetworks
-using BooleanInference.GenericTensorNetworks: ∧, ∨, ¬
+using GenericTensorNetworks
+using GenericTensorNetworks: ∧, ∨, ¬
 using Test
-using BooleanInference.GenericTensorNetworks.ProblemReductions
-using BooleanInference.OptimalBranchingCore: BranchingStrategy
+using GenericTensorNetworks.ProblemReductions
+using OptimalBranchingCore
 
 @testset "setup_from_cnf" begin
     @bools a b c d e f g
@@ -11,12 +11,8 @@ using BooleanInference.OptimalBranchingCore: BranchingStrategy
 
     he2v = []
     tnproblem = setup_from_cnf(cnf)
-    for tensors in tnproblem.static.t2v
-        list = []
-        for item in tensors
-            push!(list, item.var)
-        end
-        push!(he2v, list)
+    for tensor in tnproblem.static.tensors
+        push!(he2v, tensor.var_axes)
     end
     @test he2v == [[1, 2, 3, 4], [1, 3, 4, 5], [5, 6], [2, 7], [1]]
     @show tnproblem.static.tensors[3].tensor[1] == zero(Tropical{Float64})
@@ -30,12 +26,8 @@ end
     push!(circuit.exprs, Assignment([:c],BooleanExpr(true)))
     tnproblem = setup_from_circuit(circuit)
     he2v = []
-    for tensors in tnproblem.static.t2v
-        list = []
-        for item in tensors
-            push!(list, item.var)
-        end
-        push!(he2v, list)
+    for tensor in tnproblem.static.tensors
+        push!(he2v, tensor.var_axes)
     end
     @test he2v == [[1, 2, 3],[1]]
     @test tnproblem.static.tensors[1].tensor == vec(Tropical.([0.0 0.0; -Inf -Inf;;; 0.0 -Inf; -Inf 0.0]))
@@ -48,20 +40,16 @@ end
     @bools a b c d e f g
     cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c), ∨(¬a))
     sat = Satisfiability(cnf; use_constraints=true)
-    res, dict, _, stats = solve_sat_with_assignments(sat)
+    res, dict, stats = solve_sat_with_assignments(sat)
     @test res == true
     @test satisfiable(cnf, dict) == true
     # Test that stats are recorded
     @test stats.total_branches >= 0
-    @test stats.max_depth >= 0
+    @test stats.total_subproblems >= 0
 
     cnf = ∧(∨(a), ∨(a,¬c), ∨(d,¬b), ∨(¬c,¬d), ∨(a,e), ∨(a,e,¬c), ∨(¬a))
     sat = Satisfiability(cnf; use_constraints=true)
-    res, dict, _, stats = solve_sat_with_assignments(sat)
-    @test res == false
-    # @test satisfiable(cnf, dict) == false
-    @test isempty(dict)
-    @test stats.total_branches >= 0
+    @test_throws ErrorException setup_from_sat(sat)
 end
 
 @testset "solve_factoring" begin
@@ -69,7 +57,7 @@ end
     @test a*b == 31*29
     @test stats.total_branches >= 0
     @test stats.total_subproblems >= 0
-    println("Factoring stats: branches=$(stats.total_branches), subproblems=$(stats.total_subproblems), max_depth=$(stats.max_depth)")
+    println("Factoring stats: branches=$(stats.total_branches), subproblems=$(stats.total_subproblems)")
 end
 
 @testset "branching_statistics" begin
@@ -83,49 +71,26 @@ end
     initial_stats = get_branching_stats(tn_problem)
     @test initial_stats.total_branches == 0
     @test initial_stats.total_subproblems == 0
-    @test initial_stats.max_depth == 0
-    
+
     # Solve and check stats are recorded
-    result, depth, stats = BooleanInference.solve(tn_problem, 
-        BranchingStrategy(table_solver=TNContractionSolver(1, 2), 
-                         selector=MostOccurrenceSelector(), 
-                         measure=NumUnfixedVars()), 
+    result = BooleanInference.solve(tn_problem,
+        BranchingStrategy(table_solver=TNContractionSolver(),
+                         selector=MostOccurrenceSelector(1,2),
+                         measure=NumUnfixedVars()),
         NoReducer())
-    
+
     # Stats should have been recorded
-    @test stats.total_branches > 0 || result !== nothing  # Either branched or solved immediately
-    @test stats.total_subproblems >= 0  # Each branch creates at least 2 subproblems
-    @test stats.max_depth >= 0
-    @test stats.avg_branching_factor >= 0.0
-    
+    @test result.stats.total_branches >= 0
+    @test result.stats.total_subproblems >= 0
+    @test result.stats.avg_branching_factor >= 0.0
+
     # Print stats for debugging
     println("\nBranching Statistics:")
-    print_stats_summary(stats)
+    print_stats_summary(result.stats)
     
     # Test reset functionality
-    reset_branching_stats!(tn_problem)
+    reset_problem!(tn_problem)
     reset_stats = get_branching_stats(tn_problem)
     @test reset_stats.total_branches == 0
     @test reset_stats.total_subproblems == 0
-    @test reset_stats.max_depth == 0
 end
-
-# @testset "benchmark" begin
-# 	table_solver = TNContractionSolver()
-# 	reducer = NoReducer()
-# 	for selector in []
-# 		for measure in [NumOfVertices(), NumOfClauses(), NumOfDegrees()]
-#             println("$measure,$selector")
-# 			solve_factoring(8, 8, 1019 * 1021; bsconfig = BranchingStrategy(; table_solver, selector, measure), reducer)
-# 		end
-# 	end
-# end
-
-# @testset "interface" begin
-#     solve_factoring(8, 8, 1019 * 1021; bsconfig = BranchingStrategy(; table_solver= TNContractionSolver(), selector=KNeighborSelector(1, 1), measure=NumOfDegrees()), reducer= NoReducer())
-#     solve_factoring(5, 5, 899; bsconfig = BranchingStrategy(; table_solver= TNContractionSolver(), selector=KNeighborSelector(1, 1), measure=NumOfDegrees()), reducer= NoReducer())
-	
-# 	bs = BranchingStrategy(table_solver = TNContractionSolver(), selector = KNeighborSelector(1, 1), set_cover_solver = BooleanInference.OptimalBranchingCore.GreedyMerge(),measure=NumOfDegrees())
-
-# 	solve_factoring(8, 8, 1019 * 1021; bsconfig = bs, reducer= NoReducer())
-# end

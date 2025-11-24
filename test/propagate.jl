@@ -109,7 +109,7 @@ using GenericTensorNetworks
         
         # Propagation should detect contradiction
         propagated = BooleanInference.propagate(static, doms)
-        @test all(d -> d.bits == 0x00, propagated)
+        @test all(d -> d == BooleanInference.DM_NONE, propagated)
     end
     
     # Test 5: Chain propagation

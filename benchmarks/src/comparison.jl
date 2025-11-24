@@ -20,7 +20,7 @@ Compare multiple solvers on the same datasets.
 """
 function run_solver_comparison(problem_type::Type{<:AbstractBenchmarkProblem}, 
                                dataset_paths::Vector{String};
-                               solvers=nothing)
+                               solvers::Union{Vector{<:AbstractSolver}, Nothing}=nothing)
     solver_list = isnothing(solvers) ? available_solvers(problem_type) : solvers
     results = Dict()
     
@@ -30,7 +30,7 @@ function run_solver_comparison(problem_type::Type{<:AbstractBenchmarkProblem},
         
         solver_results = []
         for path in dataset_paths
-            result = benchmark_dataset(problem_type, path; solver)
+            result = benchmark_dataset(problem_type, path; solver=solver, verify=solver.verify)
             if !isnothing(result)
                 push!(solver_results, result)
             end
@@ -138,4 +138,3 @@ function compare_solver_results(name1::String, results1, name2::String, results2
     end
     println(repeat("+", 80))
 end
-
