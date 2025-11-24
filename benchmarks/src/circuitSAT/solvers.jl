@@ -2,7 +2,7 @@
 
 function solve_instance(::Type{CircuitSATProblem}, instance::CircuitSATInstance, solver::BooleanInferenceSolver)
     try
-        result = BooleanInference.solve_circuit_sat(instance.circuit)
+        result = BooleanInference.solve_circuit_sat(instance.circuit; bsconfig=solver.bsconfig, reducer=solver.reducer, show_stats=solver.show_stats)
         return result
     catch e
         @warn "Failed to solve $(instance.name)" exception=(e, catch_backtrace())
