@@ -11,18 +11,14 @@ end
 struct NumHardTensors <: AbstractMeasure end
 function OptimalBranchingCore.measure(problem::TNProblem, ::NumHardTensors)
     active_tensors = get_active_tensors(problem.static, problem.doms)
-    hard_tensor_num = 0
+    total_excess = 0
     for tensor_id in active_tensors
         vars = problem.static.tensors[tensor_id].var_axes
         degree = 0
-        for var in vars
-            if !is_fixed(problem.doms[var])
-                degree += 1
-            end
+        @inbounds for var in vars
+            !is_fixed(problem.doms[var]) && (degree += 1)
         end
-        if degree > 2
-            hard_tensor_num += 1
-        end
+        degree > 2 && (total_excess += (degree - 2))
     end
-    return hard_tensor_num
+    return total_excess
 end

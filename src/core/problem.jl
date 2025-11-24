@@ -47,6 +47,12 @@ function Base.show(io::IO, problem::TNProblem)
     print(io, "TNProblem(unfixed=$(problem.n_unfixed)/$(length(problem.static.vars)))")
 end
 
+# Custom show for propagated_cache: only display keys
+function Base.show(io::IO, cache::Dict{Clause{INT}, Vector{DomainMask}}) where {INT<:Integer}
+    print(io, "Dict{Clause{", INT, "}, Vector{DomainMask}} with keys: ")
+    print(io, collect(keys(cache)))
+end
+
 get_var_value(problem::TNProblem, var_id::Int) = get_var_value(problem.doms, var_id)
 get_var_value(problem::TNProblem, var_ids::Vector{Int}) = Bool[get_var_value(problem.doms, var_id) for var_id in var_ids]
 
