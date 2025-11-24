@@ -44,3 +44,21 @@ ismasked(clause::Clause, var_idx::Int) = (clause.mask >> (var_idx - 1)) & 1 == 1
 
 # Get the value for a variable from the clause
 getbit(clause::Clause, var_idx::Int) = (clause.val >> (var_idx - 1)) & 1 == 1
+
+function is_legal(checklist::Vector{DomainMask})
+    mask = UInt64(0)
+    value = UInt64(0)
+    @inbounds for (var_idx, v) in enumerate(checklist)
+        v == DM_BOTH && continue
+        bit = UInt64(1) << (var_idx-1)
+        mask |= bit
+        if v == DM_1
+            value |= bit
+        end
+    end
+    return mask, value
+end
+
+packint(bits::NTuple{N, Int}) where {N} = reduce(|, (UInt64(b) << (i - 1) for (i, b) in enumerate(bits)); init = UInt64(0))
+packint(i::Int) = packint((i - 1,))
+packint(ci::CartesianIndex{N}) where {N} = packint(ntuple(j -> ci.I[j] - 1, N))

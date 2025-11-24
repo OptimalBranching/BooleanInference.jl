@@ -45,8 +45,9 @@ function solve_sat_problem(
     sat::ConstraintSatisfactionProblem;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector==MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
-        measure=NumUnfixedVars()
+        selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
+        measure=NumUnfixedVars(),
+        set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
     show_stats::Bool=false
@@ -61,7 +62,8 @@ function solve_sat_with_assignments(
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
         selector==MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
-        measure=NumUnfixedVars()
+        measure=NumUnfixedVars(),
+        set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
     show_stats::Bool=false
@@ -90,8 +92,9 @@ function solve_factoring(
     n::Int, m::Int, N::Int;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
-        measure=NumUnfixedVars(),
+        # selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
+        selector=MostOccurrenceSelector(2,4),
+        measure=NumHardTensors(),
         set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
