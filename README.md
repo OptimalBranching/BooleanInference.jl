@@ -67,7 +67,7 @@ result, depth = solve(tnproblem, BranchingStrategy(), NoReducer())
 
 ### Problem Types
 - `TNProblem`: Main problem representation
-- `TNStatic`: Static problem structure
+- `BipartiteGraph`: Static problem structure
 - `DomainMask`: Variable domain representation
 
 ### Solvers

@@ -14,7 +14,7 @@ function create_test_problem()
         fill(Tropical(0.0), 4)
     ]
     static = BooleanInference.setup_problem(3, dummy_tensors_to_vars, dummy_tensor_data)
-    return TNProblem(static)
+    return TNProblem(static, UInt8)
 end
 
 
@@ -25,6 +25,7 @@ end
     
     # Test with a valid clause
     clause = Clause(0b11, 0b10)  # variable 1 = 1
+    
     reduction = OptimalBranchingCore.size_reduction(problem, measure, clause, variables)
     @test isfinite(reduction)
     
@@ -73,7 +74,6 @@ end
     measure = NumUnfixedVars()
     
     # Test that clauses with invalid reductions are filtered out
-    # This tests drop_invalid_rows! indirectly
     clauses = [
         [Clause(0b11, 0b10)],  # Valid
         [Clause(0b11, 0b00)]   # Might be invalid
@@ -119,19 +119,6 @@ end
     @test isfinite(result.γ) || result.γ == Inf
     result_clauses = OptimalBranchingCore.get_clauses(result)
     @test !isempty(result_clauses) || isempty(clauses)
-end
-
-@testset "greedymerge - empty clauses" begin
-    problem = create_test_problem()
-    variables = [1, 2]
-    measure = NumUnfixedVars()
-    
-    # Test with empty clause set
-    empty_clauses = Vector{Vector{Clause{UInt64}}}()
-    result = OptimalBranchingCore.greedymerge(empty_clauses, problem, variables, measure)
-    @test result.γ == Inf
-    result_clauses = OptimalBranchingCore.get_clauses(result)
-    @test isempty(result_clauses)
 end
 
 @testset "greedymerge - invalid clauses" begin

@@ -1,16 +1,46 @@
-struct TNProblem <: AbstractProblem
-    static::TNStatic
-    doms::Vector{DomainMask}
-    n_unfixed::Int
-    ws::DynamicWorkspace
+# Result type for branch-and-reduce solving
+struct Result
+    found::Bool
+    solution::Vector{DomainMask}
+    stats::BranchingStats
 end
 
-function TNProblem(static::TNStatic; verbose::Bool = false)::TNProblem
-    doms = init_doms(static)
-    ws = DynamicWorkspace(length(static.vars), verbose)
-    doms = propagate(static, doms, collect(1:length(static.vars)), ws)
-    n_unfixed = count_unfixed(doms)
-    return TNProblem(static, doms, n_unfixed, ws)
+function Base.show(io::IO, r::Result)
+    if r.found
+        print(io, "Result(found=true, solution=available)")
+    else
+        print(io, "Result(found=false)")
+    end
+end
+
+struct TNProblem{INT<:Integer} <: AbstractProblem
+    static::BipartiteGraph   # TODO: simplify the graph type
+    doms::Vector{DomainMask}
+    n_unfixed::Int           # Do not store the number of unfixed variables.
+    stats::BranchingStats
+    propagated_cache::Dict{Clause{INT}, Vector{DomainMask}}
+
+    function TNProblem{INT}(static::BipartiteGraph, doms::Vector{DomainMask}, stats::BranchingStats=BranchingStats(), propagated_cache::Dict{Clause{INT}, Vector{DomainMask}}=Dict{Clause{INT}, Vector{DomainMask}}()) where {INT<:Integer}
+        n_unfixed = count_unfixed(doms)
+        new{INT}(static, doms, n_unfixed, stats, propagated_cache)
+    end
+end
+
+function TNProblem(static::BipartiteGraph, ::Type{INT}=UInt64) where {INT<:Integer}
+    doms, _ = propagate(static, init_doms(static), collect(1:length(static.tensors)))
+    has_contradiction(doms) && error("Domain has contradiction")
+    return TNProblem{INT}(static, doms)
+end
+
+### Reduce the number of interfaces
+# Constructor with explicit domains
+function TNProblem(static::BipartiteGraph, doms::Vector{DomainMask}, ::Type{INT}=UInt64) where {INT<:Integer}
+    return TNProblem{INT}(static, doms)
+end
+
+# Constructor with all parameters (for internal use)
+function TNProblem(static::BipartiteGraph, doms::Vector{DomainMask}, stats::BranchingStats, propagated_cache::Dict{Clause{INT}, Vector{DomainMask}}) where {INT<:Integer}
+    return TNProblem{INT}(static, doms, stats, propagated_cache)
 end
 
 function Base.show(io::IO, problem::TNProblem)
@@ -22,33 +52,7 @@ get_var_value(problem::TNProblem, var_ids::Vector{Int}) = Bool[get_var_value(pro
 
 is_solved(problem::TNProblem) = problem.n_unfixed == 0
 
-function cache_branch_solution!(problem::TNProblem)
-    ws = problem.ws
-    copyto!(ws.cached_doms, problem.doms)
-    ws.has_cached_solution = true
-    return nothing
-end
+get_branching_stats(problem::TNProblem) = copy(problem.stats)
 
-function reset_last_branch_problem!(problem::TNProblem)
-    problem.ws.has_cached_solution = false
-    return nothing
-end
-
-@inline has_last_branch_problem(problem::TNProblem) = problem.ws.has_cached_solution
-
-function last_branch_problem(problem::TNProblem)
-    has_last_branch_problem(problem) || return nothing
-    doms = copy(problem.ws.cached_doms)
-    fixed = count(x -> is_fixed(x), doms)
-    @assert fixed == length(doms)
-    return TNProblem(problem.static, doms, 0, problem.ws)
-end
-
-function get_branching_stats(problem::TNProblem)
-    return copy(problem.ws.branch_stats)
-end
-
-function reset_branching_stats!(problem::TNProblem)
-    reset!(problem.ws.branch_stats)
-    return nothing
-end
+reset_problem!(problem::TNProblem) = (reset!(problem.stats); empty!(problem.propagated_cache))
+reset_propagated_cache!(problem::TNProblem) = empty!(problem.propagated_cache)

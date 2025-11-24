@@ -1,9 +1,9 @@
 function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, solver::BooleanInferenceSolver)
-    return BooleanInference.solve_factoring(instance.m, instance.n, Int(instance.N))
+    return BooleanInference.solve_factoring(instance.m, instance.n, Int(instance.N); bsconfig=solver.bsconfig, reducer=solver.reducer, show_stats=solver.show_stats)
 end
 
 function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, solver::IPSolver)
-    return factoring_ip(instance.m, instance.n, Int(instance.N); solver)
+    return factoring_ip(instance.m, instance.n, instance.N, solver)
 end
 
 function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, solver::XSATSolver)
@@ -19,7 +19,7 @@ function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, s
     
         run(`$(solver.yosys_path) -q -p "read_verilog $vfile; prep -top circuit; aigmap; write_aiger -symbols $aig"`)
     
-        res = run_xsat_and_parse(solver.csat_path, aig)
+        res = run_xsat_and_parse(solver.csat_path, aig, solver.timeout)
         res.status != :sat && return :unsat
         
         model = res.model::Dict{Int,Bool}
@@ -31,6 +31,20 @@ function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, s
         q_val = sum(Int(bit) << (i-1) for (i, bit) in enumerate(bits_q))
 
         return (p_val, q_val)
+    end
+end
+
+# Generic implementation for CNF solvers
+function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, solver::CNFSolver)
+    m, n = instance.m, instance.n
+    fproblem = Factoring(m, n, instance.N)
+    circuit_sat = reduceto(CircuitSAT, fproblem)
+
+    mktempdir() do dir
+        cnf_file = circuit_to_cnf(circuit_sat.circuit.circuit, solver.abc_path, dir)
+        
+        res = run_cnf_solver(solver, cnf_file)
+        return res.status
     end
 end
 
@@ -53,4 +67,3 @@ function verify_solution(::Type{FactoringProblem}, instance::FactoringInstance, 
         return false
     end
 end
-
