@@ -62,7 +62,6 @@ function findbest(cache::RegionCache, problem::TNProblem{INT}, measure::Abstract
         reset_propagated_cache!(problem)
         result = compute_branching_result(cache, problem, var_id, measure, set_cover_solver)
         isnothing(result) && continue
-        # @info "var_id: $var_id, γ: $(result.γ)"
 
         if result.γ < best_gamma
             best_gamma = result.γ
@@ -71,15 +70,13 @@ function findbest(cache::RegionCache, problem::TNProblem{INT}, measure::Abstract
             @assert haskey(problem.propagated_cache, clauses[1])
             best_subproblem = [problem.propagated_cache[clauses[i]] for i in 1:length(clauses)]
 
+            fixed_indices = findall(iszero, count_unfixed.(best_subproblem))
+            !isempty(fixed_indices) && (best_subproblem = [best_subproblem[fixed_indices[1]]])
+
             best_gamma == 1.0 && break
         end
     end
-    println("best_γ: $best_gamma")
-    best_gamma === Inf && return []
-    
-    # If any subproblem is already fully fixed, return it directly
-    fixed_indices = findall(iszero, count_unfixed.(best_subproblem))
-    !isempty(fixed_indices) && return [best_subproblem[fixed_indices[1]]]
-    
+    # println("best_γ: $best_gamma")
+    best_gamma === Inf && return []    
     return best_subproblem
 end

@@ -16,7 +16,7 @@ function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, touched_ten
         append!(propagated_vars, updated_vars)
 
         new_tensors = unique(vcat([static.v2t[v] for v in updated_vars]...))
-        append!(touched_tensors, filter(t -> t ∉ touched_tensors[queue_index:end], new_tensors))
+        append!(touched_tensors, filter(t -> t ∉ touched_tensors[queue_index:end], new_tensors)) 
     end
     return working_doms, propagated_vars
 end

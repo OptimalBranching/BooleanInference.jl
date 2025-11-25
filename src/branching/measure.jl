@@ -1,6 +1,6 @@
 struct NumUnfixedVars <: AbstractMeasure end
 function OptimalBranchingCore.measure(problem::TNProblem, ::NumUnfixedVars)
-    return Int(problem.n_unfixed)
+    return count_unfixed(problem.doms)
 end
 
 struct NumUnfixedTensors <: AbstractMeasure end

@@ -3,6 +3,9 @@ Pkg.activate(joinpath(@__DIR__, ".."))
 
 using BooleanInferenceBenchmarks
 using Random
+using ProblemReductions
+using BooleanInference
+using BooleanInference.OptimalBranchingCore
 
 using Gurobi
 const env = Gurobi.Env()
@@ -28,36 +31,27 @@ configs = [
 
 paths = generate_factoring_datasets(configs; per_config=5, include_solution=true, force_regenerate=false)
 
-# ----------------------------------------
-# Example 2: Run benchmark on a single dataset
-# ----------------------------------------
-
-# println("\n" * "=" ^80)
-# println("Running Benchmark")
-# println("=" ^80)
-
-# # result = benchmark_dataset(FactoringProblem, paths[1]; solver=XSATSolver(;yosys_path="/opt/homebrew/bin/yosys"))
-# result = benchmark_dataset(FactoringProblem, paths[1]; solver=IPSolver(Gurobi.Optimizer, env))
-
-# if !isnothing(result)
-#     println("\nResults:")
-#     println("  Dataset: $(result["dataset_path"])")
-#     println("  Instances tested: $(result["instances_tested"])")
-#     println("  Accuracy: $(round(result["accuracy_rate"]*100, digits=1))%")
-#     println("  Median time: $(result["median_time"]) seconds")
-# end
-
-# ----------------------------------------
-# Example 3: Compare solvers
-# ----------------------------------------
-
 println("\n" * "=" ^80)
 println("Comparing Solvers")
 println("=" ^80)
 
-# results = run_solver_comparison(FactoringProblem, paths, solvers=[XSATSolver(;yosys_path="/opt/homebrew/bin/yosys"), BooleanInferenceSolver()])
+bsconfig = BranchingStrategy(
+    table_solver=TNContractionSolver(),
+    selector=MinGammaSelector(2,4,TNContractionSolver(), GreedyMerge()),
+    # selector=MostOccurrenceSelector(2,4),
+    measure=NumUnfixedVars(),
+    set_cover_solver=GreedyMerge()
+)
+
+results = run_solver_comparison(FactoringProblem, paths, solvers=[XSATSolver(;yosys_path="/opt/homebrew/bin/yosys"), BooleanInferenceSolver(;bsconfig)])
 # results = run_solver_comparison(FactoringProblem, paths, solvers=[XSATSolver(;yosys_path="/opt/homebrew/bin/yosys", timeout=600.0)])
 # results = run_solver_comparison(FactoringProblem, paths, solvers=[KissatSolver(kissat_path="/opt/homebrew/bin/kissat", timeout=300.0), MinisatSolver(minisat_path="/opt/homebrew/bin/minisat", timeout=300.0)])
-results = run_solver_comparison(FactoringProblem, paths, solvers=[IPSolver(Gurobi.Optimizer, env)])
+# results = run_solver_comparison(FactoringProblem, paths, solvers=[IPSolver(Gurobi.Optimizer, env)])
 print_solver_comparison_summary(results)
 
+
+test_instance = FactoringInstance(12,12,10371761)
+result = solve_instance(FactoringProblem, test_instance, BooleanInferenceSolver(;bsconfig, show_stats=true))
+# @show result
+# result = solve_instance(FactoringProblem, test_instance, KissatSolver(kissat_path="/opt/homebrew/bin/kissat", timeout=300.0, quiet=false))
+@show result
