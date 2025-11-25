@@ -11,12 +11,13 @@ struct BooleanInferenceSolver <: AbstractSolver
     bsconfig::BranchingStrategy
     reducer::AbstractReducer
     show_stats::Bool
-    function BooleanInferenceSolver(;warmup=true, bsconfig=BranchingStrategy(
+    verify::Bool
+    function BooleanInferenceSolver(;bsconfig=BranchingStrategy(
         table_solver=TNContractionSolver(),
         selector=MinGammaSelector(1,2, TNContractionSolver(), OptimalBranchingCore.GreedyMerge()),
         measure=NumUnfixedVars()
     ), reducer=NoReducer(), show_stats=false)
-        new(warmup, bsconfig, reducer, show_stats)
+        new(true, bsconfig, reducer, show_stats, true)
     end
 end
 
@@ -60,12 +61,13 @@ struct KissatSolver <: CNFSolver
     abc_path::Union{String, Nothing}
     verify::Bool
     timeout::Real
-    function KissatSolver(;kissat_path=nothing, abc_path=joinpath(dirname(@__DIR__), "artifacts", "bin", "abc"), timeout=600.0)
+    quiet::Bool
+    function KissatSolver(;kissat_path=nothing, abc_path=joinpath(dirname(@__DIR__), "artifacts", "bin", "abc"), timeout=600.0, quiet=false)
         kissat_path = isnothing(kissat_path) ? 
             find_executable_in_path("kissat", "Kissat") : 
             validate_executable_path(kissat_path, "Kissat")
         abc_path = validate_executable_path(abc_path, "ABC")
-        new(false, kissat_path, abc_path, false, timeout)  # CNF solvers typically don't need warmup
+        new(false, kissat_path, abc_path, false, timeout, quiet)  # CNF solvers typically don't need warmup
     end
 end
 
@@ -75,16 +77,15 @@ struct MinisatSolver <: CNFSolver
     abc_path::Union{String, Nothing}
     verify::Bool
     timeout::Real
-    function MinisatSolver(;minisat_path=nothing, abc_path=joinpath(dirname(@__DIR__), "artifacts", "bin", "abc"), timeout=600.0)
+    quiet::Bool
+    function MinisatSolver(;minisat_path=nothing, abc_path=joinpath(dirname(@__DIR__), "artifacts", "bin", "abc"), timeout=600.0, quiet=false)
         minisat_path = isnothing(minisat_path) ? 
             find_executable_in_path("minisat", "MiniSAT") : 
             validate_executable_path(minisat_path, "MiniSAT")
         abc_path = validate_executable_path(abc_path, "ABC")
-        new(false, minisat_path, abc_path, false, timeout)
+        new(false, minisat_path, abc_path, false, timeout, quiet)
     end
 end
-
-
 
 # ----------------------------------------
 # Core Interface (must be implemented)

@@ -11,15 +11,15 @@ dataset_path = joinpath(@__DIR__, "..", "data", "CNF", "random")
 bsconfig = BranchingStrategy(
     table_solver=TNContractionSolver(),
     # selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
-    selector=MostOccurrenceSelector(1,2),
-    measure=NumHardTensors(),
+    selector=MostOccurrenceSelector(1,3),
+    measure=NumUnfixedVars(),
     set_cover_solver=GreedyMerge()
 )
 
 result = benchmark_dataset(
     CNFSATProblem,
     dataset_path;
-    solver=BooleanInferenceSolver(bsconfig=bsconfig),
+    solver=BooleanInferenceSolver(;bsconfig),
     verify=true
 )
 

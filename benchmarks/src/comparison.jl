@@ -30,7 +30,7 @@ function run_solver_comparison(problem_type::Type{<:AbstractBenchmarkProblem},
         
         solver_results = []
         for path in dataset_paths
-            result = benchmark_dataset(problem_type, path; solver=solver, verify=solver.verify)
+            result = benchmark_dataset(problem_type, path; solver=solver, verify=true)
             if !isnothing(result)
                 push!(solver_results, result)
             end

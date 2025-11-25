@@ -61,8 +61,11 @@ end
 function run_kissat_and_parse(kissat_path::String, cnf_path::String, solver::KissatSolver)::CNFSolverResult
     # Kissat exit codes: 10=SAT, 20=UNSAT, 0=unknown/timeout, others=error
     # We need to capture output even when exit code is non-zero
-    cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $kissat_path -q $cnf_path`
-    @show cmd
+    if solver.quiet
+        cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $kissat_path -q $cnf_path`
+    else
+        cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $kissat_path $cnf_path`
+    end
     # Capture stdout and stderr separately, allow non-zero exit codes
     stdout_pipe = Pipe()
     stderr_pipe = Pipe()
@@ -74,6 +77,7 @@ function run_kissat_and_parse(kissat_path::String, cnf_path::String, solver::Kis
     raw_stderr = read(stderr_pipe, String)
     wait(proc)
     exitcode = proc.exitcode
+    @show raw_stdout
     
     # Check for actual errors (not SAT/UNSAT exit codes)
     if exitcode != 0 && exitcode != 10 && exitcode != 20
@@ -86,7 +90,11 @@ end
 function run_minisat_and_parse(minisat_path::String, cnf_path::String, solver::MinisatSolver)::CNFSolverResult
     # MiniSAT with -verb=0 for quiet mode (only outputs status)
     # MiniSAT exit codes: 10=SAT, 20=UNSAT, 0=unknown/timeout
-    cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $minisat_path -verb=0 $cnf_path`
+    if solver.quiet
+        cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $minisat_path -verb=0 $cnf_path`
+    else
+        cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $minisat_path $cnf_path`
+    end
     
     # Capture stdout and stderr separately, allow non-zero exit codes
     stdout_pipe = Pipe()

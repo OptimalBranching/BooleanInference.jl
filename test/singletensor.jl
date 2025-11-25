@@ -48,7 +48,7 @@ using OptimalBranchingCore
         problem = TNProblem(static, verbose=false)
 
         # All variables should remain unfixed (multiple solutions possible)
-        @test problem.n_unfixed == 3
+        @test count_unfixed(problem) == 3
 
         # Test with SingleTensorSolver on tensor 1
         solver = SingleTensorSolver()

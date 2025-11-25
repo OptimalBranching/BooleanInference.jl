@@ -32,10 +32,10 @@ include("branching/propagate.jl")
 include("branching/measure.jl")
 
 include("branch_table/knn.jl")
+include("branch_table/regioncache.jl")
 include("branch_table/selector.jl")
 include("branch_table/contraction.jl")
 include("branch_table/branchtable.jl")
-include("branch_table/regioncache.jl")
 
 include("utils/visualization.jl")
 include("branching/branch.jl")
