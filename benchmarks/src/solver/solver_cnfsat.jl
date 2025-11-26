@@ -2,6 +2,7 @@ struct CNFSolverResult
     status::Symbol                 # :sat | :unsat | :unknown
     model::Union{Nothing, Dict{Int, Bool}}  # Variable -> value (present only when SAT)
     raw::String                    # Raw console output for debugging/logging
+    decisions::Union{Nothing, Int}  # Number of decisions (branches) made by solver
 end
 
 function parse_dimacs_model(raw_output::String)::Dict{Int, Bool}
@@ -38,7 +39,17 @@ function parse_dimacs_output(solver::KissatSolver, raw_output::String)::CNFSolve
     # Parse model if SAT
     model = status == :sat ? parse_dimacs_model(raw_output) : nothing
     
-    return CNFSolverResult(status, model, raw_output)
+    # Parse decisions (branches) from kissat output
+    # Example: "c decisions:                            13555                1.49 per conflict"
+    decisions = nothing
+    if !solver.quiet
+        m = match(r"(?m)^c\s+decisions:\s+(\d+)", raw_output)
+        if m !== nothing
+            decisions = parse(Int, m.captures[1])
+        end
+    end
+    
+    return CNFSolverResult(status, model, raw_output, decisions)
 end
 
 function parse_dimacs_output(solver::MinisatSolver, raw_output::String)::CNFSolverResult
@@ -54,7 +65,17 @@ function parse_dimacs_output(solver::MinisatSolver, raw_output::String)::CNFSolv
     # Parse model if SAT
     model = status == :sat ? parse_dimacs_model(raw_output) : nothing
     
-    return CNFSolverResult(status, model, raw_output)
+    # Parse decisions from MiniSAT output
+    # Example: "decisions             : 13753          (0.00 % random) (75275 /sec)"
+    decisions = nothing
+    if !solver.quiet
+        m = match(r"(?m)^decisions\s+:\s+(\d+)", raw_output)
+        if m !== nothing
+            decisions = parse(Int, m.captures[1])
+        end
+    end
+    
+    return CNFSolverResult(status, model, raw_output, decisions)
 end
 
 
@@ -77,7 +98,6 @@ function run_kissat_and_parse(kissat_path::String, cnf_path::String, solver::Kis
     raw_stderr = read(stderr_pipe, String)
     wait(proc)
     exitcode = proc.exitcode
-    @show raw_stdout
     
     # Check for actual errors (not SAT/UNSAT exit codes)
     if exitcode != 0 && exitcode != 10 && exitcode != 20

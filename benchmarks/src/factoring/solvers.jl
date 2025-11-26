@@ -44,26 +44,21 @@ function solve_instance(::Type{FactoringProblem}, instance::FactoringInstance, s
         cnf_file = circuit_to_cnf(circuit_sat.circuit.circuit, solver.abc_path, dir)
         
         res = run_cnf_solver(solver, cnf_file)
-        return res.status
+        return res
     end
 end
 
 function verify_solution(::Type{FactoringProblem}, instance::FactoringInstance, result)
-    try
-        if result isa Tuple
-            p = result[1]; q = result[2];
-        else
-            @warn "Unknown result format: $(typeof(result))"
-            return false
-        end
-        if p * q == instance.N
-            return true
-        else
-            @warn "Incorrect factorization: $p × $q = $(p*q) ≠ $(instance.N)"
-            return false
-        end
-    catch e
-        @warn "Error verifying solution: $e"
+    if result isa Tuple
+        p = result[1]; q = result[2];
+    else
+        @warn "Unknown result format: $(typeof(result))"
+        return false
+    end
+    if p * q == instance.N
+        return true
+    else
+        @warn "Incorrect factorization: $p × $q = $(p*q) ≠ $(instance.N)"
         return false
     end
 end

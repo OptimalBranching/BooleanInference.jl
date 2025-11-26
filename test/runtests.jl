@@ -1,6 +1,10 @@
 using BooleanInference
 using Test
 
+@testset "test_2sat.jl" begin
+    include("2sat.jl")
+end
+
 # @testset "branch.jl" begin
 #     include("branch.jl")
 # end
