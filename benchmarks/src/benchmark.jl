@@ -35,10 +35,7 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem},
     end
     
     all_times = Float64[]
-    all_memory = Int64[]
-    all_gc_times = Float64[]
-    successful_runs = 0
-    failed_runs = 0
+    all_results = Any[]
     
     # Warmup if requested
     if warmup
@@ -46,17 +43,18 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem},
         solve_instance(problem_type, instances[1], actual_solver)
         @info "  Warmup completed, starting verification and timing..."
     else
-        @info "  Skipping warmup (non-Julia solver), starting verification and timing..."
+        @info "  Skipping warmup, starting verification and timing..."
     end
     
-    correct_runs = 0        
     for (i, instance) in enumerate(instances)
         # Measure time directly while solving
         result = nothing
         elapsed_time = @elapsed begin
             result = solve_instance(problem_type, instance, actual_solver)
         end
-        
+        push!(all_times, elapsed_time)
+        push!(all_results, result)
+
         # For CircuitSAT, print SAT/UNSAT result
         if problem_type == CircuitSATProblem && result !== nothing
             satisfiable, _ = result
@@ -68,27 +66,17 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem},
         if verify
             is_correct = verify_solution(problem_type, instance, result)
             !is_correct && @error "  Instance $i: Incorrect solution"
-        end   
-        correct_runs += 1
-        
-        push!(all_times, elapsed_time)
-        # Memory and GC time not available without BenchmarkTools, set to 0
-        push!(all_memory, 0)
-        push!(all_gc_times, 0.0)
-        successful_runs += 1
+        end           
         
         if i % 10 == 0 || i == length(instances)
-            @info "  Completed $i/$(length(instances)) instances ($(correct_runs) correct)"
+            @info "  Completed $i/$(length(instances)) instances"
         end
     end        
     return Dict(
         "dataset_path" => dataset_path,
         "instances_tested" => length(instances),
-        "correct_runs" => correct_runs,
-        "successful_runs" => successful_runs,
-        "accuracy_rate" => correct_runs / length(instances),
-        "median_time" => median(all_times),
-        "median_memory" => median(all_memory),
-        "solver" => solver_info
+        "solver" => solver_info,
+        "all_time" => all_times,
+        "all_results" => all_results
     )
 end

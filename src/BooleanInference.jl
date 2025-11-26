@@ -17,6 +17,7 @@ using GraphMakie
 using CairoMakie: Figure, Axis, save, hidespines!, hidedecorations!, DataAspect
 using NetworkLayout: SFDP, Spring, Stress, Spectral
 import ProblemReductions: BooleanExpr, simple_form, extract_symbols!
+using Gurobi
 
 include("core/types.jl")
 include("core/static.jl")
@@ -27,6 +28,7 @@ include("core/region.jl")
 
 include("utils/utils.jl")
 include("utils/circuit_analysis.jl")
+include("utils/twosat.jl")
 
 include("branching/propagate.jl")
 include("branching/measure.jl")
@@ -90,6 +92,8 @@ export get_highest_degree_variables, get_tensors_containing_variables
 
 export branching_table!, branch_and_reduce!, bbsat!
 export BranchingStrategy, AbstractReducer, NoReducer
-export NumHardTensors, NumUnfixedVars, NumUnfixedTensors
+export NumHardTensors, NumUnfixedVars, NumUnfixedTensors, HardSetSize
 export TNContractionSolver
+
+export solve_2sat, is_2sat_reducible
 end

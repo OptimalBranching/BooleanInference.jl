@@ -50,13 +50,10 @@ function _bbsat!(problem::TNProblem, config::OptimalBranchingCore.BranchingStrat
 
     subproblems = findbest(region_cache, problem, config.measure, config.set_cover_solver, config.selector)
     isempty(subproblems) && return Result(false, DomainMask[], copy(stats))
-
     record_branch!(stats, length(subproblems))
-
     @inbounds for (i, subproblem_doms) in enumerate(subproblems)
         record_visit!(stats)
         subproblem = TNProblem(problem.static, subproblem_doms, problem.stats, Dict{Clause{UInt64}, Vector{DomainMask}}())
-        @show measure(subproblem, NumHardTensors())
         result = _bbsat!(subproblem, config, reducer, region_cache)
         result.found && return result
     end
