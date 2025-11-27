@@ -5,6 +5,13 @@ function resolve_data_dir(parts::AbstractString...)
     return dir
 end
 
+function resolve_results_dir(problem_type::AbstractString)
+    base = normpath(joinpath(@__DIR__, ".."))
+    dir = joinpath(base, "results", problem_type)
+    isdir(dir) || mkpath(dir)
+    return dir
+end
+
 # Helper function for finding executables in PATH
 function find_executable_in_path(cmd::String, name::String)
     try

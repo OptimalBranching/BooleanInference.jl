@@ -28,7 +28,7 @@ function compute_var_cover_scores_weighted(problem::TNProblem)
         for t in problem.static.v2t[v]
             deg = degrees[t]
             if deg > 2
-                scores[v] += (deg - 2) / deg
+                scores[v] += (deg - 2)
             end
         end
     end

@@ -1,5 +1,5 @@
 """
-    benchmark_dataset(problem_type, dataset_path; solver=nothing, verify=true)
+    benchmark_dataset(problem_type, dataset_path; solver=nothing, verify=true, save_result=nothing)
 
 Run benchmark on a single dataset file/directory.
 
@@ -9,11 +9,20 @@ Run benchmark on a single dataset file/directory.
 - `solver`: The solver to use (defaults to the problem type's default solver)
 - `verify::Bool`: Whether to verify solution correctness (default: true). Set to false to skip
   verification and only measure performance. When false, all runs are considered successful.
+- `save_result::Union{String, Nothing}`: Directory to save result JSON file. If nothing, results are not saved.
+  File will be named deterministically based on problem parameters.
+
+# Returns
+A tuple `(times, branches, result_path)` where:
+- `times`: Vector of execution times for each instance
+- `branches`: Vector of branch/decision counts for each instance  
+- `result_path`: Path to saved result file (or nothing if not saved)
 """
 function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem},
                            dataset_path::AbstractString;
                            solver::Union{AbstractSolver, Nothing}=nothing,
-                           verify::Bool=true)
+                           verify::Bool=true,
+                           save_result::Union{String, Nothing}=nothing)
     actual_solver = isnothing(solver) ? default_solver(problem_type) : solver
     warmup = actual_solver.warmup
     solver_info = solver_name(actual_solver)
@@ -72,11 +81,38 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem},
             @info "  Completed $i/$(length(instances)) instances"
         end
     end        
-    return Dict(
-        "dataset_path" => dataset_path,
-        "instances_tested" => length(instances),
-        "solver" => solver_info,
-        "all_time" => all_times,
-        "all_results" => all_results
-    )
+    # Extract branch counts based on solver type
+    branches = Int[]
+    if actual_solver isa BooleanInferenceSolver
+        for res in all_results
+            push!(branches, res[3].total_visited_nodes)
+        end
+    else
+        for res in all_results
+            push!(branches, res.decisions)
+        end
+    end
+    
+    println("Times: ", all_times)
+    println("Branches: ", branches)
+    
+    # Save results if requested
+    result_path = nothing
+    if !isnothing(save_result)
+        result = BenchmarkResult(
+            string(problem_type),
+            abspath(dataset_path),
+            solver_info,
+            solver_config_dict(actual_solver),
+            length(instances),
+            all_times,
+            branches,
+            Dates.format(now(), "yyyy-mm-ddTHH:MM:SS"),
+            collect_metadata()
+        )
+        result_path = save_benchmark_result(result, save_result)
+        print_result_summary(result)
+    end
+    
+    return all_times, branches, result_path
 end
