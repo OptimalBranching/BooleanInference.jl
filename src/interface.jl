@@ -92,8 +92,8 @@ function solve_factoring(
     n::Int, m::Int, N::Int;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=MinGammaSelector(2,4,TNContractionSolver(), GreedyMerge()),
-        # selector=MostOccurrenceSelector(2,4),
+        # selector=MinGammaSelector(2,4,TNContractionSolver(), GreedyMerge()),
+        selector=MostOccurrenceSelector(3,3),
         measure=NumHardTensors(),
         set_cover_solver=GreedyMerge()
     ),
