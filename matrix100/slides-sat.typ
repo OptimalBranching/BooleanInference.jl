@@ -147,152 +147,113 @@
 
 = AI, reasoning and constraint satisfaction
 
-== Logic reasoning gap in LLMs
+== The Logic Reasoning Gap
+#timecounter(2)
 
-#slide[
-Large Language Models (LLMs) have shown human-like reasoning abilities but still *struggle with complex logical problems* @Pan2023.
-  - Hallucinations in multi-step reasoning.
-  - Inability to strictly adhere to hard constraints.
-][
-//#place(center, text(30pt, stroke: yellow)[LLM + Solver = \u{1F9E0} + \u{1F527}])
-#image("images/aibrain.png", width: 300pt)
-#place(dx: 50%, dy: -75%, box(stroke: white, inset: 5pt, text(white, 30pt, stroke: yellow)[SAT]))
-]
+#grid(columns: 2, gutter: 40pt,
+[
+  *LLMs struggle with logical reasoning* @Pan2023:
+  - Hallucinations in multi-step reasoning
+  - Cannot strictly enforce hard constraints
+  - No guarantees on correctness
+  
+  #v(20pt)
+  
+  *Solution*: Combine neural networks with symbolic solvers
+  
+  #figure(canvas({
+    import draw: *
+    content((-3, 0), [*AI*])
+    content((0, 0), [*Human*])
+    content((3, 0), [*Solvers*])
+    content((-3, -1), text(12pt)[Reasoning])
+    line((-2, -1), (-1, -1), mark: (end: "straight"))
+    content((3, -1), text(12pt)[Knowledge])
+    line((2, -1), (1, -1), mark: (end: "straight"))
+  }))
+],
+[
+  #image("images/aibrain.png", width: 250pt)
+  #place(dx: 30%, dy: -75%, box(stroke: white, inset: 5pt, text(white, 24pt, stroke: yellow)[SAT Solvers]))
+])
 
-==
-
-#figure(canvas({
-  import draw: *
-  content((-6, -1), [*AI*])
-  content((0, -1), [*Human*])
-  content((6, -1), [*SAT solvers*])
-
-  content((0, -2.5), [Reasoning power])
-  line((3, -2.5), (5, -2.5), mark: (end: "straight"))
-
-  content((0, -3.5), [Knowledge level])
-  line((-3, -3.5), (-5, -3.5), mark: (end: "straight"))
-}))
-
-=== Example SAT solvers
-- logic programming, first order logic, e.g. Prover9
-- satisfiability modulo theories (SMT), e.g. Microsoft Z3
-- constraint satisfiability problem (CSP), e.g. Kissat, X-SAT
-
-== Significance of CSP in Machine Learning
+== Three Types of Constraint Solvers
 #timecounter(1)
 
-#align(center, box(stroke: black, inset: 10pt, width: 100%, [
-  *Why Constraint Satisfaction Problems (CSP) matter for AI?*
-]))
+1. *First-Order Logic* (FOL): Theorem provers (e.g., Prover9)
+   - Most expressive, but undecidable
+   
+2. *Satisfiability Modulo Theories* (SMT): Z3, CVC5 @deMoura2008
+   - Boolean logic + arithmetic/arrays/bit-vectors
+   - Decidable for many theories
+   
+3. *Constraint Satisfaction Problems* (CSP): Kissat, X-SAT
+   - Finite domains, highly efficient
+   - Foundation for many applications
 
-- *Neuro-symbolic AI*: Bridging the gap between neural networks (learning) and symbolic logic (reasoning).
-- *Verification*: Ensuring neural networks satisfy safety constraints (e.g., robustness verification).
-- *Structured Prediction*: Problems where output variables are constrained (e.g., protein folding, scheduling).
+== Why CSP Matters for AI + Science
+#timecounter(1)
 
-*Recent Works*:
-- SATNet @Wang2019: Differentiable SAT solver layer.
-- NeuroSAT @Selsam2018: Learning to solve SAT with GNNs.
-- AlphaGeometry @Trinh2024: Combining LLMs with symbolic solvers.
+*Neuro-symbolic AI*:
+- SATNet @Wang2019: Differentiable SAT solver layer
+- NeuroSAT @Selsam2018: Learning to solve SAT with GNNs
+- AlphaGeometry @Trinh2024: LLMs + symbolic solvers
 
+*Scientific Applications*:
+- Protein structure prediction, molecular design
+- Circuit verification, control systems
+- Combinatorial optimization (spin systems, scheduling)
 
-==
-- Neural networks are Turing in-complete.
-- Neural networks + SAT solvers is Turing complete? (needs support). Can we say NP-complete is a finite state version of Turing complete? i.e. draw a connection between NP-complete and halting problem?
-== Constraint satisfaction problem
-
-*Definition*: Constraint satisfaction problem (CSP) is a problem of finding the optimal solution to a set of constraints over a set of variables.
-
-== Comparing Three Reasoning Paradigms
+== Comparing the Three Paradigms
 #timecounter(2)
 
-#let hd(name) = table.cell(text(16pt)[#name], fill: green.lighten(50%))
-#let s(name) = table.cell(text(16pt)[#name])
-#align(center, table(
-  columns: (auto, auto, auto, auto),
-  align: (left, left, left, left),
-  inset: 8pt,
-  table.header(
-    hd[*Paradigm*], 
-    hd[*Domain*], 
-    hd[*Example Problem*], 
-    hd[*Expressiveness*]
-  ),
-  s[*First-Order\ Logic (FOL)*], 
-  s[Predicates, quantifiers,\ logical connectives], 
-  s[∀x (Bird(x) → CanFly(x))\ ∃x (Penguin(x) ∧ ¬CanFly(x))], 
-  s[Highest: can express\ complex relations],
-  
-  s[*SMT*\ (SAT + Theories) @deMoura2008], 
-  s[Boolean logic +\ arithmetic, arrays,\ bit-vectors, etc.], 
-  s[$(x + y = 10) and (x > 0)$\ $(2x < y or x = 5)$], 
-  s[Medium: combines\ boolean + arithmetic],
-  
-  s[*CSP*], 
-  s[Variables with\ finite domains,\ constraints], 
-  s[$x in {1,2,3}, y in {1,2,3}$\ $x != y, x + y > 3$], 
-  s[Lower: finite domains,\ but very efficient],
-))
+*Problem*: "Three people have different ages. Alice > Bob."
 
-*Key Differences*:
-- *FOL*: Most expressive, but undecidable in general (no guaranteed termination)
-- *SMT*: Decidable for many theories, practical solvers exist (Z3, CVC5)
-- *CSP*: Highly efficient for finite domains, used in scheduling, planning
-
-== Example: Same Problem in Three Paradigms
-#timecounter(2)
-
-*Problem*: "Alice, Bob, and Carol have different ages. Alice is older than Bob."
-
-#grid(columns: 3, gutter: 30pt, align(top)[
-  *First-Order Logic*
+#grid(columns: 3, gutter: 25pt, align(top)[
+  *FOL (Theorem Proving)*
   
-  #text(16pt)[```
-  ∀x,y (Person(x) ∧ Person(y) 
-        ∧ x≠y → Age(x)≠Age(y))
-  
-  Person(Alice) ∧ Person(Bob) 
-    ∧ Person(Carol)
-  
+  #text(14pt)[```
+  ∀x,y (x≠y → Age(x)≠Age(y))
   Age(Alice) > Age(Bob)
   
-  Query: Age(Alice) > Age(Carol)?
+  Query: ?
   ```]
-], align(top)[
-  *SMT*
   
-  #text(16pt)[
-  ```smt
+  ✓ Most expressive\ 
+  ✗ Undecidable
+], align(top)[
+  *SMT (Z3, CVC5)*
+  
+  #text(14pt)[```smt
   (declare-const a Int)
   (declare-const b Int)
   (declare-const c Int)
-  
   (assert (distinct a b c))
-  (assert (> a 0))
-  (assert (> b 0))
-  (assert (> c 0))
   (assert (> a b))
-  
   (check-sat)
-  (get-model)
   ```]
-], align(top, box(stroke: (paint: black, dash: "dashed"), outset: 10pt)[*CSP*
   
-  #text(16pt)[```
-  Variables:
-    Alice ∈ {1,2,3}
-    Bob ∈ {1,2,3}
-    Carol ∈ {1,2,3}
+  ✓ Boolean + theories\
+  ✓ Decidable
+], align(top)[
+  *CSP (Our Focus)*
   
-  Constraints:
-    AllDifferent(Alice, Bob, Carol)
-    Alice > Bob
+  #text(14pt)[```
+  Alice, Bob, Carol ∈ {1,2,3}
   
-  Solve for all solutions
+  AllDifferent(·,·,·)
+  Alice > Bob
+  
+  → 12 solutions
   ```]
-]))
+  
+  ✓ Highly efficient\
+  ✓ Combinatorial opt.
+])
 
-- _Remark_: CSP is the fundation of many SMT solvers.
+#align(center, box(stroke: black, inset: 8pt)[
+  *CSP is the foundation of many SMT solvers and combinatorial algorithms*
+])
 
 == Physics-inspired algorithms
 
@@ -304,196 +265,121 @@ Dilema of physics-inspired algorithms:
 - None of the solvers above are close to the state-of-the-art exact solvers.
 
 == Exact solvers
-- Branching algorithms.
-- Dynamic programming.
+- Branching algorithms $(checkmark)$: contributes most of the SOTA exact exponential solvers for computational hard problems @Fomin2013.
+- Dynamic programming/tensor network.
 - Integer programming.
 - SAT solvers.
+- Grover search: quadratic speed up compared to bruteforce search.
 - ...
 
-= Branching, but online
-== Searching a solution
-#timecounter(2)
-*Problem*: Given a combinatorial optimization problem with $n$ boolean variables $bold(x) = {x_1, x_2, dots, x_n}$, and an verifier $f$ that returns $1$ for the solution.
-- The naive bruteforce search requires $2^n$ time to find the optimal solution.
-- Grover search: without extra information, renders a $2^(n/2)$ time solution.
 
-#align(box(stroke: black, inset: 10pt, radius: 0pt, width: 100%, [
-  *Why $sqrt(2)^n$ is not enough?*
-
-- Most real world problem has structures.
-- _Branching algorithm_ can utilize structures to produce $gamma^n$ ($1<= gamma <=2$) algorithm, in many cases, the _branching factor_ $gamma < sqrt(2)$.
-]))
-- _Remark_: Branching algorithm contributes most of the SOTA exact exponential solvers for computational hard problems. @Fomin2013
-
-
-== Branching on the fly
-#timecounter(1)
-
-#align(center, grid(columns: 2, gutter: 40pt, box(width: 300pt, canvas({
-  import draw: *
-  scale(x:60%, y:60%)
-  let DY = 3
-  let size = 1
-  for k in range(5){
-    content((k * size, 0.2 + size), text(12pt, box([$#numbering("a", k+1)$], fill: none, inset: 2pt)))
-  }
-  content((2, 2.5), align(center, text(12pt)[oracle: $(b, c, d) in {101, 100, 011}$]))
-  content((-5.5, -1.5), align(center, text(12pt)[branch: $b = 1, c = 0$]))
-  decision_sequence((0, 0), (0, -3, -3, -3, 0))
-  decision_sequence((-4, -DY), (-3, 1, 2, -3, -3))
-  decision_sequence((4, -DY), (-3, 2, 1, 1, -3))
-  decision_sequence((-8, -2*DY), (1, 1, 2, 2, -3))
-  decision_sequence((0, -2*DY), (1, 1, 2, 1, 2))
-  decision_sequence((8, -2*DY), (1, 2, 1, 1, 1))
-  decision_sequence((-8, -3*DY), (1, 1, 2, 2, 2))
-  line((1.2, -0.8), (-1.2, -DY + 0.8), mark: (end: "straight"))
-  line((2.8, -0.8), (5.2, -DY + 0.8), mark: (end: "straight"))
-  line((6.8, -DY - 0.8), (9.2, -2 * DY + 0.8), mark: (end: "straight"))
-  line((-2.8, -DY - 0.8), (-5.2, -2 * DY + 0.8), mark: (end: "straight"))
-  line((-1.2, -DY - 0.8), (1.2, -2 * DY + 0.8), mark: (end: "straight"))
-  line((-6, -2 * DY - 0.8), (-6, -3 * DY + 0.8), mark: (end: "straight"))
-})),
-[
-// 1. Get an *oracle* over a subset of _variables_, representing the decisions that may leads to the best solution.
-// 2. Make _decisions_ over some _variables_, go to step 1 if any _variable_ left.
-// 3. An _ending_ is observed, *time travel* to a previous scene and change some decisions until no more potential good endings to be explored.
-#canvas(length: 25pt, {
-  import draw: *
-  main-diagram()
-})
-]
-))
-
-
-
-// == It is difficult
-// #timecounter(1)
-
-// #align(center, box(stroke:black, inset:10pt, align(left, [
-// We are generating "theories"!
-// ])))
-// In the following,
-// - A formal definition of a branching "theory", the size of theories space is double exponential.
-// - An algorithm to generate provably optimal branching rules.
-// - For efficient contraction of sparse tensor networks.
-
-
-= Application 1: B&B tensor networks for MIS
-
-== Combining Online Branching with Tensor Networks
-#timecounter(1)
-
-#slide[
-  *The Synergy*:
-  - *Tensor Networks*: Powerful for computing the "Oracle" (counting/sampling solutions on a local region).
-    - Computing marginals ($p(x_i)$) or local configurations ($p(x_i, x_j)$).
-    - Exact contraction can be expensive, but local contraction is cheap.
-  - *Online Branching*: Uses the Oracle to find optimal cuts.
-    - Simplifies the tensor network by fixing variables (slicing).
-    - Reduces the bond dimension/complexity of the network.
-][
-  #align(center, canvas({
-    import draw: *
-    circle((0,0), radius: 2, fill: blue.lighten(80%), stroke: none)
-    content((0,0), [Tensor\ Network])
-    circle((3,0), radius: 2, fill: red.lighten(80%), stroke: none)
-    content((3,0), [Branching])
-    content((1.5, 0), text(20pt)[+])
-    
-    content((1.5, -3), box(stroke: black, inset: 10pt)[
-      TN Oracle $arrow.r$ Optimal Branch $arrow.r$ Simplified TN
-    ])
-  }))
-]
-
-== The branching algorithms for MIS
-
-#let hd(name) = table.cell(text(10pt)[#name], fill: green.lighten(50%))
-#let s(name) = table.cell(text(10pt)[#name])
-#slide(table(
-  columns: (auto, auto, auto, auto),
-  table.header(hd[Year], hd[Running times], hd[References], hd[Notes]),
-  s[1977], s[$O^*(1.2600^n)$], s[@Tarjan1977], s[],
-  s[1986], s[$O^*(1.2346^n)$], s[@Jian1986], s[],
-  s[1986], s[$O^*(1.2109^n)$], s[@Robson1986], s[],
-  s[1999], s[$O^*(1.0823^m)$], s[@Beigel1999], s[],
-  s[2001], s[$O^*(1.1893^n)$], s[@Robson2001], s[],
-  s[2003], s[$O^*(1.1254^n)$ for 3-MIS], s[@Chen2003], s[],
-  s[2005], s[$O^*(1.1034^n)$ for 3-MIS], s[@Xiao2005], s[],
-  s[2006], s[$O^*(1.2210^n)$], s[@Fomin2006], s[Measure and conquer,\ mirror rule],
-  s[2006], s[$O^*(1.1225^n)$ for 3-MIS], s[@Fomin2006b], s[Same as TN],
-  s[2006], s[$O^*(1.1120^n)$ for 3-MIS], s[@Furer2006], s[],
-  s[2006], s[$O^*(1.1034^n)$ for 3-MIS], s[@Razgon2006], s[],
-  s[2008], s[$O^*(1.0977^n)$ for 3-MIS], s[@Bourgeois2008], s[],
-  s[2009], s[$O^*(1.0919^n)$ for 3-MIS], s[@Xiao2009], s[],
-  s[2009], s[$O^*(1.2132^n)$], s[@Kneis2009], s[Satellite rule],
-  s[2013], s[$O^*(1.0836^n)$ for 3-MIS], s[@Xiao2013], s[SOTA],
-  s[2016], s[$O^*(1.2210^n)$], s[@Akiba2016], s[PACE winner],
-  s[2017], s[$O^*(1.1996^n)$], s[@Xiao2017], s[SOTA],
-),
-[
-#timecounter(1)
-
-- Independent set: is a set of vertices in a graph, no two of which are adjacent.
-- MIS: the maximum independent set
-
-#align(center, box([Finding MIS is NP-complete - unlikely to be solved in time polynomial to the input size @Karp1972.], stroke: black, inset: 10pt))
-
-#let formin() = {
-  import draw: *
-  let s = 2
-  let dy = 3.0
-  let la = (-s, 0)
-  let lb = (0, s)
-  let lc = (0, 0)
-  let ld = (s, 0)
-  let le = (s, s)
- 
-  for (l, n, color) in ((la, "a", red), (lb, "b", black), (lc, "c", red), (ld, "d", black), (le, "e", red)){
-    circle((l.at(0), l.at(1)-s/2), radius:0.4, name: n, stroke: color)
-    content((l.at(0), l.at(1)-s/2), text(14pt)[$#n$])
-  }
-  for (a, b) in (("a", "b"), ("b", "c"), ("c", "d"), ("d", "e"), ("b", "d")){
-    line(a, b)
-  }
-}
-
-
-#grid([
-#pad(canvas({
-  import draw: *
-  formin()
-  content((0.5, -2), [$G = (V, E)$])
-}), x:20pt)
-],
-[
-  - 0 for not in the set
-  - 1 for in the set
-],
-columns: 2, gutter: 30pt
-)
+#align(center, box(stroke: black, inset: 8pt)[
+Branching implements human wisdom for reasoning: *case by case*.
 ])
 
-== Time complexity v.s. space complexity
-#slide[
-    #image("images/ksg_60x60_tc_s1.svg", width: 100%)][
-#timecounter(1)
-  - Dynamic slicing: time complexity grows with slice size.
-  - TNBB (OB based method): both time and space complexity reduces.
+= Branching, but online
+
+== Constraint Satisfaction Problem (CSP)
+#timecounter(2)
+
+#definition("Constraint Satisfaction Problem")[
+  Given:
+  - *Variables*: $bold(x) = {x_1, x_2, dots, x_n}$ with finite domains $D_i$
+  - *Constraints*: $C_1, C_2, dots, C_m$ (relations over subsets of variables)
+  - *Objective*: Find assignment satisfying all constraints (or optimize some function)
 ]
 
-== Showcase: King's subgraph at 0.8 filling
-#timecounter(1)
-
-#grid(columns: 2, gutter: 20pt,
-[#canvas({
-  import draw: *
-  show-grid-graph(8, 8, filling: 0.8, unitdisk: 1.6)
-})
+==
+#grid(columns: 2, gutter: 30pt,
+[
+  *Example: Graph Coloring*
+  
+  #canvas({
+    import draw: *
+    let nodes = ((0, (0,0)), (1, (1.5,0)), (2, (0.75,1.3)))
+    for (i, pos) in nodes {
+      circle(pos, radius: 0.3, name: str(i))
+      content(pos, text(14pt)[$v_#i$])
+    }
+    line("0", "1")
+    line("1", "2")
+    line("2", "0")
+  })
+  
+  - *Variables*: $v_0, v_1, v_2$
+  - *Domain*: Each $v_i in {R, G, B}$
+  - *Constraints*: Adjacent vertices $!=$ same color
+  - *Objective*: Find valid coloring
 ],
 [
-  - Independent set problem on King's subgraph is NP-hard @Pichler2018, also known as hard-core lattice gas @Nath2014, and is implementable on Rydberg atoms arrays @Ebadi2022.
-  - Previous (classical) record: $40 times 40$ for tensor network @Liu2023 and branching methods, estimated to be $70 times 70$ for integer programming (CPLEX) @Andrist2023
+  *Example: Maximum Independent Set*
+  
+  Same graph structure
+  
+  - *Variables*: $x_i in {0, 1}$ (in set or not)
+  - *Constraints*: $x_i + x_j <= 1$ if edge $(i,j)$
+  - *Objective*: *Maximize* $sum_i x_i$
+  
+  #v(10pt)
+  
+  *Key insight*: Constraint $ arrow.r.double$ reduces search space
+])
+
+#align(center, box(stroke: black, inset: 10pt)[
+  Naive search: $|D|^n$ possibilities. *Can we do better?*
+])
+
+== Why Branching? The Power of Divide-and-Conquer
+#timecounter(2)
+
+*Branching algorithm*: Recursively split problem into independent subproblems
+
+#figure(canvas(length: 0.6cm, {
+  import draw: *
+  mixmode_tree()
+}))
+
+#grid(columns: 2, gutter: 25pt,
+[
+  *How it achieves $gamma^n$ complexity:*
+  
+  Let $rho$ = problem size measure (e.g., \# variables)
+  
+  At each node, branch into $k$ subproblems with size reductions $Delta rho_1, dots, Delta rho_k$
+  
+  Time complexity: 
+  $
+  T(rho) = sum_(i=1)^k T(rho - Delta rho_i)
+  $
+  
+  This recurrence solves to $T(rho) = O(gamma^rho)$ where:
+  $
+  1 = sum_(i=1)^k gamma^(-Delta rho_i)
+  $
+],
+[
+  *Example: Simple branching*
+  
+  Pick variable $x$, branch on $x=0$ and $x=1$:
+  - Removes 1 variable per branch
+  - $gamma^n = 2 gamma^(n-1)$
+  - Solving: $gamma = 2$
+  
+  *Better branching*:
+  
+  Branch cleverly to remove more variables:
+  - Branch 1: remove 3 variables
+  - Branch 2: remove 5 variables
+  - $gamma^n = gamma^(n-3) + gamma^(n-5)$
+  - Solving: $gamma approx 1.32$
+  
+  #v(5pt)
+  
+  *Goal*: Find branching rules that minimize $gamma$!
+])
+
+#align(center, box(stroke: black, inset: 10pt)[
+  *Key*: Branching utilizes problem structure to achieve $gamma < 2$, often $gamma < sqrt(2)$ @Fomin2013
 ])
 
 
@@ -569,29 +455,56 @@ $
 $
 ]
 
-== Traditional branching: Rule-based
+== Branching on the fly
 #timecounter(1)
 
-#align(center, grid(columns: 3, gutter: 25pt,
-align(center, [1. Design a rule table\ (local pattern $arrow.r$ sub-problems)]), align(center, [2. Pattern matching]), align(center, [3. Pattern $arrow.r$ which rule]),
-align(left + top, box(stroke: black, inset: 10pt, width: 200pt, [
-- Dominance rule
-- Mirror rule
-- Satellite rule
-- ...
-])),
-align(center+top, text(11pt)[#canvas(length: 0.5cm, demograph((white, white, white, white, white), fontsize: 12pt))]),
-align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
-  - If `degree(v) == 1`, add `v` to the set
-  - If `has_mirror`, use mirror rule
-  - If `has_satellite`, use satellite rule
-  - ...
-]))
+#align(center, grid(columns: 2, gutter: 40pt, box(width: 300pt, canvas({
+  import draw: *
+  scale(x:60%, y:60%)
+  let DY = 3
+  let size = 1
+  for k in range(5){
+    content((k * size, 0.2 + size), text(12pt, box([$#numbering("a", k+1)$], fill: none, inset: 2pt)))
+  }
+  content((2, 2.5), align(center, text(12pt)[oracle: $(b, c, d) in {101, 100, 011}$]))
+  content((-5.5, -1.5), align(center, text(12pt)[branch: $b = 1, c = 0$]))
+  decision_sequence((0, 0), (0, -3, -3, -3, 0))
+  decision_sequence((-4, -DY), (-3, 1, 2, -3, -3))
+  decision_sequence((4, -DY), (-3, 2, 1, 1, -3))
+  decision_sequence((-8, -2*DY), (1, 1, 2, 2, -3))
+  decision_sequence((0, -2*DY), (1, 1, 2, 1, 2))
+  decision_sequence((8, -2*DY), (1, 2, 1, 1, 1))
+  decision_sequence((-8, -3*DY), (1, 1, 2, 2, 2))
+  line((1.2, -0.8), (-1.2, -DY + 0.8), mark: (end: "straight"))
+  line((2.8, -0.8), (5.2, -DY + 0.8), mark: (end: "straight"))
+  line((6.8, -DY - 0.8), (9.2, -2 * DY + 0.8), mark: (end: "straight"))
+  line((-2.8, -DY - 0.8), (-5.2, -2 * DY + 0.8), mark: (end: "straight"))
+  line((-1.2, -DY - 0.8), (1.2, -2 * DY + 0.8), mark: (end: "straight"))
+  line((-6, -2 * DY - 0.8), (-6, -3 * DY + 0.8), mark: (end: "straight"))
+})),
+[
+// 1. Get an *oracle* over a subset of _variables_, representing the decisions that may leads to the best solution.
+// 2. Make _decisions_ over some _variables_, go to step 1 if any _variable_ left.
+// 3. An _ending_ is observed, *time travel* to a previous scene and change some decisions until no more potential good endings to be explored.
+#canvas(length: 25pt, {
+  import draw: *
+  main-diagram()
+})
+]
 ))
 
-- _Remark_: Each rule is associated with a branching factor $gamma$. The overall complexity is upper bounded by the maximum branching factor in the rule table.
-- _Remark_: The table of rules is *problem-specific*.
-- _Remark_: The rules are usually *local* (e.g. only considers $N_2[v]$).
+
+
+// == It is difficult
+// #timecounter(1)
+
+// #align(center, box(stroke:black, inset:10pt, align(left, [
+// We are generating "theories"!
+// ])))
+// In the following,
+// - A formal definition of a branching "theory", the size of theories space is double exponential.
+// - An algorithm to generate provably optimal branching rules.
+// - For efficient contraction of sparse tensor networks.
 
 == Branching - an art of deviding and conquering
 #timecounter(2)
@@ -613,6 +526,7 @@ Characterizes the hardness of the instance
 - The number of vertices in the sub-problem
 - Degree 3 measure: $sum_(v in V) max(0, d(v) - 2)$, because degree 2 graphs are easy!
 - More sofisticated measures, e.g. assigning different measurs for vertices with different degree.
+- The tree-width of a graph topology.
 
 It must be *positive*, *non-increasing* during branching, measure 0 problem is directly solvable.
 
@@ -767,6 +681,151 @@ min_(x) sum_(i=1)^(|cal(C)|) gamma^(-Delta rho(c_i)) x_i,  "s.t." union.big_(i =
 $
 where $J_i$ is the indices of bitstrings that covered by the $i$-th clause.
 - _Remark_: Although this problem is NP-hard, it is efficiently solvable with integer programming in practise. It allows us to handle number of vertices $>20$.
+
+
+= Application 1: B&B tensor networks for MIS
+
+== Combining Online Branching with Tensor Networks
+#timecounter(1)
+
+#slide[
+  *The Synergy*:
+  - *Tensor Networks*: Powerful for computing the "Oracle" (counting/sampling solutions on a local region).
+    - Computing marginals ($p(x_i)$) or local configurations ($p(x_i, x_j)$).
+    - Exact contraction can be expensive, but local contraction is cheap.
+  - *Online Branching*: Uses the Oracle to find optimal cuts.
+    - Simplifies the tensor network by fixing variables (slicing).
+    - Reduces the bond dimension/complexity of the network.
+][
+  #align(center, canvas({
+    import draw: *
+    circle((0,0), radius: 2, fill: blue.lighten(80%), stroke: none)
+    content((0,0), [Tensor\ Network])
+    circle((3,0), radius: 2, fill: red.lighten(80%), stroke: none)
+    content((3,0), [Branching])
+    content((1.5, 0), text(20pt)[+])
+    
+    content((1.5, -3), box(stroke: black, inset: 10pt)[
+      TN Oracle $arrow.r$ Optimal Branch $arrow.r$ Simplified TN
+    ])
+  }))
+]
+
+== The branching algorithms for MIS
+
+#let hd(name) = table.cell(text(10pt)[#name], fill: green.lighten(50%))
+#let s(name) = table.cell(text(10pt)[#name])
+#slide(table(
+  columns: (auto, auto, auto, auto),
+  table.header(hd[Year], hd[Running times], hd[References], hd[Notes]),
+  s[1977], s[$O^*(1.2600^n)$], s[@Tarjan1977], s[],
+  s[1986], s[$O^*(1.2346^n)$], s[@Jian1986], s[],
+  s[1986], s[$O^*(1.2109^n)$], s[@Robson1986], s[],
+  s[1999], s[$O^*(1.0823^m)$], s[@Beigel1999], s[],
+  s[2001], s[$O^*(1.1893^n)$], s[@Robson2001], s[],
+  s[2003], s[$O^*(1.1254^n)$ for 3-MIS], s[@Chen2003], s[],
+  s[2005], s[$O^*(1.1034^n)$ for 3-MIS], s[@Xiao2005], s[],
+  s[2006], s[$O^*(1.2210^n)$], s[@Fomin2006], s[Measure and conquer,\ mirror rule],
+  s[2006], s[$O^*(1.1225^n)$ for 3-MIS], s[@Fomin2006b], s[Same as TN],
+  s[2006], s[$O^*(1.1120^n)$ for 3-MIS], s[@Furer2006], s[],
+  s[2006], s[$O^*(1.1034^n)$ for 3-MIS], s[@Razgon2006], s[],
+  s[2008], s[$O^*(1.0977^n)$ for 3-MIS], s[@Bourgeois2008], s[],
+  s[2009], s[$O^*(1.0919^n)$ for 3-MIS], s[@Xiao2009], s[],
+  s[2009], s[$O^*(1.2132^n)$], s[@Kneis2009], s[Satellite rule],
+  s[2013], s[$O^*(1.0836^n)$ for 3-MIS], s[@Xiao2013], s[SOTA],
+  s[2016], s[$O^*(1.2210^n)$], s[@Akiba2016], s[PACE winner],
+  s[2017], s[$O^*(1.1996^n)$], s[@Xiao2017], s[SOTA],
+),
+[
+#timecounter(1)
+
+- Independent set: is a set of vertices in a graph, no two of which are adjacent.
+- MIS: the maximum independent set
+
+#align(center, box([Finding MIS is NP-complete - unlikely to be solved in time polynomial to the input size @Karp1972.], stroke: black, inset: 10pt))
+
+#let formin() = {
+  import draw: *
+  let s = 2
+  let dy = 3.0
+  let la = (-s, 0)
+  let lb = (0, s)
+  let lc = (0, 0)
+  let ld = (s, 0)
+  let le = (s, s)
+ 
+  for (l, n, color) in ((la, "a", red), (lb, "b", black), (lc, "c", red), (ld, "d", black), (le, "e", red)){
+    circle((l.at(0), l.at(1)-s/2), radius:0.4, name: n, stroke: color)
+    content((l.at(0), l.at(1)-s/2), text(14pt)[$#n$])
+  }
+  for (a, b) in (("a", "b"), ("b", "c"), ("c", "d"), ("d", "e"), ("b", "d")){
+    line(a, b)
+  }
+}
+
+
+#grid([
+#pad(canvas({
+  import draw: *
+  formin()
+  content((0.5, -2), [$G = (V, E)$])
+}), x:20pt)
+],
+[
+  - 0 for not in the set
+  - 1 for in the set
+],
+columns: 2, gutter: 30pt
+)
+])
+
+== Time complexity v.s. space complexity
+#slide[
+    #image("images/ksg_60x60_tc_s1.svg", width: 100%)][
+#timecounter(1)
+  - Dynamic slicing: time complexity grows with slice size.
+  - TNBB (OB based method): both time and space complexity reduces.
+]
+
+== Showcase: King's subgraph at 0.8 filling
+#timecounter(1)
+
+#grid(columns: 2, gutter: 20pt,
+[#canvas({
+  import draw: *
+  show-grid-graph(8, 8, filling: 0.8, unitdisk: 1.6)
+})
+],
+[
+  - Independent set problem on King's subgraph is NP-hard @Pichler2018, also known as hard-core lattice gas @Nath2014, and is implementable on Rydberg atoms arrays @Ebadi2022.
+  - Previous (classical) record: $40 times 40$ for tensor network @Liu2023 and branching methods, estimated to be $70 times 70$ for integer programming (CPLEX) @Andrist2023
+])
+
+
+
+== Traditional branching: Rule-based
+#timecounter(1)
+
+#align(center, grid(columns: 3, gutter: 25pt,
+align(center, [1. Design a rule table\ (local pattern $arrow.r$ sub-problems)]), align(center, [2. Pattern matching]), align(center, [3. Pattern $arrow.r$ which rule]),
+align(left + top, box(stroke: black, inset: 10pt, width: 200pt, [
+- Dominance rule
+- Mirror rule
+- Satellite rule
+- ...
+])),
+align(center+top, text(11pt)[#canvas(length: 0.5cm, demograph((white, white, white, white, white), fontsize: 12pt))]),
+align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
+  - If `degree(v) == 1`, add `v` to the set
+  - If `has_mirror`, use mirror rule
+  - If `has_satellite`, use satellite rule
+  - ...
+]))
+))
+
+- _Remark_: Each rule is associated with a branching factor $gamma$. The overall complexity is upper bounded by the maximum branching factor in the rule table.
+- _Remark_: The table of rules is *problem-specific*.
+- _Remark_: The rules are usually *local* (e.g. only considers $N_2[v]$).
 
 == A bottleneck case in an expert designed 3-MIS branching
 #timecounter(1)
