@@ -12,7 +12,6 @@ Parse the `s ...` status line and one or more `v ...` assignment lines (DIMACS s
 """
 function run_xsat_and_parse(exec::AbstractString, aig_path::AbstractString, timeout::Real)::XSatResult
     raw = read(`/opt/homebrew/bin/gtimeout $(timeout)s $exec -i $aig_path`, String)
-    @show raw
     status =
         occursin(r"(?m)^s\s+SATISFIABLE\b", raw) ? :sat :
         occursin(r"(?m)^s\s+UNSATISFIABLE\b", raw) ? :unsat : :unknown

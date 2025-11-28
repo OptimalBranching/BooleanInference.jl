@@ -82,19 +82,25 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem},
         end
     end        
     # Extract branch counts based on solver type
+    # Only BooleanInferenceSolver and CNFSolver track branch/decision counts
     branches = Int[]
     if actual_solver isa BooleanInferenceSolver
         for res in all_results
             push!(branches, res[3].total_visited_nodes)
         end
-    else
+    elseif actual_solver isa CNFSolver
         for res in all_results
             push!(branches, res.decisions)
         end
+    else
+        # XSATSolver and IPSolver don't track branches - use 0 as placeholder
+        branches = zeros(Int, length(all_results))
     end
     
     println("Times: ", all_times)
-    println("Branches: ", branches)
+    if actual_solver isa BooleanInferenceSolver || actual_solver isa CNFSolver
+        println("Branches: ", branches)
+    end
     
     # Save results if requested
     result_path = nothing

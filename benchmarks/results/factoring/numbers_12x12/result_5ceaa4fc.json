@@ -1,0 +1,62 @@
+{
+  "dataset_path": "/Users/xiweipan/Codes/BooleanInference.jl/benchmarks/data/factoring/numbers_12x12.txt",
+  "branches": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "problem_type": "FactoringProblem",
+  "solver_config": {
+    "timeout": 300,
+    "verify": true
+  },
+  "num_instances": 20,
+  "solver_name": "X-SAT",
+  "times": [
+    0.112625041,
+    0.111667458,
+    0.11626525,
+    0.09714175,
+    0.098729,
+    0.094323166,
+    0.09069375,
+    0.104508041,
+    0.088918875,
+    0.131769167,
+    0.094388292,
+    0.089439375,
+    0.133898125,
+    0.111429792,
+    0.092362458,
+    0.105250583,
+    0.116187416,
+    0.116516834,
+    0.110220917,
+    0.091478333
+  ],
+  "timestamp": "2025-11-27T21:18:55",
+  "metadata": {
+    "julia_version": "1.12.1",
+    "arch": "aarch64",
+    "hostname": "MacBook-Air-Pan.local",
+    "os": "Darwin",
+    "cpu_threads": 4
+  }
+}

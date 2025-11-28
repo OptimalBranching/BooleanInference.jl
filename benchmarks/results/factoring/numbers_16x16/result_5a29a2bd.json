@@ -1,0 +1,62 @@
+{
+  "dataset_path": "/Users/xiweipan/Codes/BooleanInference.jl/benchmarks/data/factoring/numbers_16x16.txt",
+  "branches": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "problem_type": "FactoringProblem",
+  "solver_config": {
+    "optimizer": "Gurobi",
+    "verify": true
+  },
+  "num_instances": 20,
+  "solver_name": "IP-Gurobi",
+  "times": [
+    16.222631541,
+    12.481445708,
+    5.782439083,
+    14.740054958,
+    16.136438541,
+    22.412994292,
+    1.87815,
+    1.498862583,
+    22.668871709,
+    7.269470458,
+    18.30389675,
+    11.951629292,
+    17.5855905,
+    0.23161525,
+    15.595741833,
+    2.054980125,
+    19.737672417,
+    12.693926292,
+    17.887937416,
+    16.588420125
+  ],
+  "timestamp": "2025-11-27T20:29:28",
+  "metadata": {
+    "julia_version": "1.12.1",
+    "arch": "aarch64",
+    "hostname": "MacBook-Air-Pan.local",
+    "os": "Darwin",
+    "cpu_threads": 4
+  }
+}

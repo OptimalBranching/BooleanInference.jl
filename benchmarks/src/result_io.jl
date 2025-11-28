@@ -8,6 +8,8 @@ file naming based on parameters.
 using JSON3
 using SHA
 using Dates
+using Statistics: mean, median
+using Printf
 
 """
     BenchmarkResult
@@ -213,16 +215,27 @@ A `BenchmarkResult` object.
 function load_benchmark_result(filepath::String)
     json_data = JSON3.read(read(filepath, String))
     
+    # Convert JSON3 objects to proper Dict types
+    solver_config = Dict{String,Any}()
+    for (k, v) in pairs(json_data.solver_config)
+        solver_config[string(k)] = v
+    end
+    
+    metadata = Dict{String,Any}()
+    for (k, v) in pairs(json_data.metadata)
+        metadata[string(k)] = v
+    end
+    
     return BenchmarkResult(
-        json_data.problem_type,
-        json_data.dataset_path,
-        json_data.solver_name,
-        Dict{String,Any}(json_data.solver_config),
-        json_data.num_instances,
+        string(json_data.problem_type),
+        string(json_data.dataset_path),
+        string(json_data.solver_name),
+        solver_config,
+        Int(json_data.num_instances),
         Vector{Float64}(json_data.times),
         Vector{Int}(json_data.branches),
-        json_data.timestamp,
-        Dict{String,Any}(json_data.metadata)
+        string(json_data.timestamp),
+        metadata
     )
 end
 
@@ -247,6 +260,223 @@ function find_result_file(problem_type::Type{<:AbstractBenchmarkProblem},
     filepath = joinpath(dataset_dir, filename)
     
     return isfile(filepath) ? filepath : nothing
+end
+
+"""
+    load_all_results(problem_dir::String)
+
+Load all result files from a problem directory (e.g., results/factoring/).
+Returns a vector of BenchmarkResult objects.
+
+# Example
+```julia
+results = load_all_results(resolve_results_dir("factoring"))
+```
+"""
+function load_all_results(problem_dir::String)
+    results = BenchmarkResult[]
+    
+    if !isdir(problem_dir)
+        @warn "Directory not found: $problem_dir"
+        return results
+    end
+    
+    for dataset_dir in readdir(problem_dir, join=true)
+        isdir(dataset_dir) || continue
+        
+        for file in readdir(dataset_dir, join=true)
+            if endswith(file, ".json")
+                try
+                    push!(results, load_benchmark_result(file))
+                catch e
+                    @warn "Failed to load $file: $e"
+                end
+            end
+        end
+    end
+    
+    return results
+end
+
+"""
+    load_dataset_results(problem_dir::String, dataset_name::String)
+
+Load all results for a specific dataset.
+
+# Example
+```julia
+results = load_dataset_results(resolve_results_dir("factoring"), "numbers_8x8")
+```
+"""
+function load_dataset_results(problem_dir::String, dataset_name::String)
+    results = BenchmarkResult[]
+    dataset_dir = joinpath(problem_dir, dataset_name)
+    
+    if !isdir(dataset_dir)
+        @warn "Dataset directory not found: $dataset_dir"
+        return results
+    end
+    
+    for file in readdir(dataset_dir, join=true)
+        if endswith(file, ".json")
+            try
+                push!(results, load_benchmark_result(file))
+            catch e
+                @warn "Failed to load $file: $e"
+            end
+        end
+    end
+    
+    return results
+end
+
+"""
+    get_config_summary(result::BenchmarkResult)
+
+Generate a short summary string for the solver configuration.
+"""
+function get_config_summary(result::BenchmarkResult)
+    config = result.solver_config
+    
+    # Abbreviation mappings
+    selector_abbrev = Dict(
+        "MostOccurrenceSelector" => "MostOcc",
+        "LeastOccurrenceSelector" => "LeastOcc",
+        "MinGammaSelector" => "MinGamma"
+    )
+    
+    measure_abbrev = Dict(
+        "NumHardTensors" => "HardT",
+        "NumUnfixedVars" => "UnfixV",
+        "NumUnfixedTensors" => "UnfixT",
+        "HardSetSize" => "HardSet"
+    )
+    
+    if result.solver_name == "BI"
+        parts = String[]
+        
+        # Selector info
+        if haskey(config, "selector_type")
+            selector = split(string(config["selector_type"]), ".")[end]  # Get last part after dot
+            selector_short = get(selector_abbrev, selector, selector)
+            
+            if haskey(config, "selector_k") && haskey(config, "selector_max_tensors")
+                push!(parts, "$(selector_short)($(config["selector_k"]),$(config["selector_max_tensors"]))")
+            else
+                push!(parts, selector_short)
+            end
+        end
+        
+        # Measure info
+        if haskey(config, "measure")
+            measure = split(string(config["measure"]), ".")[end]
+            measure_short = get(measure_abbrev, measure, measure)
+            push!(parts, measure_short)
+        end
+        
+        return join(parts, "+")
+    else
+        # For non-BI solvers, just return solver type
+        return result.solver_name
+    end
+end
+
+"""
+    compare_results(results::Vector{BenchmarkResult})
+
+Compare multiple benchmark results and print a comparison table.
+"""
+function compare_results(results::Vector{BenchmarkResult})
+    isempty(results) && (@warn "No results to compare"; return)
+    
+    println("\n" * "="^100)
+    println("Benchmark Results Comparison")
+    println("="^100)
+    
+    # Group by dataset
+    datasets = unique([splitext(basename(r.dataset_path))[1] for r in results])
+    
+    for dataset in sort(datasets)
+        dataset_results = filter(r -> splitext(basename(r.dataset_path))[1] == dataset, results)
+        isempty(dataset_results) && continue
+        
+        println("\nDataset: $dataset")
+        println("-"^100)
+        println(@sprintf("%-14s %-19s %12s %12s %12s %12s %8s", 
+                        "Solver", "Config", "Mean Time", "Total Time", "Mean Branch", "Total Branch", "N"))
+        println("-"^100)
+        
+        for result in sort(dataset_results, by=r->mean(r.times))
+            config_str = get_config_summary(result)
+            
+            mean_time = mean(result.times)
+            total_time = sum(result.times)
+            
+            if !all(iszero, result.branches)
+                mean_branch = mean(result.branches)
+                total_branch = sum(result.branches)
+                println(@sprintf("%-14s %-19s %12.4f %12.4f %12.2f %12d %8d", 
+                                result.solver_name, config_str[1:min(25,end)], 
+                                mean_time, total_time, mean_branch, total_branch, result.num_instances))
+            else
+                println(@sprintf("%-14s %-19s %12.4f %12.4f %12s %12s %8d", 
+                                result.solver_name, config_str[1:min(25,end)], 
+                                mean_time, total_time, "-", "-", result.num_instances))
+            end
+        end
+    end
+    println("="^100)
+end
+
+"""
+    filter_results(results::Vector{BenchmarkResult}; solver_name=nothing, dataset=nothing)
+
+Filter results by solver name and/or dataset.
+"""
+function filter_results(results::Vector{BenchmarkResult}; 
+                       solver_name::Union{String,Nothing}=nothing,
+                       dataset::Union{String,Nothing}=nothing)
+    filtered = results
+    
+    if !isnothing(solver_name)
+        filtered = filter(r -> r.solver_name == solver_name, filtered)
+    end
+    
+    if !isnothing(dataset)
+        filtered = filter(r -> splitext(basename(r.dataset_path))[1] == dataset, filtered)
+    end
+    
+    return filtered
+end
+
+"""
+    print_detailed_comparison(results::Vector{BenchmarkResult})
+
+Print a detailed comparison showing all configuration parameters.
+"""
+function print_detailed_comparison(results::Vector{BenchmarkResult})
+    isempty(results) && (@warn "No results to compare"; return)
+    
+    println("\n" * "="^100)
+    println("Detailed Configuration Comparison")
+    println("="^100)
+    
+    for (i, result) in enumerate(results)
+        println("\n[$i] $(result.solver_name) - $(basename(result.dataset_path))")
+        println("  Mean Time:   $(round(mean(result.times), digits=4))s")
+        println("  Total Time:  $(round(sum(result.times), digits=4))s")
+        
+        if !all(iszero, result.branches)
+            println("  Mean Branch: $(round(mean(result.branches), digits=2))")
+            println("  Total Branch: $(sum(result.branches))")
+        end
+        
+        println("  Configuration:")
+        for k in sort(collect(keys(result.solver_config)))
+            println("    $k: $(result.solver_config[k])")
+        end
+    end
+    println("="^100)
 end
 
 """
@@ -275,12 +505,15 @@ function print_result_summary(result::BenchmarkResult)
     println("  Max:     $(round(maximum(result.times), digits=4))s")
     println("  Total:   $(round(sum(result.times), digits=4))s")
     
-    println("\nBranching Statistics:")
-    println("  Mean:    $(round(mean(result.branches), digits=2))")
-    println("  Median:  $(round(median(result.branches), digits=2))")
-    println("  Min:     $(minimum(result.branches))")
-    println("  Max:     $(maximum(result.branches))")
-    println("  Total:   $(sum(result.branches))")
+    # Only print branching statistics if they exist (not all zeros)
+    if !all(iszero, result.branches)
+        println("\nBranching Statistics:")
+        println("  Mean:    $(round(mean(result.branches), digits=2))")
+        println("  Median:  $(round(median(result.branches), digits=2))")
+        println("  Min:     $(minimum(result.branches))")
+        println("  Max:     $(maximum(result.branches))")
+        println("  Total:   $(sum(result.branches))")
+    end
     println("="^70)
 end
 
