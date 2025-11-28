@@ -152,14 +152,14 @@
 
 #grid(columns: 2, gutter: 40pt,
 [
-  *LLMs struggle with logical reasoning* @Pan2023:
+  *LLMs struggle with logical reasoning*
   - Hallucinations in multi-step reasoning
   - Cannot strictly enforce hard constraints
   - No guarantees on correctness
   
   #v(20pt)
   
-  *Solution*: Combine neural networks with symbolic solvers
+  *Solution*: Combine neural networks with symbolic solvers @Pan2023:
   
   #figure(canvas({
     import draw: *
@@ -168,7 +168,7 @@
     content((3, 0), [*Solvers*])
     content((-3, -1), text(12pt)[Reasoning])
     line((-2, -1), (-1, -1), mark: (end: "straight"))
-    content((3, -1), text(12pt)[Knowledge])
+    content((3.2, -1), text(12pt)[Knowledge])
     line((2, -1), (1, -1), mark: (end: "straight"))
   }))
 ],
@@ -255,27 +255,28 @@
   *CSP is the foundation of many SMT solvers and combinatorial algorithms*
 ])
 
-== Physics-inspired algorithms
+== Exact solvers
+- Branching algorithms.
+- Dynamic programming.
+- Integer programming.
+- SAT solvers.
 
-- Quantum annealing and quantum variational optimization algorithms (approximate).
-- Simulated annealing, simulated bifurcation and free energy machine (heuristic).\
-- Tensor networks (exact), especially the tropical tensor network.
+=== Physics-inspired (exact) algorithms
+- Grover search: quadratic speed up compared to bruteforce search.
+- Tensor networks (similar to dynamic programming).
 
 Dilema of physics-inspired algorithms:
 - None of the solvers above are close to the state-of-the-art exact solvers.
 
-== Exact solvers
-- Branching algorithms $(checkmark)$: contributes most of the SOTA exact exponential solvers for computational hard problems @Fomin2013.
-- Dynamic programming/tensor network.
-- Integer programming.
-- SAT solvers.
-- Grover search: quadratic speed up compared to bruteforce search.
-- ...
+==
 
+- Branching algorithms $(checkmark)$: contributes most of the SOTA exact exponential solvers for computational hard problems @Fomin2013.
 
 #align(center, box(stroke: black, inset: 8pt)[
 Branching implements human wisdom for reasoning: *case by case*.
 ])
+
+e.g. In the previous example, assume `Alice = 1`, create a branch. If no valid solution is found, backtrack and try `Alice = 2`, and so on.
 
 = Branching, but online
 
@@ -330,34 +331,32 @@ Branching implements human wisdom for reasoning: *case by case*.
 ])
 
 == Why Branching? The Power of Divide-and-Conquer
-#timecounter(2)
 
+#slide[
 *Branching algorithm*: Recursively split problem into independent subproblems
 
-#figure(canvas(length: 0.6cm, {
+#figure(canvas(length: 1cm, {
   import draw: *
   mixmode_tree()
 }))
-
-#grid(columns: 2, gutter: 25pt,
-[
-  *How it achieves $gamma^n$ complexity:*
-  
-  Let $rho$ = problem size measure (e.g., \# variables)
-  
-  At each node, branch into $k$ subproblems with size reductions $Delta rho_1, dots, Delta rho_k$
-  
-  Time complexity: 
+Key assumption: $T(rho) = O(gamma^rho)$, $rho$ is the *problem size measure* (e.g., \# variables)
+][
+#timecounter(2)
+*How it achieves $gamma^n$ complexity:*
+1. At each node, branch into $k$ subproblems with size reductions $Delta rho_1, dots, Delta rho_k$
+2. Recurse, with time determined by: 
   $
-  T(rho) = sum_(i=1)^k T(rho - Delta rho_i)
+  T(rho) = sum_(i=1)^k T(rho - Delta rho_i),
   $
-  
-  This recurrence solves to $T(rho) = O(gamma^rho)$ where:
   $
   1 = sum_(i=1)^k gamma^(-Delta rho_i)
   $
-],
-[
+  Solve $gamma$: branching factor
+]
+
+==
+#grid(columns: 2, gutter: 20pt,
+align(top)[
   *Example: Simple branching*
   
   Pick variable $x$, branch on $x=0$ and $x=1$:
@@ -365,6 +364,7 @@ Branching implements human wisdom for reasoning: *case by case*.
   - $gamma^n = 2 gamma^(n-1)$
   - Solving: $gamma = 2$
   
+], align(top)[
   *Better branching*:
   
   Branch cleverly to remove more variables:
@@ -372,14 +372,11 @@ Branching implements human wisdom for reasoning: *case by case*.
   - Branch 2: remove 5 variables
   - $gamma^n = gamma^(n-3) + gamma^(n-5)$
   - Solving: $gamma approx 1.32$
-  
-  #v(5pt)
+])
   
   *Goal*: Find branching rules that minimize $gamma$!
-])
-
 #align(center, box(stroke: black, inset: 10pt)[
-  *Key*: Branching utilizes problem structure to achieve $gamma < 2$, often $gamma < sqrt(2)$ @Fomin2013
+  *Key*: A good *branching rule* utilizes problem structure to achieve a small branching factor $gamma$.
 ])
 
 
@@ -1086,6 +1083,10 @@ The overhead of branching on-the-fly is $8times$ the case with a pre-defined bra
 
 ==
 #figure(image("images/time_complexity.svg", width: 70%))
+
+#let namebox(src, name) = box(align(center, [#image(src, width:60pt, height:80pt)#v(-10pt)#name]))
+#namebox("images/yijiawang.png", "Yijia Wang (IOTP)")#h(20pt)
+#namebox("images/xuanzhao.png", "Xuanzhao Gao (HKUST)")
 
 ==
 #figure(image("images/tc_different_target.svg", width: 50%))
