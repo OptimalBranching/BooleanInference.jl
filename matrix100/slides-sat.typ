@@ -147,13 +147,16 @@
 #title-slide()
 #outline-slide()
 
-= AI and logic reasoning
+= AI, reasoning and constraint satisfaction
 
-== Logic reasoning
+== Logic reasoning gap in LLMs
 
 #slide[
 Large Language Models (LLMs) have shown human-like reasoning abilities but still *struggle with complex logical problems* @Pan2023.
+  - Hallucinations in multi-step reasoning.
+  - Inability to strictly adhere to hard constraints.
 ][
+//#place(center, text(30pt, stroke: yellow)[LLM + Solver = \u{1F9E0} + \u{1F527}])
 #image("images/aibrain.png", width: 300pt)
 #place(dx: 50%, dy: -75%, box(stroke: white, inset: 5pt, text(white, 30pt, stroke: yellow)[SAT]))
 ]
@@ -178,67 +181,122 @@ Large Language Models (LLMs) have shown human-like reasoning abilities but still
 - satisfiability modulo theories (SMT), e.g. Microsoft Z3
 - constraint satisfiability problem (CSP), e.g. Kissat, X-SAT
 
+== Significance of CSP in Machine Learning
+#timecounter(1)
+
+#align(center, box(stroke: black, inset: 10pt, width: 100%, [
+  *Why Constraint Satisfaction Problems (CSP) matter for AI?*
+]))
+
+- *Neuro-symbolic AI*: Bridging the gap between neural networks (learning) and symbolic logic (reasoning).
+- *Verification*: Ensuring neural networks satisfy safety constraints (e.g., robustness verification).
+- *Structured Prediction*: Problems where output variables are constrained (e.g., protein folding, scheduling).
+
+*Recent Works*:
+- SATNet @Wang2019: Differentiable SAT solver layer.
+- NeuroSAT @Selsam2018: Learning to solve SAT with GNNs.
+- AlphaGeometry @Trinh2024: Combining LLMs with symbolic solvers.
+
+
 ==
 - Neural networks are Turing in-complete.
 - Neural networks + SAT solvers is Turing complete? (needs support). Can we say NP-complete is a finite state version of Turing complete? i.e. draw a connection between NP-complete and halting problem?
-== Logic Programming
-
-=== Rules:
-- Metal(x, True) → ConductElectricity(x, True) 
-- MadeOfIron(x, True) → Metal(x, True) 
-=== Facts:  
-- MadeOfIron(Nails, True) 
-- ConductElectricity(Insulator, False) 
-=== Query:  
-- ConductElectricity(Nail, False)
-
-== First-order Logic Prover
-=== Facts:
-- ¬(∃x(LanguageModel x ∧ Giant x ∧ ¬GoodPerformance(x)))
-- ∀x(LanguageModel x ∧ GoodPerformance x → UsedbySomeReseachers(x))
-- ∀x UsedbySomeResearchers x → Popular x
-- LanguageModel(bert) ∧ Giant(bert) → LanguageModel(gpt3) ∧ Giant(gpt3)
-- Language(bert)
-- Giant(bert)
-
-=== Query:
-Popular(bert)
-
-== Constraint Optimization
-
-=== Domain
-```
-1: oldest
-3: newest
-```
-
-=== Variables
-```
-tractor ∈ [1, 2, 3]
-minivan ∈ [1, 2, 3]
-convertible ∈ [1, 2, 3]
-```
-
-=== Constraints
-```
-tractor == 2
-minivan > convertible
-AllDifferentConstraint(tractor, minivan, convertible)
-```
-
-== SMT Solver
-
-@deMoura2008
-```
-(declare-fun a () Bool)
-(declare-fun b () Bool)
-(assert (not (= (not (and a b)) (or (not a)(not b)))))
-(check-sat)
-```
-
 == Constraint satisfaction problem
 
 *Definition*: Constraint satisfaction problem (CSP) is a problem of finding the optimal solution to a set of constraints over a set of variables.
+
+== Comparing Three Reasoning Paradigms
+#timecounter(2)
+
+#let hd(it) = table.cell(fill: aqua.lighten(80%), text(16pt)[*#it*])
+#let s(it) = text(16pt)[#it]
+#align(center, table(
+  columns: (auto, auto, auto, auto),
+  align: (left, left, left, left),
+  inset: 8pt,
+  table.header(
+    hd[Paradigm], 
+    hd[Domain], 
+    hd[Example Problem], 
+    hd[Expressiveness]
+  ),
+  s[*First-Order\ Logic (FOL)*], 
+  s[Predicates, quantifiers,\ logical connectives], 
+  s[∀x (Bird(x) → CanFly(x))\ ∃x (Penguin(x) ∧ ¬CanFly(x))], 
+  s[Highest: can express\ complex relations],
+  
+  s[*SMT*\ (SAT + Theories) @deMoura2008], 
+  s[Boolean logic +\ arithmetic, arrays,\ bit-vectors, etc.], 
+  s[$(x + y = 10) and (x > 0)$\ $(2x < y or x = 5)$], 
+  s[Medium: combines\ boolean + arithmetic],
+  
+  s[*CSP*], 
+  s[Variables with\ finite domains,\ constraints], 
+  s[$x in {1,2,3}, y in {1,2,3}$\ $x != y, x + y > 3$], 
+  s[Lower: finite domains,\ but very efficient],
+))
+
+#v(10pt)
+
+*Key Differences*:
+- *FOL*: Most expressive, but undecidable in general (no guaranteed termination)
+- *SMT*: Decidable for many theories, practical solvers exist (Z3, CVC5)
+- *CSP*: Highly efficient for finite domains, used in scheduling, planning
+
+== Example: Same Problem in Three Paradigms
+#timecounter(2)
+
+*Problem*: "Alice, Bob, and Carol have different ages. Alice is older than Bob."
+
+#grid(columns: 3, gutter: 30pt, align(top)[
+  *First-Order Logic*
+  
+  #text(16pt)[```
+  ∀x,y (Person(x) ∧ Person(y) 
+        ∧ x≠y → Age(x)≠Age(y))
+  
+  Person(Alice) ∧ Person(Bob) 
+    ∧ Person(Carol)
+  
+  Age(Alice) > Age(Bob)
+  
+  Query: Age(Alice) > Age(Carol)?
+  ```]
+], align(top)[
+  *SMT*
+  
+  #text(16pt)[
+  ```smt
+  (declare-const a Int)
+  (declare-const b Int)
+  (declare-const c Int)
+  
+  (assert (distinct a b c))
+  (assert (> a 0))
+  (assert (> b 0))
+  (assert (> c 0))
+  (assert (> a b))
+  
+  (check-sat)
+  (get-model)
+  ```]
+], align(top, box(stroke: (paint: black, dash: "dashed"), outset: 10pt)[*CSP*
+  
+  #text(16pt)[```
+  Variables:
+    Alice ∈ {1,2,3}
+    Bob ∈ {1,2,3}
+    Carol ∈ {1,2,3}
+  
+  Constraints:
+    AllDifferent(Alice, Bob, Carol)
+    Alice > Bob
+  
+  Solve for all solutions
+  ```]
+]))
+
+- _Remark_: CSP is the fundation of many SMT solvers.
 
 == Physics-inspired algorithms
 
@@ -256,6 +314,7 @@ Dilema of physics-inspired algorithms:
 - SAT solvers.
 - ...
 
+= Branching, but online
 == Searching a solution
 #timecounter(2)
 *Problem*: Given a combinatorial optimization problem with $n$ boolean variables $bold(x) = {x_1, x_2, dots, x_n}$, and an verifier $f$ that returns $1$ for the solution.
@@ -270,50 +329,86 @@ Dilema of physics-inspired algorithms:
 ]))
 - _Remark_: Branching algorithm contributes most of the SOTA exact exponential solvers for computational hard problems. @Fomin2013
 
-== DPLL Algorithm
 
-*Davis-Putnam-Logemann-Loveland (DPLL)* algorithm is a complete, backtracking-based search algorithm for deciding the satisfiability of propositional logic formulae in CNF.
+== Branching on the fly
+#timecounter(1)
 
-*Key ideas*:
-- *Unit propagation*: If a clause is a unit clause (only one literal), assign the variable to satisfy that clause.
-- *Pure literal elimination*: If a variable appears with only one polarity, assign it to satisfy all clauses containing it.
-- *Branching*: Choose a variable and recursively try both assignments (true and false).
-- *Backtracking*: If a branch leads to a conflict, backtrack and try the other assignment.
-
-*Time complexity*: $O(2^n)$ in the worst case, but often much better in practice due to pruning.
-
-==
-*Example with branching*: Consider $F = (x_1 or x_2) and (not x_1 or x_3) and (not x_2 or not x_3) and (not x_3 or x_1)$
-
-#text(size: 16pt)[
-1. *Initial*: $F = (x_1 or x_2) and (not x_1 or x_3) and (not x_2 or not x_3) and (not x_3 or x_1)$ (no unit clauses)
-2. *Branch*: Choose $x_1$, try $x_1 = 1$ first
-3. $F arrow.r cancel((x_1 or x_2)) and (cancel(not x_1) or x_3) and (not x_2 or not x_3) and (cancel(not x_3) or cancel(x_1))$\
-   $F arrow.r (x_3) and (not x_2 or not x_3)$
-4. *Unit propagation*: $x_3 = 1$\
-   $F arrow.r cancel((x_3)) and (not x_2 or cancel(not x_3)) arrow.r (not x_2)$
-5. *Unit propagation*: $x_2 = 0$\
-   $F arrow.r cancel((not x_2)) arrow.r emptyset$ #text(fill: green)[✓ *SAT*]
-6. *Result*: Assignment found: $x_1 = 1, x_2 = 0, x_3 = 1$
+#align(center, grid(columns: 2, gutter: 40pt, box(width: 300pt, canvas({
+  import draw: *
+  scale(x:60%, y:60%)
+  let DY = 3
+  let size = 1
+  for k in range(5){
+    content((k * size, 0.2 + size), text(12pt, box([$#numbering("a", k+1)$], fill: none, inset: 2pt)))
+  }
+  content((2, 2.5), align(center, text(12pt)[oracle: $(b, c, d) in {101, 100, 011}$]))
+  content((-5.5, -1.5), align(center, text(12pt)[branch: $b = 1, c = 0$]))
+  decision_sequence((0, 0), (0, -3, -3, -3, 0))
+  decision_sequence((-4, -DY), (-3, 1, 2, -3, -3))
+  decision_sequence((4, -DY), (-3, 2, 1, 1, -3))
+  decision_sequence((-8, -2*DY), (1, 1, 2, 2, -3))
+  decision_sequence((0, -2*DY), (1, 1, 2, 1, 2))
+  decision_sequence((8, -2*DY), (1, 2, 1, 1, 1))
+  decision_sequence((-8, -3*DY), (1, 1, 2, 2, 2))
+  line((1.2, -0.8), (-1.2, -DY + 0.8), mark: (end: "straight"))
+  line((2.8, -0.8), (5.2, -DY + 0.8), mark: (end: "straight"))
+  line((6.8, -DY - 0.8), (9.2, -2 * DY + 0.8), mark: (end: "straight"))
+  line((-2.8, -DY - 0.8), (-5.2, -2 * DY + 0.8), mark: (end: "straight"))
+  line((-1.2, -DY - 0.8), (1.2, -2 * DY + 0.8), mark: (end: "straight"))
+  line((-6, -2 * DY - 0.8), (-6, -3 * DY + 0.8), mark: (end: "straight"))
+})),
+[
+// 1. Get an *oracle* over a subset of _variables_, representing the decisions that may leads to the best solution.
+// 2. Make _decisions_ over some _variables_, go to step 1 if any _variable_ left.
+// 3. An _ending_ is observed, *time travel* to a previous scene and change some decisions until no more potential good endings to be explored.
+#canvas(length: 25pt, {
+  import draw: *
+  main-diagram()
+})
 ]
+))
 
-*Branching tree* shows search space reduction: Without branching, need to check $2^3 = 8$ assignments. DPLL finds solution by exploring only one branch with unit propagation.
 
-==
-*Example with backtracking*: Consider $F = (x_1 or x_2) and (not x_1 or not x_2) and (not x_1 or x_2)$
 
-#text(size: 16pt)[
-*Left branch* ($x_1 = 1$):
-- $F arrow.r cancel((x_1 or x_2)) and (cancel(not x_1) or not x_2) and (cancel(not x_1) or x_2) arrow.r (not x_2) and (x_2)$
-- Get empty clause #text(fill: red)[✗ *UNSAT*] → *Backtrack!*
+// == It is difficult
+// #timecounter(1)
 
-*Right branch* ($x_1 = 0$):
-- $F arrow.r (cancel(x_1) or x_2) and cancel((not x_1 or not x_2)) and cancel((not x_1 or x_2)) arrow.r (x_2)$
-- Unit propagation: $x_2 = 1$ → $emptyset$ #text(fill: green)[✓ *SAT*]
-- *Result*: $x_1 = 0, x_2 = 1$
+// #align(center, box(stroke:black, inset:10pt, align(left, [
+// We are generating "theories"!
+// ])))
+// In the following,
+// - A formal definition of a branching "theory", the size of theories space is double exponential.
+// - An algorithm to generate provably optimal branching rules.
+// - For efficient contraction of sparse tensor networks.
+
+
+= Application 1: B&B tensor networks for MIS
+
+== Combining Online Branching with Tensor Networks
+#timecounter(1)
+
+#slide[
+  *The Synergy*:
+  - *Tensor Networks*: Powerful for computing the "Oracle" (counting/sampling solutions on a local region).
+    - Computing marginals ($p(x_i)$) or local configurations ($p(x_i, x_j)$).
+    - Exact contraction can be expensive, but local contraction is cheap.
+  - *Online Branching*: Uses the Oracle to find optimal cuts.
+    - Simplifies the tensor network by fixing variables (slicing).
+    - Reduces the bond dimension/complexity of the network.
+][
+  #align(center, canvas({
+    import draw: *
+    circle((0,0), radius: 2, fill: blue.lighten(80%), stroke: none)
+    content((0,0), [Tensor\ Network])
+    circle((3,0), radius: 2, fill: red.lighten(80%), stroke: none)
+    content((3,0), [Branching])
+    content((1.5, 0), text(20pt)[+])
+    
+    content((1.5, -3), box(stroke: black, inset: 10pt)[
+      TN Oracle $arrow.r$ Optimal Branch $arrow.r$ Simplified TN
+    ])
+  }))
 ]
-
-This demonstrates how DPLL *branches* on variables and *backtracks* when conflicts arise, achieving $gamma^n$ complexity with $gamma < 2$ through pruning.
 
 == The branching algorithms for MIS
 
@@ -380,6 +475,29 @@ This demonstrates how DPLL *branches* on variables and *backtracks* when conflic
 columns: 2, gutter: 30pt
 )
 ])
+
+== Time complexity v.s. space complexity
+#slide[
+    #image("images/ksg_60x60_tc_s1.svg", width: 100%)][
+#timecounter(1)
+  - Dynamic slicing: time complexity grows with slice size.
+  - TNBB (OB based method): both time and space complexity reduces.
+]
+
+== Showcase: King's subgraph at 0.8 filling
+#timecounter(1)
+
+#grid(columns: 2, gutter: 20pt,
+[#canvas({
+  import draw: *
+  show-grid-graph(8, 8, filling: 0.8, unitdisk: 1.6)
+})
+],
+[
+  - Independent set problem on King's subgraph is NP-hard @Pichler2018, also known as hard-core lattice gas @Nath2014, and is implementable on Rydberg atoms arrays @Ebadi2022.
+  - Previous (classical) record: $40 times 40$ for tensor network @Liu2023 and branching methods, estimated to be $70 times 70$ for integer programming (CPLEX) @Andrist2023
+])
+
 
 == The simplest branching algorithm @Fomin2006
 #slide[
@@ -670,8 +788,6 @@ A bottle neck case has been reported in @Xiao2013, with $gamma = 1.0836$.
 )
 
 
-= Branching on the fly
-
 // == Methods for solving MIS
 // #timecounter(1)
 
@@ -840,57 +956,6 @@ align(center + top, text(80pt)[\u{1F4CF}])
 // })
 // ))
 
-== Branching on the fly
-#timecounter(1)
-
-#align(center, grid(columns: 2, gutter: 40pt, box(width: 300pt, canvas({
-  import draw: *
-  scale(x:60%, y:60%)
-  let DY = 3
-  let size = 1
-  for k in range(5){
-    content((k * size, 0.2 + size), text(12pt, box([$#numbering("a", k+1)$], fill: none, inset: 2pt)))
-  }
-  content((2, 2.5), align(center, text(12pt)[oracle: $(b, c, d) in {101, 100, 011}$]))
-  content((-5.5, -1.5), align(center, text(12pt)[branch: $b = 1, c = 0$]))
-  decision_sequence((0, 0), (0, -3, -3, -3, 0))
-  decision_sequence((-4, -DY), (-3, 1, 2, -3, -3))
-  decision_sequence((4, -DY), (-3, 2, 1, 1, -3))
-  decision_sequence((-8, -2*DY), (1, 1, 2, 2, -3))
-  decision_sequence((0, -2*DY), (1, 1, 2, 1, 2))
-  decision_sequence((8, -2*DY), (1, 2, 1, 1, 1))
-  decision_sequence((-8, -3*DY), (1, 1, 2, 2, 2))
-  line((1.2, -0.8), (-1.2, -DY + 0.8), mark: (end: "straight"))
-  line((2.8, -0.8), (5.2, -DY + 0.8), mark: (end: "straight"))
-  line((6.8, -DY - 0.8), (9.2, -2 * DY + 0.8), mark: (end: "straight"))
-  line((-2.8, -DY - 0.8), (-5.2, -2 * DY + 0.8), mark: (end: "straight"))
-  line((-1.2, -DY - 0.8), (1.2, -2 * DY + 0.8), mark: (end: "straight"))
-  line((-6, -2 * DY - 0.8), (-6, -3 * DY + 0.8), mark: (end: "straight"))
-})),
-[
-// 1. Get an *oracle* over a subset of _variables_, representing the decisions that may leads to the best solution.
-// 2. Make _decisions_ over some _variables_, go to step 1 if any _variable_ left.
-// 3. An _ending_ is observed, *time travel* to a previous scene and change some decisions until no more potential good endings to be explored.
-#canvas(length: 25pt, {
-  import draw: *
-  main-diagram()
-})
-]
-))
-
-
-
-// == It is difficult
-// #timecounter(1)
-
-// #align(center, box(stroke:black, inset:10pt, align(left, [
-// We are generating "theories"!
-// ])))
-// In the following,
-// - A formal definition of a branching "theory", the size of theories space is double exponential.
-// - An algorithm to generate provably optimal branching rules.
-// - For efficient contraction of sparse tensor networks.
-
 // = The time traveler problem
 
 // == Branchmark on random graphs
@@ -971,42 +1036,258 @@ The overhead of branching on-the-fly is $8times$ the case with a pre-defined bra
 ==
 #figure(image("images/compare_nu_u.svg", width: 50%))
 
-== Satisfiability problems
+= Application 2: Circuit SAT problems
 
-= Outlook
-== Ongoing work 1: Tensor network based branching
-#timecounter(1)
+== DPLL Algorithm
 
-#figure(canvas(length: 1.5cm, {
-  import draw: *
-  mixmode()
-  content((2, 5.0), [space complexity])
-  line((2, -1), (2, 4.5), mark: (end: "straight"))
-}))
+*Davis-Putnam-Logemann-Loveland (DPLL)* algorithm is a complete, backtracking-based search algorithm for deciding the satisfiability of propositional logic formulae in CNF.
 
-- _Remark_: Unlike traditional *slicing*, TNBB generates networks with different topologies.
+*Key ideas*:
+- *Unit propagation*: If a clause is a unit clause (only one literal), assign the variable to satisfy that clause.
+- *Pure literal elimination*: If a variable appears with only one polarity, assign it to satisfy all clauses containing it.
+- *Branching*: Choose a variable and recursively try both assignments (true and false).
+- *Backtracking*: If a branch leads to a conflict, backtrack and try the other assignment.
 
-== Time complexity v.s. space complexity
-#slide[
-    #image("images/ksg_60x60_tc_s1.svg", width: 100%)][
-#timecounter(1)
-  - Dynamic slicing: time complexity grows with slice size.
-  - TNBB (OB based method): both time and space complexity reduces.
+*Time complexity*: $O(2^n)$ in the worst case, but often much better in practice due to pruning.
+
+==
+*Example with branching*: Consider $F = (x_1 or x_2) and (not x_1 or x_3) and (not x_2 or not x_3) and (not x_3 or x_1)$
+
+#text(size: 16pt)[
+1. *Initial*: $F = (x_1 or x_2) and (not x_1 or x_3) and (not x_2 or not x_3) and (not x_3 or x_1)$ (no unit clauses)
+2. *Branch*: Choose $x_1$, try $x_1 = 1$ first
+3. $F arrow.r cancel((x_1 or x_2)) and (cancel(not x_1) or x_3) and (not x_2 or not x_3) and (cancel(not x_3) or cancel(x_1))$\
+   $F arrow.r (x_3) and (not x_2 or not x_3)$
+4. *Unit propagation*: $x_3 = 1$\
+   $F arrow.r cancel((x_3)) and (not x_2 or cancel(not x_3)) arrow.r (not x_2)$
+5. *Unit propagation*: $x_2 = 0$\
+   $F arrow.r cancel((not x_2)) arrow.r emptyset$ #text(fill: green)[✓ *SAT*]
+6. *Result*: Assignment found: $x_1 = 1, x_2 = 0, x_3 = 1$
 ]
 
-== Showcase: King's subgraph at 0.8 filling
+*Branching tree* shows search space reduction: Without branching, need to check $2^3 = 8$ assignments. DPLL finds solution by exploring only one branch with unit propagation.
+
+==
+*Example with backtracking*: Consider $F = (x_1 or x_2) and (not x_1 or not x_2) and (not x_1 or x_2)$
+
+#text(size: 16pt)[
+*Left branch* ($x_1 = 1$):
+- $F arrow.r cancel((x_1 or x_2)) and (cancel(not x_1) or not x_2) and (cancel(not x_1) or x_2) arrow.r (not x_2) and (x_2)$
+- Get empty clause #text(fill: red)[✗ *UNSAT*] → *Backtrack!*
+
+*Right branch* ($x_1 = 0$):
+- $F arrow.r (cancel(x_1) or x_2) and cancel((not x_1 or not x_2)) and cancel((not x_1 or x_2)) arrow.r (x_2)$
+- Unit propagation: $x_2 = 1$ → $emptyset$ #text(fill: green)[✓ *SAT*]
+- *Result*: $x_1 = 0, x_2 = 1$
+]
+
+This demonstrates how DPLL *branches* on variables and *backtracks* when conflicts arise, achieving $gamma^n$ complexity with $gamma < 2$ through pruning.
+
+== Combining Online Branching with Unit Propagation
+#timecounter(2)
+
+#slide[
+*Key Insight*: Unit propagation is extremely efficient, but traditional branching (choosing single variables) may not exploit the constraint structure optimally.
+
+*Our Approach*:
+1. Select a subset of variables to form a region
+2. Compute the oracle (tensor network contraction over the region)
+3. Generate optimal branching rules from the oracle
+4. Apply unit propagation after each branch
+][
+  #align(center, canvas({
+    import draw: *
+    rect((-3, -0.5), (3, 0.5), fill: blue.lighten(80%), stroke: black)
+    content((0, 0), [1. Select region])
+    
+    rect((-3, -2), (3, -1), fill: green.lighten(80%), stroke: black)
+    content((0, -1.5), [2. Compute oracle (TN)])
+    
+    rect((-3, -3.5), (3, -2.5), fill: yellow.lighten(80%), stroke: black)
+    content((0, -3), [3. Optimal branching])
+    
+    rect((-3, -5), (3, -4), fill: red.lighten(80%), stroke: black)
+    content((0, -4.5), [4. Unit propagation])
+    
+    line((0, 0.5), (0, -1), mark: (end: "straight"))
+    line((0, -2), (0, -2.5), mark: (end: "straight"))
+    line((0, -3.5), (0, -4), mark: (end: "straight"))
+    line((0, -5), (5, -5), (5, 0.5), mark: (end: "straight"))
+  }))
+]
+
+== The 2-SAT Reduction Strategy
+#timecounter(2)
+
+*Observation*: After branching and unit propagation, many clauses become:
+- Unit clauses (directly fixed by propagation)
+- Binary clauses (2-SAT, solvable in linear time!)
+- Larger clauses (still need branching)
+
+#definition("Measure: Number of Non-2-SAT Clauses")[
+  Define the measure $rho$ as the number of clauses with $>=3$ literals:
+  $ rho(F) = |{c in F : |c| >= 3}| $
+  
+  A problem with $rho = 0$ is a 2-SAT problem, solvable in $O(n)$ time.
+]
+
+*Goal*: Design branching rules that maximize the reduction of $rho$, not just the number of variables.
+
+== Why This Measure?
+#timecounter(1)
+
+#grid(columns: 2, gutter: 30pt,
+[
+*Traditional measure*: Number of unfixed variables
+- Assigns one variable $arrow.r$ reduces measure by 1
+- May not exploit constraint structure
+
+*Our measure*: Number of non-2-SAT clauses
+- Good branching can reduce many clauses simultaneously
+- Better captures problem hardness
+- Exploits clause structure through unit propagation
+],
+canvas({
+  import draw: *
+  // Example showing clause reduction
+  content((0, 0), align(left)[
+    *Before*: $F = (a or b or c) and (not a or d or e)$\
+    $rho = 2$
+  ])
+  
+  content((0, -1.5), align(left)[
+    *Branch*: $a = 1$
+  ])
+  
+  content((0, -3), align(left)[
+    *After propagation*: $F = (d or e)$\
+    $rho = 0$ (2-SAT!) \ 
+    Reduction: $Delta rho = 2$
+  ])
+}))
+
+== Optimal Branching for Circuit SAT
+#timecounter(2)
+
+#slide[
+*Algorithm*:
+1. Select a region of variables (e.g., variables in nearby gates)
+2. Contract tensor network to get oracle $cal(S)$
+3. Find optimal branching rule minimizing $gamma$:
+   $ 1 = sum_(i) gamma^(-Delta rho(c_i)) $
+   where $Delta rho(c_i)$ is the reduction in non-2-SAT clauses after branch $c_i$
+4. Apply best branch, propagate, recurse
+][
+  #box(stroke: black, inset: 10pt, fill: yellow.lighten(80%))[
+    *Key difference from MIS*: Measure is clause-based, not variable-based.
+    This exploits the cascading effect of unit propagation.
+  ]
+]
+
+== Example: Circuit SAT Instance
+#timecounter(2)
+
+Consider a small circuit with variables $x_1, x_2, x_3, x_4$ and clauses:
+$ F = &(x_1 or x_2 or x_3) and (not x_1 or x_3 or x_4) \ 
+    &and (not x_2 or not x_3 or x_4) and (not x_3 or not x_4) $
+
+- Initial: $rho = 4$ (all clauses have 3+ literals)
+- Traditional: branch on single variable, $Delta rho <= 2$
+- Our approach: compute oracle on ${x_1, x_2, x_3}$, find branching rule that reduces $rho$ maximally
+
+#box(stroke: black, inset: 10pt)[
+*Result*: Optimal branching may assign multiple variables simultaneously, achieving $Delta rho = 4$ in one branch!
+]
+
+== Computational Results - Placeholder
+#timecounter(2)
+
+#align(center)[
+  #box(stroke: black + 2pt, inset: 20pt, fill: gray.lighten(80%))[
+    #text(20pt)[
+      *Data Section*
+      
+      - Comparison table: DPLL vs CDCL vs Our method
+      - Branching factor comparison
+      - Runtime on benchmark instances
+      - Plot: $gamma$ vs problem size
+      
+      [To be filled with experimental results]
+    ]
+  ]
+]
+
+== Benchmark Problems - Placeholder  
 #timecounter(1)
 
 #grid(columns: 2, gutter: 20pt,
-[#canvas({
-  import draw: *
-  show-grid-graph(8, 8, filling: 0.8, unitdisk: 1.6)
-})
+box(stroke: black, inset: 10pt, width: 100%, height: 200pt)[
+  *Graph/Plot Area*
+  
+  (Reserved for performance plots)
 ],
 [
-  - Independent set problem on King's subgraph is NP-hard @Pichler2018, also known as hard-core lattice gas @Nath2014, and is implementable on Rydberg atoms arrays @Ebadi2022.
-  - Previous (classical) record: $40 times 40$ for tensor network @Liu2023 and branching methods, estimated to be $70 times 70$ for integer programming (CPLEX) @Andrist2023
+  *Test instances*:
+  - Random 3-SAT problems
+  - Circuit SAT (multiplication)
+  - Factoring problems
+  - Real-world SAT benchmarks
+  
+  *Metrics*:
+  - Average branching factor $gamma$
+  - Number of branches
+  - Total runtime
 ])
+
+== Comparison with State-of-the-Art - Placeholder
+#timecounter(1)
+
+#align(center, table(
+  columns: (auto, auto, auto, auto),
+  table.header(hd[Method], hd[Branching Factor], hd[Branches], hd[Time (s)]),
+  s[DPLL], s[?], s[?], s[?],
+  s[CDCL], s[?], s[?], s[?],
+  s[Minisat], s[?], s[?], s[?],
+  s[Our method], s[?], s[?], s[?],
+))
+
+#box(stroke: black, inset: 10pt)[
+  [Data to be collected from experiments]
+]
+
+== Advantages of the Hybrid Approach
+#timecounter(1)
+
+*Combining tensor networks + optimal branching + unit propagation*:
+
+#grid(columns: 2, gutter: 20pt,
+[
+  ✓ *Exploits local structure* through tensor network oracle
+  
+  ✓ *Optimal branching rules* minimize complexity
+  
+  ✓ *Unit propagation* provides cascading simplifications
+  
+  ✓ *Problem-agnostic* measure (non-2-SAT clauses)
+  
+  ✓ *Adaptive* to problem structure
+],
+canvas({
+  import draw: *
+  circle((0, 0), radius: 1.5, fill: blue.lighten(80%), stroke: none)
+  content((0, 0.8), [TN])
+  content((0, 0.3), [Oracle])
+  
+  circle((0, -3), radius: 1.5, fill: green.lighten(80%), stroke: none)
+  content((0, -2.2), [Optimal])
+  content((0, -2.7), [Branching])
+  
+  circle((0, -6), radius: 1.5, fill: yellow.lighten(80%), stroke: none)
+  content((0, -5.2), [Unit])
+  content((0, -5.7), [Propagation])
+  
+  line((1.5, -6.5), (2.5, -6.5), (2.5, 1.5), (1.5, 1.5), mark: (end: "straight"))
+}))
 
 // == Circuit SAT
 // #timecounter(1)
@@ -1249,7 +1530,7 @@ The overhead of branching on-the-fly is $8times$ the case with a pre-defined bra
 == Advanced materials thrust \u{2665} quantum science
 #timecounter(1)
 //#place(box(width: 200%, height: 200%, stroke: none, fill: white.transparentize(0%)), dx: -100pt, dy: -250pt)
-#grid(image("images/AMAT_Logo_Gold-Blue.png", width: 300pt), text(16pt, font: "Proxima Nova")[Enablers for technological innovation in *new materials*, *new energy*, *sustainable environment* and *biomedical devices*], columns: 2, gutter: 20pt)
+#grid(image("images/AMAT_Logo_Gold-Blue.png", width: 300pt), text(16pt)[Enablers for technological innovation in *new materials*, *new energy*, *sustainable environment* and *biomedical devices*], columns: 2, gutter: 20pt)
 
 #align(center, grid(columns: 2, gutter: 20pt,
 image("images/2025-01-13-09-19-10.png", height: 150pt),
@@ -1275,5 +1556,5 @@ columns: 6, column-gutter: 20pt, row-gutter: 10pt))
 
 TODO: update avatar (xiwei)
 
-==
-#bibliography("refs.bib")
+== References
+#bibliography("refs.bib", title: none)

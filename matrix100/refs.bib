@@ -478,3 +478,44 @@ author = {Takuya Akiba and Yoichi Iwata},
   keywords = {Bound Model Check,Linear Arithmetic,Predicate Abstraction,Symbolic Execution,Theory Solver},
   file = {/home/leo/snap/zotero-snap/common/Zotero/storage/H52G6UZF/de Moura and Bjørner - 2008 - Z3 An Efficient SMT Solver.pdf}
 }
+
+@inproceedings{Wang2019,
+  title = {{{SATNet}}: {{Bridging}} Deep Learning and Logical Reasoning Using a Differentiable Satisfiability Solver},
+  shorttitle = {{{SATNet}}},
+  booktitle = {Proceedings of the 36th {{International Conference}} on {{Machine Learning}}},
+  author = {Wang, Po-Wei and Donti, Priya L. and Wilder, Bryan and Kolter, J. Zico},
+  year = {2019},
+  series = {Proceedings of {{Machine Learning Research}}},
+  volume = {97},
+  pages = {6545--6554},
+  publisher = {PMLR},
+  address = {Long Beach, California, USA},
+  url = {https://proceedings.mlr.press/v97/wang19e.html},
+  abstract = {Integrating logical reasoning within deep learning architectures has been a major goal of modern AI systems. In this paper, we propose a new direction toward this goal by introducing a differentiable (smoothed) maximum satisfiability (MAXSAT) solver that can be integrated into the loop of larger deep learning systems. Our (approximate) solver is based upon a fast coordinate descent approach to solving the semidefinite program (SDP) associated with the MAXSAT problem. We show how to analytically differentiate through the solution to this SDP and efficiently solve the associated backward pass. We demonstrate that by integrating this solver into end-to-end learning systems, we can learn the logical structure of challenging problems in a minimally supervised fashion.}
+}
+
+@inproceedings{Selsam2018,
+  title = {Learning a {{SAT Solver}} from {{Single-Bit Supervision}}},
+  booktitle = {7th {{International Conference}} on {{Learning Representations}}, {{ICLR}} 2019},
+  author = {Selsam, Daniel and Lamm, Matthew and Bünz, Benedikt and Liang, Percy and {de Moura}, Leonardo and Dill, David L.},
+  year = {2019},
+  address = {New Orleans, LA, USA},
+  url = {https://openreview.net/forum?id=HJMC_iA5tm},
+  abstract = {We present NeuroSAT, a message passing neural network that learns to solve SAT problems after only being trained as a classifier to predict satisfiability. Although it is not competitive with state-of-the-art SAT solvers, NeuroSAT can solve problems that are substantially larger and more difficult than it ever saw during training by simply running for more iterations. Moreover, NeuroSAT generalizes to novel distributions; after training only on random SAT problems, at test time it can solve SAT problems encoding graph coloring, clique detection, dominating set, and vertex cover problems, all on a range of distributions over small random graphs.}
+}
+
+@article{Trinh2024,
+  title = {Solving Olympiad Geometry without Human Demonstrations},
+  author = {Trinh, Trieu H. and Wu, Yuhuai and Le, Quoc V. and He, He and Luong, Thang},
+  year = {2024},
+  month = jan,
+  journal = {Nature},
+  volume = {625},
+  number = {7995},
+  pages = {476--482},
+  publisher = {Nature Publishing Group},
+  issn = {1476-4687},
+  doi = {10.1038/s41586-023-06747-5},
+  url = {https://doi.org/10.1038/s41586-023-06747-5},
+  abstract = {Proving mathematical theorems at the olympiad level represents a notable milestone in human-level automated reasoning, owing to their reputed difficulty among the world's best talents in pre-university mathematics. Current machine learning approaches, however, are not applicable to most mathematical domains owing to the high cost of translating human proofs into machine-verifiable format. The problem is even worse for geometry because of its unique translation challenges, resulting in severe scarcity of training data. We propose AlphaGeometry, a theorem prover for Euclidean plane geometry that sidesteps the need for human demonstrations by synthesizing millions of theorems and proofs across different levels of complexity. AlphaGeometry is a neuro-symbolic system that uses a neural language model, trained from scratch on our large-scale synthetic data, to guide a symbolic deduction engine through infinite branching points in challenging problems. On a test set of 30 latest olympiad-level problems, AlphaGeometry solves 25, outperforming the previous best method that solves ten and approaching the performance of an average International Mathematical Olympiad (IMO) gold medallist. Notably, AlphaGeometry produces human-readable proofs, solves all geometry problems in the IMO 2000 and 2015 under human expert evaluation and discovers a generalized version of a translated IMO theorem in 2004.}
+}
