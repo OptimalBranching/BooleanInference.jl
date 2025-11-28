@@ -57,6 +57,8 @@ export list_available_solvers, print_solver_comparison_summary, compare_solver_r
 export BenchmarkResult, save_benchmark_result, load_benchmark_result
 export print_result_summary, find_result_file, solver_config_dict
 export resolve_results_dir
+export load_all_results, load_dataset_results, compare_results, filter_results
+export print_detailed_comparison, get_config_summary
 export FactoringProblem, FactoringConfig, FactoringInstance, generate_factoring_datasets
 export CircuitSATProblem, CircuitSATConfig, CircuitSATInstance
 export load_circuit_instance, load_verilog_dataset, load_aag_dataset
