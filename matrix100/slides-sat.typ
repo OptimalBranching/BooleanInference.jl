@@ -23,8 +23,6 @@
 #let definition = thmbox("definition", "Definition", inset: (x: 1.2em, top: 1em)).with(numbering: none)
 #let example = thmplain("example", "Example").with(numbering: none)
 #let proof = thmproof("proof", "Proof")
-#let hd(name) = table.cell(text(10pt)[#name], fill: green.lighten(50%))
-#let s(name) = table.cell(text(10pt)[#name])
 #let jinguo(txt) = [#txt]
 
 #let globalvars = state("t", 0)
@@ -208,17 +206,17 @@ Large Language Models (LLMs) have shown human-like reasoning abilities but still
 == Comparing Three Reasoning Paradigms
 #timecounter(2)
 
-#let hd(it) = table.cell(fill: aqua.lighten(80%), text(16pt)[*#it*])
-#let s(it) = text(16pt)[#it]
+#let hd(name) = table.cell(text(16pt)[#name], fill: green.lighten(50%))
+#let s(name) = table.cell(text(16pt)[#name])
 #align(center, table(
   columns: (auto, auto, auto, auto),
   align: (left, left, left, left),
   inset: 8pt,
   table.header(
-    hd[Paradigm], 
-    hd[Domain], 
-    hd[Example Problem], 
-    hd[Expressiveness]
+    hd[*Paradigm*], 
+    hd[*Domain*], 
+    hd[*Example Problem*], 
+    hd[*Expressiveness*]
   ),
   s[*First-Order\ Logic (FOL)*], 
   s[Predicates, quantifiers,\ logical connectives], 
@@ -235,8 +233,6 @@ Large Language Models (LLMs) have shown human-like reasoning abilities but still
   s[$x in {1,2,3}, y in {1,2,3}$\ $x != y, x + y > 3$], 
   s[Lower: finite domains,\ but very efficient],
 ))
-
-#v(10pt)
 
 *Key Differences*:
 - *FOL*: Most expressive, but undecidable in general (no guaranteed termination)
@@ -412,6 +408,8 @@ Dilema of physics-inspired algorithms:
 
 == The branching algorithms for MIS
 
+#let hd(name) = table.cell(text(10pt)[#name], fill: green.lighten(50%))
+#let s(name) = table.cell(text(10pt)[#name])
 #slide(table(
   columns: (auto, auto, auto, auto),
   table.header(hd[Year], hd[Running times], hd[References], hd[Notes]),
