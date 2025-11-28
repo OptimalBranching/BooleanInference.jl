@@ -25,6 +25,7 @@
 #let proof = thmproof("proof", "Proof")
 #let hd(name) = table.cell(text(10pt)[#name], fill: green.lighten(50%))
 #let s(name) = table.cell(text(10pt)[#name])
+#let jinguo(txt) = [#txt]
 
 #let globalvars = state("t", 0)
 #let timecounter(minutes) = [
