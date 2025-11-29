@@ -150,35 +150,27 @@
 == The Logic Reasoning Gap
 #timecounter(2)
 
-#grid(columns: 2, gutter: 40pt,
-[
-  *LLMs struggle with logical reasoning*
-  - Hallucinations in multi-step reasoning
-  - Cannot strictly enforce hard constraints
-  - No guarantees on correctness
-  
-  #v(20pt)
-  
-  *Solution*: Combine neural networks with satisfiability (SAT) solvers @Pan2023:
-  
-  #figure(canvas({
-    import draw: *
-    content((-5, 0), [*AI*])
-    content((0, 0), [*Human*])
-    content((5, 0), [*SAT Solvers*])
-    content((-3, -1), text(12pt)[Reasoning])
-    line((-2, -1), (-1, -1), mark: (end: "straight"))
-    content((3.2, -1), text(12pt)[Knowledge])
-    line((2, -1), (1, -1), mark: (end: "straight"))
-  }))
-],
-[
-  #image("images/aibrain.png", width: 200pt)
-  #place(dx: 50%, dy: -70%, box(stroke: white, fill: white, inset: 5pt, text(black, 24pt)[SAT]))
-])
+*Large language models (LLMs) struggle with logical reasoning*
+- Hallucinations in multi-step reasoning
+- Cannot strictly enforce hard constraints
+- No guarantees on correctness
 
-== Three Types of Constraint Solvers
-#timecounter(1)
+#align(center, [? Machines cannot deep reason])
+  
+== No!
+  
+#figure(canvas({
+  import draw: *
+  content((-5, 0), [*LLM*])
+  content((0, 0), [*Human*])
+  content((5, 0), [*SAT Solvers*])
+  content((-3, -1), text(12pt)[Reasoning])
+  line((-2, -1), (-1, -1), mark: (end: "straight"))
+  content((3.2, -1), text(12pt)[Knowledge])
+  line((2, -1), (1, -1), mark: (end: "straight"))
+}))
+
+*New Scheme*: LLM + SAT solvers @Pan2023:
 
 1. *First-Order Logic* (FOL): Theorem provers (e.g., Prover9)
    - Most expressive, but undecidable
@@ -186,99 +178,104 @@
 2. *Satisfiability Modulo Theories* (SMT): Z3, CVC5 @deMoura2008
    - Boolean logic + arithmetic/arrays/bit-vectors
    - Decidable for many theories
-   
+#box(stroke: (paint: black, dash: "dashed"), outset: 10pt, [
 3. *Constraint Satisfaction Problems* (CSP): Kissat, X-SAT
    - Finite domains, highly efficient
    - Foundation for many applications
-
-== Why CSP Matters for AI + Science
-#timecounter(1)
-
-*Neuro-symbolic AI*:
-- SATNet @Wang2019: Differentiable SAT solver layer
-- NeuroSAT @Selsam2018: Learning to solve SAT with GNNs
-- AlphaGeometry @Trinh2024: LLMs + symbolic solvers
-
-*Scientific Applications*:
-- Protein structure prediction, molecular design
-- Circuit verification, control systems
-- Combinatorial optimization (spin systems, scheduling)
-
-== Comparing the Three Paradigms
-#timecounter(2)
-
-*Problem*: "Three people have different ages. Alice > Bob."
-
-#grid(columns: 3, gutter: 25pt, align(top)[
-  *FOL (Theorem Proving)*
-  
-  #text(14pt)[```
-  ∀x,y (x≠y → Age(x)≠Age(y))
-  Age(Alice) > Age(Bob)
-  
-  Query: ?
-  ```]
-  
-  ✓ Most expressive\ 
-  ✗ Undecidable
-], align(top)[
-  *SMT (Z3, CVC5)*
-  
-  #text(14pt)[```smt
-  (declare-const a Int)
-  (declare-const b Int)
-  (declare-const c Int)
-  (assert (distinct a b c))
-  (assert (> a b))
-  (check-sat)
-  ```]
-  
-  ✓ Boolean + theories\
-  ✓ Decidable
-], align(top)[
-  *CSP (Our Focus)*
-  
-  #text(14pt)[```
-  Alice, Bob, Carol ∈ {1,2,3}
-  
-  AllDifferent(·,·,·)
-  Alice > Bob
-  
-  → 12 solutions
-  ```]
-  
-  ✓ Highly efficient\
-  ✓ Combinatorial opt.
 ])
 
-#align(center, box(stroke: black, inset: 8pt)[
-  *CSP is the foundation of many SMT solvers and combinatorial algorithms*
-])
+#place(dx: 70%, dy: -20%, [*$checkmark$ Our objective*
+- Simple
+- Fundational])
 
-== Exact solvers
-- Branching algorithms.
-- Dynamic programming.
-- Integer programming.
-- SAT solvers.
+// == Why CSP Matters for AI + Science
+// #timecounter(1)
 
-=== Physics-inspired (exact) algorithms
-- Grover search: quadratic speed up compared to bruteforce search.
-- Tensor networks (similar to dynamic programming).
+// *Neuro-symbolic AI*:
+// - SATNet @Wang2019: Differentiable SAT solver layer
+// - NeuroSAT @Selsam2018: Learning to solve SAT with GNNs
+// - AlphaGeometry @Trinh2024: LLMs + symbolic solvers
 
-Dilema of physics-inspired algorithms:
-- None of the solvers above are close to the state-of-the-art exact solvers.
+// *Scientific Applications*:
+// - Protein structure prediction, molecular design
+// - Circuit verification, control systems
+// - Combinatorial optimization (spin systems, scheduling)
 
-==
+// == Comparing the Three Paradigms
+// #timecounter(2)
 
-- Branching algorithms $(checkmark)$: contributes most of the SOTA exact exponential solvers for computational hard problems @Fomin2013.
+// *Problem*: "Three people have different ages. Alice > Bob."
+
+// #grid(columns: 3, gutter: 25pt, align(top)[
+//   *FOL (Theorem Proving)*
+  
+//   #text(14pt)[```
+//   ∀x,y (x≠y → Age(x)≠Age(y))
+//   Age(Alice) > Age(Bob)
+  
+//   Query: ?
+//   ```]
+  
+//   ✓ Most expressive\ 
+//   ✗ Undecidable
+// ], align(top)[
+//   *SMT (Z3, CVC5)*
+  
+//   #text(14pt)[```smt
+//   (declare-const a Int)
+//   (declare-const b Int)
+//   (declare-const c Int)
+//   (assert (distinct a b c))
+//   (assert (> a b))
+//   (check-sat)
+//   ```]
+  
+//   ✓ Boolean + theories\
+//   ✓ Decidable
+// ], align(top)[
+//   *CSP (Our Focus)*
+  
+//   #text(14pt)[```
+//   Alice, Bob, Carol ∈ {1,2,3}
+  
+//   AllDifferent(·,·,·)
+//   Alice > Bob
+  
+//   → 12 solutions
+//   ```]
+  
+//   ✓ Highly efficient\
+//   ✓ Combinatorial opt.
+// ])
+
+// #align(center, box(stroke: black, inset: 8pt)[
+//   *CSP is the foundation of many SMT solvers and combinatorial algorithms*
+// ])
+
+// == Exact solvers
+// - Branching algorithms.
+// - Dynamic programming.
+// - Integer programming.
+// - SAT solvers.
+
+// === Physics-inspired (exact) algorithms
+// - Grover search: quadratic speed up compared to bruteforce search.
+// - Tensor networks (similar to dynamic programming).
+
+// Dilema of physics-inspired algorithms:
+// - None of the solvers above are close to the state-of-the-art exact solvers.
+
+== Focus of this talk: Branching for CSP
+
+- Branching$(checkmark)$: contributes most of the SOTA exact exponential solvers for computational hard problems @Fomin2013.
 
 #align(center, box(stroke: black, inset: 8pt)[
 Branching implements human wisdom for reasoning: *case by case*.
 ])
 
-e.g. In the previous example, assume `Alice = 1`, create a branch. If no valid solution is found, backtrack and try `Alice = 2`, and so on.
+e.g. Solving a Sudoku: assume a cell is `1`. If this choice leads to a conflict, backtrack and try `2`.
 
-= Branching, but online
+= Branching, a generic principle
 
 == Constraint Satisfaction Problem (CSP)
 #timecounter(2)
@@ -422,7 +419,6 @@ $
 Key assumption: $T(rho) = O(gamma^rho)$, $rho$ is the *problem size measure* (e.g., \# variables)
 ][
 #timecounter(2)
-*How it achieves $gamma^rho$ complexity:*
 1. At each node, branch into $k$ subproblems with size reductions $Delta rho_1, dots, Delta rho_k$
 2. Recurse, with time determined by: 
   $
@@ -432,38 +428,40 @@ Key assumption: $T(rho) = O(gamma^rho)$, $rho$ is the *problem size measure* (e.
   1 = sum_(i=1)^k gamma^(-Delta rho_i)
   $
   Solve $gamma$: branching factor
+
+*Objective*: reduce $gamma$, i.e. less branches, more problem size reduction.
 ]
 
-==
-#grid(columns: 2, gutter: 20pt,
-align(top)[
-  *Example: Simple branching*
+// ==
+// #grid(columns: 2, gutter: 20pt,
+// align(top)[
+//   *Example: Simple branching*
   
-  Pick variable $x$, branch on $x=0$ and $x=1$:
-  - Removes 1 variable per branch
-  - $gamma^n = 2 gamma^(n-1)$
-  - Solving: $gamma = 2$
+//   Pick variable $x$, branch on $x=0$ and $x=1$:
+//   - Removes 1 variable per branch
+//   - $gamma^n = 2 gamma^(n-1)$
+//   - Solving: $gamma = 2$
   
-], align(top)[
-  *Better branching*:
+// ], align(top)[
+//   *Better branching*:
   
-  Branch cleverly to remove more variables:
-  - Branch 1: remove 3 variables
-  - Branch 2: remove 5 variables
-  - $gamma^n = gamma^(n-3) + gamma^(n-5)$
-  - Solving: $gamma approx 1.32$
-])
+//   Branch cleverly to remove more variables:
+//   - Branch 1: remove 3 variables
+//   - Branch 2: remove 5 variables
+//   - $gamma^n = gamma^(n-3) + gamma^(n-5)$
+//   - Solving: $gamma approx 1.32$
+// ])
   
-  *Goal*: Find branching rules that minimize $gamma$!
-#align(center, box(stroke: black, inset: 10pt)[
-  *Key*: A good *branching rule* utilizes problem structure to achieve a small branching factor $gamma$.
-])
+//   *Goal*: Find branching rules that minimize $gamma$!
+// #align(center, box(stroke: black, inset: 10pt)[
+//   *Key*: A good *branching rule* utilizes problem structure to achieve a small branching factor $gamma$.
+// ])
 
 == Traditional branching: Rule-based
 #timecounter(1)
 
 #align(center, grid(columns: 3, gutter: 20pt,
-align(center, [1. Design a rule table\ (pattern $arrow.r$ sub-problems)]), align(center, [2. Pattern matching]), align(center, [3. Pattern $arrow.r$ which rule]),
+align(top, [1. Design a rule table\ (pattern $arrow.r$ sub-problems)]), align(top, [2. Pattern matching]), align(top, [3. Pattern $arrow.r$ which rule]),
 align(left + top, box(stroke: black, inset: 10pt, width: 200pt, [
 - Dominance rule
 - Mirror rule
@@ -484,7 +482,7 @@ align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
 - _Remark_: The rules are usually *local* (e.g. only considers $N_2[v]$).
 
 
-== Online Branching
+== Branching - a problem agnostic, generic principle
 #timecounter(1)
 
 #align(center, grid(columns: 2, gutter: 40pt, box(width: 300pt, canvas({
@@ -535,29 +533,29 @@ align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
 // - An algorithm to generate provably optimal branching rules.
 // - For efficient contraction of sparse tensor networks.
 
-== Branching - an art of deviding and conquering
-#timecounter(2)
-Let $rho$ be a measure of problem size (e.g. number of variables)
-#figure(canvas(length: 0.8cm, {
-  mixmode_tree()
-}))
+// == Branching - an art of deviding and conquering
+// #timecounter(2)
+// Let $rho$ be a measure of problem size (e.g. number of variables)
+// #figure(canvas(length: 0.8cm, {
+//   mixmode_tree()
+// }))
 
-#align(left, box(stroke: black, inset: 10pt)[Let $Delta rho_i$ be the size reduction in the $i$-th branch.
-Then the _branching factor_ is given by
-$
-gamma^rho = sum_i gamma^(rho - Delta rho_i) arrow.double.r 1 = sum_i gamma^(- Delta rho_i)
-$])
+// #align(left, box(stroke: black, inset: 10pt)[Let $Delta rho_i$ be the size reduction in the $i$-th branch.
+// Then the _branching factor_ is given by
+// $
+// gamma^rho = sum_i gamma^(rho - Delta rho_i) arrow.double.r 1 = sum_i gamma^(- Delta rho_i)
+// $])
 
-== Measure
+// == Measure
 
-Characterizes the hardness of the instance
+// Characterizes the hardness of the instance
 
-- The number of vertices in the sub-problem
-- Degree 3 measure: $sum_(v in V) max(0, d(v) - 2)$, because degree 2 graphs are easy!
-- More sofisticated measures, e.g. assigning different measurs for vertices with different degree.
-- The tree-width of a graph topology.
+// - The number of vertices in the sub-problem
+// - Degree 3 measure: $sum_(v in V) max(0, d(v) - 2)$, because degree 2 graphs are easy!
+// - More sofisticated measures, e.g. assigning different measurs for vertices with different degree.
+// - The tree-width of a graph topology.
 
-It must be *positive*, *non-increasing* during branching, measure 0 problem is directly solvable.
+// It must be *positive*, *non-increasing* during branching, measure 0 problem is directly solvable.
 
 
 == Key: Valid and good branching rule
@@ -587,7 +585,7 @@ $
   1 = sum_i gamma^(- Delta rho(c_i))
 $])
 
-== More examples
+== Examples
 #timecounter(2)
 
 #let colred(x) = text(fill: red, $#x$)
@@ -699,18 +697,17 @@ dots.v$
 // ]
 
 
-== The optimal branching algorithm
-#timecounter(1)
+// == The optimal branching algorithm
+// #timecounter(1)
 
-1. Denote the oracle $cal(S) = {bold(s)_1, bold(s)_2, dots, bold(s)_l}$
-2. Generate candidate clauses $cal(C) = {c_1, c_2, dots, c_m}$ (Can be exponentially large)
-3. Find the optimal branching rule $cal(D) = c_(k_1) or c_(k_2) or dots$ by bisecting over $gamma$, find the smallest one that make the cost to the following weighted minimum set covering problem $<=1$:
-$
-min_(x) sum_(i=1)^(|cal(C)|) gamma^(-Delta rho(c_i)) x_i,  "s.t." union.big_(i = 1, dots, |cal(D)|,\ x_i = 1) J_i = {1, 2, dots, |cal(S)|}
-$
-where $J_i$ is the indices of bitstrings that covered by the $i$-th clause.
-- _Remark_: Although this problem is NP-hard, it is efficiently solvable with integer programming in practise. It allows us to handle number of vertices $>20$.
-
+// 1. Denote the oracle $cal(S) = {bold(s)_1, bold(s)_2, dots, bold(s)_l}$
+// 2. Generate candidate clauses $cal(C) = {c_1, c_2, dots, c_m}$ (Can be exponentially large)
+// 3. Find the optimal branching rule $cal(D) = c_(k_1) or c_(k_2) or dots$ by bisecting over $gamma$, find the smallest one that make the cost to the following weighted minimum set covering problem $<=1$:
+// $
+// min_(x) sum_(i=1)^(|cal(C)|) gamma^(-Delta rho(c_i)) x_i,  "s.t." union.big_(i = 1, dots, |cal(D)|,\ x_i = 1) J_i = {1, 2, dots, |cal(S)|}
+// $
+// where $J_i$ is the indices of bitstrings that covered by the $i$-th clause.
+// - _Remark_: Although this problem is NP-hard, it is efficiently solvable with integer programming in practise. It allows us to handle number of vertices $>20$.
 
 == The branching algorithms for MIS
 
@@ -779,14 +776,6 @@ where $J_i$ is the indices of bitstrings that covered by the $i$-th clause.
 columns: 2, gutter: 30pt
 )
 ])
-
-== Time complexity v.s. space complexity
-#slide[
-    #image("images/ksg_60x60_tc_s1.svg", width: 100%)][
-#timecounter(1)
-  - Dynamic slicing: time complexity grows with slice size.
-  - TNBB (OB based method): both time and space complexity reduces.
-]
 
 // == Showcase: King's subgraph at 0.8 filling
 // #timecounter(1)
@@ -1056,7 +1045,16 @@ image("images/fig5.svg", width: 350pt), [
 
 = Application 1: B&B tensor networks for MIS
 
+== Time complexity v.s. space complexity
+#slide[
+    #image("images/ksg_60x60_tc_s1.svg", width: 100%)][
+#timecounter(1)
+  - Dynamic slicing: time complexity grows with slice size.
+  - TNBB (OB based method): both time and space complexity reduces.
+]
+
 ==
+
 #figure(image("images/bbtn.svg", width: 400pt))
 // ==
 // #figure(image("images/ob_new.svg", width: 400pt))
