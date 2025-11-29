@@ -134,7 +134,7 @@
 
 #show: hkustgz-theme.with(
   config-info(
-    title: [Automated Discovery of Branching Rules with Optimal Complexity],
+    title: [Branching principle for constraint satisfaction problems],
     subtitle: [arXiv:2412.07685],
     author: [Jin-Guo Liu],
     date: datetime.today(),
@@ -159,13 +159,13 @@
   
   #v(20pt)
   
-  *Solution*: Combine neural networks with symbolic solvers @Pan2023:
+  *Solution*: Combine neural networks with satisfiability (SAT) solvers @Pan2023:
   
   #figure(canvas({
     import draw: *
-    content((-3, 0), [*AI*])
+    content((-5, 0), [*AI*])
     content((0, 0), [*Human*])
-    content((3, 0), [*Solvers*])
+    content((5, 0), [*SAT Solvers*])
     content((-3, -1), text(12pt)[Reasoning])
     line((-2, -1), (-1, -1), mark: (end: "straight"))
     content((3.2, -1), text(12pt)[Knowledge])
@@ -173,8 +173,8 @@
   }))
 ],
 [
-  #image("images/aibrain.png", width: 250pt)
-  #place(dx: 30%, dy: -75%, box(stroke: white, inset: 5pt, text(white, 24pt, stroke: yellow)[SAT Solvers]))
+  #image("images/aibrain.png", width: 200pt)
+  #place(dx: 50%, dy: -70%, box(stroke: white, fill: white, inset: 5pt, text(black, 24pt)[SAT]))
 ])
 
 == Three Types of Constraint Solvers
@@ -290,97 +290,54 @@ e.g. In the previous example, assume `Alice = 1`, create a branch. If no valid s
   - *Objective*: Find assignment satisfying all constraints (or optimize some function)
 ]
 
-==
+== Examples of CSP
 #grid(columns: 2, gutter: 30pt,
-[
+align(top)[
   *Example: Graph Coloring*
   
-  #canvas({
+  #figure(canvas({
     import draw: *
     let nodes = ((0, (0,0)), (1, (1.5,0)), (2, (0.75,1.3)))
     for (i, pos) in nodes {
       circle(pos, radius: 0.3, name: str(i))
-      content(pos, text(14pt)[$v_#i$])
+      content(pos, text(12pt)[$v_#i$])
     }
     line("0", "1")
     line("1", "2")
     line("2", "0")
-  })
+  }))
   
   - *Variables*: $v_0, v_1, v_2$
   - *Domain*: Each $v_i in {R, G, B}$
   - *Constraints*: Adjacent vertices $!=$ same color
   - *Objective*: Find valid coloring
 ],
-[
+align(top)[
   *Example: Maximum Independent Set*
-  
-  Same graph structure
+  #figure(canvas({
+    import draw: *
+    let nodes = ((0, (0,0)), (1, (1.5,0)), (2, (0.75,1.3)))
+    for (i, pos) in nodes {
+      circle(pos, radius: 0.3, name: str(i))
+      content(pos, text(12pt)[$x_#i$])
+    }
+    line("0", "1")
+    line("1", "2")
+    line("2", "0")
+  }))
   
   - *Variables*: $x_i in {0, 1}$ (in set or not)
   - *Constraints*: $x_i + x_j <= 1$ if edge $(i,j)$
   - *Objective*: *Maximize* $sum_i x_i$
-  
-  #v(10pt)
-  
-  *Key insight*: Constraint $ arrow.r.double$ reduces search space
 ])
 
 #align(center, box(stroke: black, inset: 10pt)[
   Naive search: $|D|^n$ possibilities. *Can we do better?*
+
+  *Key insight*: Constraint $ arrow.r.double$ reduces search space
 ])
 
-== Why Branching? The Power of Divide-and-Conquer
-
-#slide[
-*Branching algorithm*: Recursively split problem into independent subproblems
-
-#figure(canvas(length: 1cm, {
-  import draw: *
-  mixmode_tree()
-}))
-Key assumption: $T(rho) = O(gamma^rho)$, $rho$ is the *problem size measure* (e.g., \# variables)
-][
-#timecounter(2)
-*How it achieves $gamma^n$ complexity:*
-1. At each node, branch into $k$ subproblems with size reductions $Delta rho_1, dots, Delta rho_k$
-2. Recurse, with time determined by: 
-  $
-  T(rho) = sum_(i=1)^k T(rho - Delta rho_i),
-  $
-  $
-  1 = sum_(i=1)^k gamma^(-Delta rho_i)
-  $
-  Solve $gamma$: branching factor
-]
-
-==
-#grid(columns: 2, gutter: 20pt,
-align(top)[
-  *Example: Simple branching*
-  
-  Pick variable $x$, branch on $x=0$ and $x=1$:
-  - Removes 1 variable per branch
-  - $gamma^n = 2 gamma^(n-1)$
-  - Solving: $gamma = 2$
-  
-], align(top)[
-  *Better branching*:
-  
-  Branch cleverly to remove more variables:
-  - Branch 1: remove 3 variables
-  - Branch 2: remove 5 variables
-  - $gamma^n = gamma^(n-3) + gamma^(n-5)$
-  - Solving: $gamma approx 1.32$
-])
-  
-  *Goal*: Find branching rules that minimize $gamma$!
-#align(center, box(stroke: black, inset: 10pt)[
-  *Key*: A good *branching rule* utilizes problem structure to achieve a small branching factor $gamma$.
-])
-
-
-== The simplest branching algorithm @Fomin2006
+== My favorite example @Fomin2006
 #slide[
 #canvas(length: 0.71cm, {
   import draw: *
@@ -452,7 +409,82 @@ $
 $
 ]
 
-== Branching on the fly
+
+== Why Branching? The Power of Divide-and-Conquer
+
+#slide[
+*Branching*: Recursively split problem into independent subproblems
+
+#figure(canvas(length: 1cm, {
+  import draw: *
+  mixmode_tree()
+}))
+Key assumption: $T(rho) = O(gamma^rho)$, $rho$ is the *problem size measure* (e.g., \# variables)
+][
+#timecounter(2)
+*How it achieves $gamma^rho$ complexity:*
+1. At each node, branch into $k$ subproblems with size reductions $Delta rho_1, dots, Delta rho_k$
+2. Recurse, with time determined by: 
+  $
+  T(rho) = sum_(i=1)^k T(rho - Delta rho_i),
+  $
+  $
+  1 = sum_(i=1)^k gamma^(-Delta rho_i)
+  $
+  Solve $gamma$: branching factor
+]
+
+==
+#grid(columns: 2, gutter: 20pt,
+align(top)[
+  *Example: Simple branching*
+  
+  Pick variable $x$, branch on $x=0$ and $x=1$:
+  - Removes 1 variable per branch
+  - $gamma^n = 2 gamma^(n-1)$
+  - Solving: $gamma = 2$
+  
+], align(top)[
+  *Better branching*:
+  
+  Branch cleverly to remove more variables:
+  - Branch 1: remove 3 variables
+  - Branch 2: remove 5 variables
+  - $gamma^n = gamma^(n-3) + gamma^(n-5)$
+  - Solving: $gamma approx 1.32$
+])
+  
+  *Goal*: Find branching rules that minimize $gamma$!
+#align(center, box(stroke: black, inset: 10pt)[
+  *Key*: A good *branching rule* utilizes problem structure to achieve a small branching factor $gamma$.
+])
+
+== Traditional branching: Rule-based
+#timecounter(1)
+
+#align(center, grid(columns: 3, gutter: 20pt,
+align(center, [1. Design a rule table\ (pattern $arrow.r$ sub-problems)]), align(center, [2. Pattern matching]), align(center, [3. Pattern $arrow.r$ which rule]),
+align(left + top, box(stroke: black, inset: 10pt, width: 200pt, [
+- Dominance rule
+- Mirror rule
+- Satellite rule
+- ...
+])),
+align(center+top, text(11pt)[#canvas(length: 0.5cm, demograph((white, white, white, white, white), fontsize: 12pt))]),
+align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
+  - If `degree(v) == 1`, add `v` to the set
+  - If `has_mirror`, use mirror rule
+  - If `has_satellite`, use satellite rule
+  - ...
+]))
+))
+
+- _Remark_: Each rule is associated with a branching factor $gamma$. The overall complexity is upper bounded by the maximum branching factor in the rule table.
+- _Remark_: The table of rules is *problem-specific*.
+- _Remark_: The rules are usually *local* (e.g. only considers $N_2[v]$).
+
+
+== Online Branching
 #timecounter(1)
 
 #align(center, grid(columns: 2, gutter: 40pt, box(width: 300pt, canvas({
@@ -680,34 +712,6 @@ where $J_i$ is the indices of bitstrings that covered by the $i$-th clause.
 - _Remark_: Although this problem is NP-hard, it is efficiently solvable with integer programming in practise. It allows us to handle number of vertices $>20$.
 
 
-= Application 1: B&B tensor networks for MIS
-
-== Combining Online Branching with Tensor Networks
-#timecounter(1)
-
-#slide[
-  *The Synergy*:
-  - *Tensor Networks*: Powerful for computing the "Oracle" (counting/sampling solutions on a local region).
-    - Computing marginals ($p(x_i)$) or local configurations ($p(x_i, x_j)$).
-    - Exact contraction can be expensive, but local contraction is cheap.
-  - *Online Branching*: Uses the Oracle to find optimal cuts.
-    - Simplifies the tensor network by fixing variables (slicing).
-    - Reduces the bond dimension/complexity of the network.
-][
-  #align(center, canvas({
-    import draw: *
-    circle((0,0), radius: 2, fill: blue.lighten(80%), stroke: none)
-    content((0,0), [Tensor\ Network])
-    circle((3,0), radius: 2, fill: red.lighten(80%), stroke: none)
-    content((3,0), [Branching])
-    content((1.5, 0), text(20pt)[+])
-    
-    content((1.5, -3), box(stroke: black, inset: 10pt)[
-      TN Oracle $arrow.r$ Optimal Branch $arrow.r$ Simplified TN
-    ])
-  }))
-]
-
 == The branching algorithms for MIS
 
 #let hd(name) = table.cell(text(10pt)[#name], fill: green.lighten(50%))
@@ -784,46 +788,19 @@ columns: 2, gutter: 30pt
   - TNBB (OB based method): both time and space complexity reduces.
 ]
 
-== Showcase: King's subgraph at 0.8 filling
-#timecounter(1)
+// == Showcase: King's subgraph at 0.8 filling
+// #timecounter(1)
 
-#grid(columns: 2, gutter: 20pt,
-[#canvas({
-  import draw: *
-  show-grid-graph(8, 8, filling: 0.8, unitdisk: 1.6)
-})
-],
-[
-  - Independent set problem on King's subgraph is NP-hard @Pichler2018, also known as hard-core lattice gas @Nath2014, and is implementable on Rydberg atoms arrays @Ebadi2022.
-  - Previous (classical) record: $40 times 40$ for tensor network @Liu2023 and branching methods, estimated to be $70 times 70$ for integer programming (CPLEX) @Andrist2023
-])
-
-
-
-== Traditional branching: Rule-based
-#timecounter(1)
-
-#align(center, grid(columns: 3, gutter: 25pt,
-align(center, [1. Design a rule table\ (local pattern $arrow.r$ sub-problems)]), align(center, [2. Pattern matching]), align(center, [3. Pattern $arrow.r$ which rule]),
-align(left + top, box(stroke: black, inset: 10pt, width: 200pt, [
-- Dominance rule
-- Mirror rule
-- Satellite rule
-- ...
-])),
-align(center+top, text(11pt)[#canvas(length: 0.5cm, demograph((white, white, white, white, white), fontsize: 12pt))]),
-align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
-  - If `degree(v) == 1`, add `v` to the set
-  - If `has_mirror`, use mirror rule
-  - If `has_satellite`, use satellite rule
-  - ...
-]))
-))
-
-- _Remark_: Each rule is associated with a branching factor $gamma$. The overall complexity is upper bounded by the maximum branching factor in the rule table.
-- _Remark_: The table of rules is *problem-specific*.
-- _Remark_: The rules are usually *local* (e.g. only considers $N_2[v]$).
-
+// #grid(columns: 2, gutter: 20pt,
+// [#canvas({
+//   import draw: *
+//   show-grid-graph(8, 8, filling: 0.8, unitdisk: 1.6)
+// })
+// ],
+// [
+//   - Independent set problem on King's subgraph is NP-hard @Pichler2018, also known as hard-core lattice gas @Nath2014, and is implementable on Rydberg atoms arrays @Ebadi2022.
+//   - Previous (classical) record: $40 times 40$ for tensor network @Liu2023 and branching methods, estimated to be $70 times 70$ for integer programming (CPLEX) @Andrist2023
+// ])
 == A bottleneck case in an expert designed 3-MIS branching
 #timecounter(1)
 
@@ -1061,25 +1038,28 @@ image("images/fig5.svg", width: 350pt), [
 // ])
 ])
 
-== The branching overhead matters? Branching hierachy
-#timecounter(1)
-The overhead of branching on-the-fly is $8times$ the case with a pre-defined branching rule.
-#grid(gutter: 30pt, columns: 2, [#image("images/mix_runtime.svg", width: 300pt)], [
-  #figure(canvas(length: 1cm,
-    {
-      import draw: *
-      mixmode-bb()
-    }
-  ))
-])
-#figure(box(stroke: black, inset: 10pt)[
-  Branching overhead can be mitigated by increasing the sub-problem size!
-])
+// == The branching overhead matters? Branching hierachy
+// #timecounter(1)
+// The overhead of branching on-the-fly is $8times$ the case with a pre-defined branching rule.
+// #grid(gutter: 30pt, columns: 2, [#image("images/mix_runtime.svg", width: 300pt)], [
+//   #figure(canvas(length: 1cm,
+//     {
+//       import draw: *
+//       mixmode-bb()
+//     }
+//   ))
+// ])
+// #figure(box(stroke: black, inset: 10pt)[
+//   Branching overhead can be mitigated by increasing the sub-problem size!
+// ])
+
+
+= Application 1: B&B tensor networks for MIS
 
 ==
 #figure(image("images/bbtn.svg", width: 400pt))
-==
-#figure(image("images/ob_new.svg", width: 400pt))
+// ==
+// #figure(image("images/ob_new.svg", width: 400pt))
 
 ==
 #figure(image("images/time_complexity.svg", width: 70%))
@@ -1091,8 +1071,8 @@ The overhead of branching on-the-fly is $8times$ the case with a pre-defined bra
 ==
 #figure(image("images/tc_different_target.svg", width: 50%))
 
-==
-#figure(image("images/compare_nu_u.svg", width: 50%))
+// ==
+// #figure(image("images/compare_nu_u.svg", width: 50%))
 
 = Application 2: Circuit SAT problems
 
