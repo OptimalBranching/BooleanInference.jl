@@ -4,9 +4,11 @@
 *.jl.mem
 /Manifest.toml
 
-# Benchmark data
-benchmarks/data/
+# Benchmark
 benchmarks/Manifest.toml
+benchmarks/data/aig
+benchmarks/data/iscas85
+benchmarks/data/factoring
 
 # IDE
 .vscode/

@@ -86,7 +86,28 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem},
     branches = Int[]
     if actual_solver isa BooleanInferenceSolver
         for res in all_results
-            push!(branches, res[3].total_visited_nodes)
+            if res !== nothing
+                # Different problem types return different result structures:
+                # - CNFSAT: Result struct with .stats field
+                # - CircuitSAT: Tuple (Bool, BranchingStats) - stats is res[2]
+                # - Factoring: Tuple (Int, Int, BranchingStats) or (Nothing, Nothing, BranchingStats) - stats is res[3]
+                if problem_type == CNFSATProblem
+                    push!(branches, res.stats.total_visited_nodes)
+                elseif problem_type == CircuitSATProblem
+                    push!(branches, res[2].total_visited_nodes)
+                elseif problem_type == FactoringProblem
+                    push!(branches, res[3].total_visited_nodes)
+                else
+                    # Fallback: try to access as Result struct
+                    if hasfield(typeof(res), :stats)
+                        push!(branches, res.stats.total_visited_nodes)
+                    else
+                        push!(branches, 0)
+                    end
+                end
+            else
+                push!(branches, 0)
+            end
         end
     elseif actual_solver isa CNFSolver
         for res in all_results
