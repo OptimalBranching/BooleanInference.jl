@@ -6,34 +6,41 @@ using ProblemReductions
 using BooleanInference
 using BooleanInference.OptimalBranchingCore
 
-dataset_path = joinpath(@__DIR__, "..", "data", "CNF", "random")
+result_dir = resolve_results_dir("CNFSAT")
 
-bsconfig = BranchingStrategy(
-    table_solver=TNContractionSolver(),
-    selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
-    # selector=MostOccurrenceSelector(1,2),
-    measure=NumHardTensors(),
-    set_cover_solver=GreedyMerge()
-)
+for n in [100, 200, 300]
+    for r in [350, 380, 400, 420, 430, 450]
+    dataset_path = joinpath(@__DIR__, "..", "data", "3CNF", "random", "n=$(n)", "$(n)-$(r)")
 
-result = benchmark_dataset(
-    CNFSATProblem,
-    dataset_path;
-    solver=BooleanInferenceSolver(;bsconfig),
-    verify=true
-)
+    for i in 1:5
+        bsconfig = BranchingStrategy(
+            table_solver=TNContractionSolver(),
+            # selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
+            selector=MostOccurrenceSelector(3,i),
+            measure=NumHardTensors(),
+            set_cover_solver=GreedyMerge()
+        )
 
-test_file = joinpath(dataset_path, "3sat10.cnf")
-test_instance = parse_cnf_file(test_file)
-result = solve_instance(CNFSATProblem, test_instance, BooleanInferenceSolver(;bsconfig, show_stats=true))
-result = solve_instance(CNFSATProblem, test_instance, KissatSolver(kissat_path="/opt/homebrew/bin/kissat", timeout=300.0, quiet=false))
+        result = benchmark_dataset(
+            CNFSATProblem,
+            dataset_path;
+            solver=BooleanInferenceSolver(;bsconfig),
+            verify=false,
+            save_result=result_dir
+        )
+    end
 
-@show result
+        # result = benchmark_dataset(
+        #     CNFSATProblem,
+        #     dataset_path;
+        #     solver=KissatSolver(kissat_path="/opt/homebrew/bin/kissat", timeout=300.0, quiet=false),
+        #     verify=false,
+        #     save_result=result_dir
+        # )
+end
+end
 
-# === Branching Statistics ===
-# Branching nodes: 19712
-# Total potential subproblems: 25631
-# Total visited nodes: 25611
-# Average branching factor (potential): 1.3
-# Average branching factor (actual): 1.3
-# Result(found=true, solution=available)
+# test_file = joinpath(dataset_path, "3sat10.cnf")
+# test_instance = parse_cnf_file(test_file)
+# result = solve_instance(CNFSATProblem, test_instance, BooleanInferenceSolver(;bsconfig, show_stats=true))
+# result = solve_instance(CNFSATProblem, test_instance, KissatSolver(kissat_path="/opt/homebrew/bin/kissat", timeout=300.0, quiet=false))
