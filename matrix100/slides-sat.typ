@@ -105,8 +105,8 @@
 
 #let main-diagram() = {
   import draw: *
-  content((0, -2), box(text(15pt)[Check some variables, get oracle: $cal(S)$], stroke: black, inset: 10pt), name: "select")
-  content((0, -4), box(text(15pt)[Generate branching rules: $cal(D)$], stroke: black, inset: 10pt), name: "rules")
+  content((0, -2), box(text(15pt)[Check some variables, get *feasible set*: $cal(S)$], stroke: black, inset: 10pt), name: "select")
+  content((0, -4), box(text(15pt)[Generate *branching rules*: $cal(D)$], stroke: black, inset: 10pt), name: "rules")
   content((0, -6), box(text(15pt)[Try each branch], stroke: black, inset: 10pt), name: "branching")
 
   let ps_1 = (0, -7.5)
@@ -150,15 +150,17 @@
 == The Logic Reasoning Gap
 #timecounter(2)
 
-*Large language models (LLMs) struggle with logical reasoning*
+*Large language models (LLMs) struggle with logical reasoning* @Pan2023
 - Hallucinations in multi-step reasoning
 - Cannot strictly enforce hard constraints
 - No guarantees on correctness
 
 #align(center, [? Machines cannot deep reason])
-  
-== No!
-  
+
+#pause
+
+#align(center, [No!])
+
 #figure(canvas({
   import draw: *
   content((-5, 0), [*LLM*])
@@ -169,6 +171,9 @@
   content((3.2, -1), text(12pt)[Knowledge])
   line((2, -1), (1, -1), mark: (end: "straight"))
 }))
+  
+== LLM + SAT
+#timecounter(2)
 
 *New Scheme*: LLM + SAT solvers @Pan2023:
 
@@ -266,8 +271,14 @@
 // - None of the solvers above are close to the state-of-the-art exact solvers.
 
 == Focus of this talk: Branching for CSP
+#timecounter(2)
 
-- Branching$(checkmark)$: contributes most of the SOTA exact exponential solvers for computational hard problems @Fomin2013.
+By the end of the talk, you will
+- Understand constraint satisfaction problems (CSP)
+- Understand the principle of branching
+- How branching is combined with tensor network methods to solve hard problems
+
+*Branching*$(checkmark)$: contributes most of the SOTA exact exponential solvers for computational hard problems @Fomin2013.
 
 #align(center, box(stroke: black, inset: 8pt)[
 Branching implements human wisdom for reasoning: *case by case*.
@@ -461,7 +472,7 @@ Key assumption: $T(rho) = O(gamma^rho)$, $rho$ is the *problem size measure* (e.
 #timecounter(1)
 
 #align(center, grid(columns: 3, gutter: 20pt,
-align(top, [1. Design a rule table\ (pattern $arrow.r$ sub-problems)]), align(top, [2. Pattern matching]), align(top, [3. Pattern $arrow.r$ which rule]),
+align(top, [1. Design a rule table]), align(top, [2. Pattern matching]), align(top, [3. Pattern $arrow.r$ which rule]),
 align(left + top, box(stroke: black, inset: 10pt, width: 200pt, [
 - Dominance rule
 - Mirror rule
@@ -479,8 +490,6 @@ align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
 
 - _Remark_: Each rule is associated with a branching factor $gamma$. The overall complexity is upper bounded by the maximum branching factor in the rule table.
 - _Remark_: The table of rules is *problem-specific*.
-- _Remark_: The rules are usually *local* (e.g. only considers $N_2[v]$).
-
 
 == Branching - a problem agnostic, generic principle
 #timecounter(1)
@@ -493,7 +502,7 @@ align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
   for k in range(5){
     content((k * size, 0.2 + size), text(12pt, box([$#numbering("a", k+1)$], fill: none, inset: 2pt)))
   }
-  content((2, 2.5), align(center, text(12pt)[oracle: $(b, c, d) in {101, 100, 011}$]))
+  content((2, 2.5), align(center, text(12pt)[feasible set: $(b, c, d) in {101, 100, 011}$]))
   content((-5.5, -1.5), align(center, text(12pt)[branch: $b = 1, c = 0$]))
   decision_sequence((0, 0), (0, -3, -3, -3, 0))
   decision_sequence((-4, -DY), (-3, 1, 2, -3, -3))
@@ -561,7 +570,7 @@ align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
 == Key: Valid and good branching rule
 #timecounter(2)
 
-- Valid: all elements in oracle are true assignments of $cal(D)$ (exploring all possibilities).
+- Valid: all elements in *feasible set* are true assignments of $cal(D)$ (exploring all possibilities).
 - Good: create less branches, eliminate more variables.
 
 #grid(columns:2, gutter: 20pt, canvas({
@@ -585,21 +594,25 @@ $
   1 = sum_i gamma^(- Delta rho(c_i))
 $])
 
-== Examples
+== Exercises
 #timecounter(2)
 
 #let colred(x) = text(fill: red, $#x$)
 - $"oracle"(a, b, c, d) = {101colred(0), 100colred(0), 010colred(0)}$
 
-  The optimal branching rule is $not d$, removing one variable for free!
+  Optimal branching: $not d$, removing one variable for free!
+
   $ gamma^n = gamma^(n-1) arrow.r gamma = 1$
 
 - $"oracle"(a, b, c, d, e) = {colred(1111)1, colred(0000)0, colred(1111)0, colred(0000)1}$
 
   Optimal branching: $(a and b and c and d) or (not a and not b and not c and not d)$.
+
   $ gamma^n = 2 gamma^(n-4) arrow.r gamma approx 1.19$
 
 - $"oracle"(a, b, c, d) = {1000, 0100, 0010, 0001}$
+
+  Optimal branching: $(not a) or (a and not b and not c and not d)$.
 
 
 == Bruteforce is infeasible
@@ -1045,6 +1058,27 @@ image("images/fig5.svg", width: 350pt), [
 
 = Application 1: B&B tensor networks for MIS
 
+== Tensor network for combinatorial optimization
+- Tensor networks with *tropical algebra* can be used for solving CSP @Liu2021@Liu2023
+- Due to hard constraints and bounding, *sparsity* emerged in the tensor network contraction: only a small subset of configurations are needed to be considered.
+- The sparsity helps a lot! but still *not surpass* branching. 😞
+- Now we understand: direct use of sparsity is not the most efficient.
+
+==
+
+#slide[
+#figure(image("images/bbtn.svg", width: 400pt))
+][
+  Branching and Bound Tensor Network (BBTN)
+  - *Key*: Use the right *measure*! Use the tree-width of a tensor network, which measures the contraction complexity.
+
+  (Left) *Slicing*, which "branch" on one variable at a time.
+
+  (Right) BBTN can be viewed as *non-uniform* version of *slicing*, which more effectively reduce the tree-width.
+]
+// ==
+// #figure(image("images/ob_new.svg", width: 400pt))
+
 == Time complexity v.s. space complexity
 #slide[
     #image("images/ksg_60x60_tc_s1.svg", width: 100%)][
@@ -1053,104 +1087,273 @@ image("images/fig5.svg", width: 350pt), [
   - TNBB (OB based method): both time and space complexity reduces.
 ]
 
-==
-
-#figure(image("images/bbtn.svg", width: 400pt))
-// ==
-// #figure(image("images/ob_new.svg", width: 400pt))
 
 ==
 #figure(image("images/time_complexity.svg", width: 70%))
 
 #let namebox(src, name) = box(align(center, [#image(src, width:60pt, height:80pt)#v(-10pt)#name]))
+#align(center,[
 #namebox("images/yijiawang.png", "Yijia Wang (IOTP)")#h(20pt)
 #namebox("images/xuanzhao.png", "Xuanzhao Gao (HKUST)")
+])
 
-==
-#figure(image("images/tc_different_target.svg", width: 50%))
+// ==
+// #figure(image("images/tc_different_target.svg", width: 50%))
 
 // ==
 // #figure(image("images/compare_nu_u.svg", width: 50%))
 
 = Application 2: Circuit SAT problems
 
-== DPLL Algorithm
+// == DPLL Algorithm
 
-*Davis-Putnam-Logemann-Loveland (DPLL)* algorithm is a complete, backtracking-based search algorithm for deciding the satisfiability of propositional logic formulae in CNF.
+// *Davis-Putnam-Logemann-Loveland (DPLL)* algorithm is a complete, backtracking-based search algorithm for deciding the satisfiability of propositional logic formulae in CNF.
 
-*Key ideas*:
-- *Unit propagation*: If a clause is a unit clause (only one literal), assign the variable to satisfy that clause.
-- *Pure literal elimination*: If a variable appears with only one polarity, assign it to satisfy all clauses containing it.
-- *Branching*: Choose a variable and recursively try both assignments (true and false).
-- *Backtracking*: If a branch leads to a conflict, backtrack and try the other assignment.
+// *Key ideas*:
+// - *Unit propagation*: If a clause is a unit clause (only one literal), assign the variable to satisfy that clause.
+// - *Pure literal elimination*: If a variable appears with only one polarity, assign it to satisfy all clauses containing it.
+// - *Branching*: Choose a variable and recursively try both assignments (true and false).
+// - *Backtracking*: If a branch leads to a conflict, backtrack and try the other assignment.
 
-*Time complexity*: $O(2^n)$ in the worst case, but often much better in practice due to pruning.
+// *Time complexity*: $O(2^n)$ in the worst case, but often much better in practice due to pruning.
 
-==
-*Example with branching*: Consider $F = (x_1 or x_2) and (not x_1 or x_3) and (not x_2 or not x_3) and (not x_3 or x_1)$
+// ==
+// *Example with branching*: Consider $F = (x_1 or x_2) and (not x_1 or x_3) and (not x_2 or not x_3) and (not x_3 or x_1)$
 
-#text(size: 16pt)[
-1. *Initial*: $F = (x_1 or x_2) and (not x_1 or x_3) and (not x_2 or not x_3) and (not x_3 or x_1)$ (no unit clauses)
-2. *Branch*: Choose $x_1$, try $x_1 = 1$ first
-3. $F arrow.r cancel((x_1 or x_2)) and (cancel(not x_1) or x_3) and (not x_2 or not x_3) and (cancel(not x_3) or cancel(x_1))$\
-   $F arrow.r (x_3) and (not x_2 or not x_3)$
-4. *Unit propagation*: $x_3 = 1$\
-   $F arrow.r cancel((x_3)) and (not x_2 or cancel(not x_3)) arrow.r (not x_2)$
-5. *Unit propagation*: $x_2 = 0$\
-   $F arrow.r cancel((not x_2)) arrow.r emptyset$ #text(fill: green)[✓ *SAT*]
-6. *Result*: Assignment found: $x_1 = 1, x_2 = 0, x_3 = 1$
+// #text(size: 16pt)[
+// 1. *Initial*: $F = (x_1 or x_2) and (not x_1 or x_3) and (not x_2 or not x_3) and (not x_3 or x_1)$ (no unit clauses)
+// 2. *Branch*: Choose $x_1$, try $x_1 = 1$ first
+// 3. $F arrow.r cancel((x_1 or x_2)) and (cancel(not x_1) or x_3) and (not x_2 or not x_3) and (cancel(not x_3) or cancel(x_1))$\
+//    $F arrow.r (x_3) and (not x_2 or not x_3)$
+// 4. *Unit propagation*: $x_3 = 1$\
+//    $F arrow.r cancel((x_3)) and (not x_2 or cancel(not x_3)) arrow.r (not x_2)$
+// 5. *Unit propagation*: $x_2 = 0$\
+//    $F arrow.r cancel((not x_2)) arrow.r emptyset$ #text(fill: green)[✓ *SAT*]
+// 6. *Result*: Assignment found: $x_1 = 1, x_2 = 0, x_3 = 1$
+// ]
+
+// *Branching tree* shows search space reduction: Without branching, need to check $2^3 = 8$ assignments. DPLL finds solution by exploring only one branch with unit propagation.
+
+// ==
+// *Example with backtracking*: Consider $F = (x_1 or x_2) and (not x_1 or not x_2) and (not x_1 or x_2)$
+
+// #text(size: 16pt)[
+// *Left branch* ($x_1 = 1$):
+// - $F arrow.r cancel((x_1 or x_2)) and (cancel(not x_1) or not x_2) and (cancel(not x_1) or x_2) arrow.r (not x_2) and (x_2)$
+// - Get empty clause #text(fill: red)[✗ *UNSAT*] → *Backtrack!*
+
+// *Right branch* ($x_1 = 0$):
+// - $F arrow.r (cancel(x_1) or x_2) and cancel((not x_1 or not x_2)) and cancel((not x_1 or x_2)) arrow.r (x_2)$
+// - Unit propagation: $x_2 = 1$ → $emptyset$ #text(fill: green)[✓ *SAT*]
+// - *Result*: $x_1 = 0, x_2 = 1$
+// ]
+
+// This demonstrates how DPLL *branches* on variables and *backtracks* when conflicts arise, achieving $gamma^n$ complexity with $gamma < 2$ through pruning.
+
+// == Combining Online Branching with Unit Propagation
+// #timecounter(2)
+
+// #slide[
+// *Key Insight*: Unit propagation is extremely efficient, but traditional branching (choosing single variables) may not exploit the constraint structure optimally.
+
+// *Our Approach*:
+// 1. Select a subset of variables to form a region
+// 2. Compute the oracle (tensor network contraction over the region)
+// 3. Generate optimal branching rules from the oracle
+// 4. Apply unit propagation after each branch
+// ][
+//   #align(center, canvas({
+//     import draw: *
+//     rect((-3, -0.5), (3, 0.5), fill: blue.lighten(80%), stroke: black)
+//     content((0, 0), [1. Select region])
+    
+//     rect((-3, -2), (3, -1), fill: green.lighten(80%), stroke: black)
+//     content((0, -1.5), [2. Compute oracle (TN)])
+    
+//     rect((-3, -3.5), (3, -2.5), fill: yellow.lighten(80%), stroke: black)
+//     content((0, -3), [3. Optimal branching])
+    
+//     rect((-3, -5), (3, -4), fill: red.lighten(80%), stroke: black)
+//     content((0, -4.5), [4. Unit propagation])
+    
+//     line((0, 0.5), (0, -1), mark: (end: "straight"))
+//     line((0, -2), (0, -2.5), mark: (end: "straight"))
+//     line((0, -3.5), (0, -4), mark: (end: "straight"))
+//     line((0, -5), (5, -5), (5, 0.5), mark: (end: "straight"))
+//   }))
+// ]
+
+== Circuit SAT problems
+#timecounter(1)
+
+#place(bottom + right, align(center, [
+  #image("images/zhongyi.jpg", width: 50pt, height: 70pt) #text(14pt, [Zhong-Yi Ni])
+]))
+
+#let multiplier-block(loc, size, sij, cij, pij, qij, pijp, qipj, sipjm, cimj) = {
+  import draw: *
+  rect((loc.at(0) - size/2, loc.at(1) - size/2), (loc.at(0) + size/2, loc.at(1) + size/2), stroke: black, fill: white)
+  circle((loc.at(0) + size/2, loc.at(1) - size/2), name: sij, radius: 0)
+  circle((loc.at(0) - size/2, loc.at(1) - size/4), name: cij, radius: 0)
+  circle((loc.at(0) - size/2, loc.at(1) + size/4), name: qipj, radius: 0)
+  circle((loc.at(0), loc.at(1) + size/2), name: pij, radius: 0)
+  circle((loc.at(0) + size/2, loc.at(1) + size/4), name: qij, radius: 0)
+  circle((loc.at(0), loc.at(1) - size/2), name: pijp, radius: 0)
+  circle((loc.at(0) - size/2, loc.at(1) + size/2), name: sipjm, radius: 0)
+  circle((loc.at(0) + size/2, loc.at(1) - size/4), name: cimj, radius: 0)
+}
+
+#let multiplier(m, n, size: 1) = {
+  import draw: *
+  for i in range(m){
+    for j in range(n) {
+      multiplier-block((-2 * i, -2 * j), size, "s" + str(i) + str(j), "c" + str(i) + str(j), "p" + str(i) + str(j), "q" + str(i) + str(j), "p" + str(i) + str(j+1) + "'", "q" + str(i+1) + str(j) + "'", "s" + str(i+1) + str(j - 1) + "'", "c" + str(i - 1) + str(j) + "'")
+    }
+  }
+  for i in range(m){
+    for j in range(n){
+      if (i > 0) and (j < n - 1) {
+        line("s" + str(i) + str(j), "s" + str(i) + str(j) + "'", mark: (end: "straight"))
+      }
+      if (i < m - 1){
+        line("c" + str(i) + str(j), "c" + str(i) + str(j) + "'", mark: (end: "straight"))
+      }
+      if (j > 0){
+        line("p" + str(i) + str(j), "p" + str(i) + str(j) + "'", mark: (start: "straight"))
+      }
+      if (i > 0){
+        line("q" + str(i) + str(j), "q" + str(i) + str(j) + "'", mark: (start: "straight"))
+      }
+    }
+  }
+  for i in range(m){
+    let a = "p" + str(i) + "0"
+    let b = (rel: (0, 0.5), to: a)
+    line(a, b, mark: (start: "straight"))
+    content((rel: (0, 0.3), to: b), text(14pt)[$p_#i$])
+
+
+    let a2 = "s" + str(i+1) + str(-1) + "'"
+    let b2 = (rel: (-0.4, 0.4), to: a2)
+    line(a2, b2, mark: (start: "straight"))
+    content((rel: (-0.2, 0.2), to: b2), text(14pt)[$0$])
+
+    let a3 = "s" + str(i) + str(n - 1)
+    let b3 = (rel: (0.4, -0.4), to: a3)
+    line(a3, b3, mark: (end: "straight"))
+    content((rel: (0.2, -0.2), to: b3), text(14pt)[$m_#(i+m - 1)$])
+
+  }
+  for j in range(n){
+    let a = "q0" + str(j)
+    let b = (rel: (0.5, 0), to: a)
+    line(a, b, mark: (start: "straight"))
+    content((rel: (0.3, 0), to: b), text(14pt)[$q_#j$])
+
+    let a2 = "q" + str(m) + str(j) + "'"
+    let b2 = (rel: (-0.5, 0), to: a2)
+    line(a2, b2, mark: (end: "straight"))
+
+
+    let a3 = "c" + str(-1) + str(j) + "'"
+    let b3 = (rel: (0.5, 0), to: a3)
+    line(a3, b3, mark: (start: "straight"))
+    content((rel: (0.3, 0), to: b3), text(14pt)[$0$])
+  
+    if (j < n - 1) {
+      let a4 = "c" + str(m - 1) + str(j)
+      let b4 = "s" + str(m) + str(j) + "'"
+      bezier(a4, b4, (rel: (-1, 0), to: a4), (rel: (-0.5, -1), to: a4), mark: (end: "straight"))
+    } else {
+      let a4 = "c" + str(m - 1) + str(j)
+      line(a4, (rel: (-0.5, 0), to: a4), mark: (end: "straight"))
+      content((rel: (-0.8, 0), to: a4), text(14pt)[$m_#(j+m)$])
+    }
+    if (j < n - 1) {
+      let a5 = "s0" + str(j)
+      let b5 = (rel: (0.4, -0.4), to: a5)
+      line(a5, b5, mark: (end: "straight"))
+      content((rel: (0.2, -0.2), to: b5), text(14pt)[$m_#j$])
+    }
+  }
+}
+
+#grid(columns: 2, gutter: 40pt, canvas({
+  import draw: *
+  let i = 0
+  let j = 0
+  multiplier(5, 5, size: 1.0)
+}),
+[#canvas({
+  import draw: *
+  multiplier-block((0, 0), 1.0, "so", "co", "pi", "qi", "po", "qo", "si", "ci")
+  line("si", (rel:(-0.5, 0.5), to:"si"), mark: (start: "straight"))
+  content((rel:(-0.75, 0.75), to:"si"), text(14pt)[$s_i$])
+  line("ci", (rel:(0.5, 0), to:"ci"), mark: (start: "straight"))
+  content((rel:(0.75, 0), to:"ci"), text(14pt)[$c_i$])
+  line("pi", (rel:(0, 0.5), to:"pi"), mark: (start: "straight"))
+  content((rel:(0, 0.75), to:"pi"), text(14pt)[$p_i$])
+  line("qi", (rel:(0.5, 0), to:"qi"), mark: (start: "straight"))
+  content((rel:(0.75, 0), to:"qi"), text(14pt)[$q_i$])
+  line("po", (rel:(0, -0.5), to:"po"), mark: (end: "straight"))
+  content((rel:(0, -0.75), to:"po"), text(14pt)[$p_i$])
+  line("qo", (rel:(-0.5, 0), to:"qo"), mark: (end: "straight"))
+  content((rel:(-0.75, 0), to:"qo"), text(14pt)[$q_i$])
+  line("so", (rel:(0.5, -0.5), to:"so"), mark: (end: "straight"))
+  content((rel:(0.75, -0.75), to:"so"), text(14pt)[$s_o$])
+  line("co", (rel:(-0.5, 0), to:"co"), mark: (end: "straight"))
+  content((rel:(-0.75, 0), to:"co"), text(14pt)[$c_o$])
+  content((5, 0), text(14pt)[$2c_o + s_o = p_i q_i + c_i + s_i$])
+
+  let gate(loc, label, size: 1, name:none) = {
+    rect((loc.at(0) - size/2, loc.at(1) - size/2), (loc.at(0) + size/2, loc.at(1) + size/2), stroke: black, fill: white, name: name)
+    content(loc, text(14pt)[$label$])
+  }
+  set-origin((-1.5, -3))
+  line((4.5, 0), (-1, 0))  // q
+  line((3, 1), (3, -4.5))  // p
+  let si = (-1, 1)
+  let ci = (4.5, -2.5)
+  gate((0.5, -0.5), [$and$], size: 0.5, name: "a1")
+  gate((2.5, -0.5), [$and$], size: 0.5, name: "a2")
+  gate((2.0, -2.5), [$and$], size: 0.5, name: "a3")
+  gate((0.5, -2.5), [$or$], size: 0.5, name: "o1")
+  gate((1.5, -1.5), [$xor$], size: 0.5, name: "x1")
+  gate((3.5, -3.5), [$xor$], size: 0.5, name: "x2")
+  line("a2", (2.5, 0))
+  line("x1", (1.5, -0.5))
+  line("a2", (3, -0.5))
+  line("a2", "a1")
+  line("a1", "o1")
+  line("a3", "o1")
+  line("o1", (rel: (-1.5, 0), to: "o1"))
+  line(si, "a1")
+  line(ci, "a3")
+  line((3.5, -2.5), "x2")
+  let turn = (1.5, -3.5)
+  line("x1",(rel: (0.5, -2.5), to: si), (rel: (0.5, -0.5), to: si))
+  line("x1", turn, "x2")
+  line("x2", (rel: (1, -1), to: "x2"))
+  line("a3", (2.0, -0.5))
+  rect((-0.75, -4), (4, 0.75), stroke: (dash: "dashed"))
+
+  let gate_with_leg(loc, label, size: 1, name:none) = {
+    gate(loc, label, size: size, name: name)
+    line(name, (rel: (0.5, 0), to: name))
+    line(name, (rel: (-0.5, 0), to: name))
+    line(name, (rel: (0, 0.5), to: name))
+  }
+  gate_with_leg((6, 0), [$xor$], size: 0.5, name: "x3")
+  content((8, 0), text(14pt)[$= mat(mat(0, 1; 1, 0); mat(1, 0; 0, 1))$])
+
+  gate_with_leg((6, -2), [$or$], size: 0.5, name: "o3")
+  content((8, -2), text(14pt)[$= mat(mat(1, 0; 0, 0); mat(0, 1; 1, 1))$])
+
+  gate_with_leg((6, -4), [$and$], size: 0.5, name: "a4")
+  content((8, -4), text(14pt)[$= mat(mat(1, 1; 1, 0); mat(0, 0; 0, 1))$])
+})
 ]
-
-*Branching tree* shows search space reduction: Without branching, need to check $2^3 = 8$ assignments. DPLL finds solution by exploring only one branch with unit propagation.
-
-==
-*Example with backtracking*: Consider $F = (x_1 or x_2) and (not x_1 or not x_2) and (not x_1 or x_2)$
-
-#text(size: 16pt)[
-*Left branch* ($x_1 = 1$):
-- $F arrow.r cancel((x_1 or x_2)) and (cancel(not x_1) or not x_2) and (cancel(not x_1) or x_2) arrow.r (not x_2) and (x_2)$
-- Get empty clause #text(fill: red)[✗ *UNSAT*] → *Backtrack!*
-
-*Right branch* ($x_1 = 0$):
-- $F arrow.r (cancel(x_1) or x_2) and cancel((not x_1 or not x_2)) and cancel((not x_1 or x_2)) arrow.r (x_2)$
-- Unit propagation: $x_2 = 1$ → $emptyset$ #text(fill: green)[✓ *SAT*]
-- *Result*: $x_1 = 0, x_2 = 1$
-]
-
-This demonstrates how DPLL *branches* on variables and *backtracks* when conflicts arise, achieving $gamma^n$ complexity with $gamma < 2$ through pruning.
-
-== Combining Online Branching with Unit Propagation
-#timecounter(2)
-
-#slide[
-*Key Insight*: Unit propagation is extremely efficient, but traditional branching (choosing single variables) may not exploit the constraint structure optimally.
-
-*Our Approach*:
-1. Select a subset of variables to form a region
-2. Compute the oracle (tensor network contraction over the region)
-3. Generate optimal branching rules from the oracle
-4. Apply unit propagation after each branch
-][
-  #align(center, canvas({
-    import draw: *
-    rect((-3, -0.5), (3, 0.5), fill: blue.lighten(80%), stroke: black)
-    content((0, 0), [1. Select region])
-    
-    rect((-3, -2), (3, -1), fill: green.lighten(80%), stroke: black)
-    content((0, -1.5), [2. Compute oracle (TN)])
-    
-    rect((-3, -3.5), (3, -2.5), fill: yellow.lighten(80%), stroke: black)
-    content((0, -3), [3. Optimal branching])
-    
-    rect((-3, -5), (3, -4), fill: red.lighten(80%), stroke: black)
-    content((0, -4.5), [4. Unit propagation])
-    
-    line((0, 0.5), (0, -1), mark: (end: "straight"))
-    line((0, -2), (0, -2.5), mark: (end: "straight"))
-    line((0, -3.5), (0, -4), mark: (end: "straight"))
-    line((0, -5), (5, -5), (5, 0.5), mark: (end: "straight"))
-  }))
-]
+)
 
 == The 2-SAT Reduction Strategy
 #timecounter(2)
@@ -1169,41 +1372,40 @@ This demonstrates how DPLL *branches* on variables and *backtracks* when conflic
 
 *Goal*: Design branching rules that maximize the reduction of $rho$, not just the number of variables.
 
-== Why This Measure?
-#timecounter(1)
+// == Why This Measure?
+// #timecounter(1)
 
-#grid(columns: 2, gutter: 30pt,
-[
-*Traditional measure*: Number of unfixed variables
-- Assigns one variable $arrow.r$ reduces measure by 1
-- May not exploit constraint structure
+// #grid(columns: 2, gutter: 30pt,
+// [
+// *Traditional measure*: Number of unfixed variables
+// - Assigns one variable $arrow.r$ reduces measure by 1
+// - May not exploit constraint structure
 
-*Our measure*: Number of non-2-SAT clauses
-- Good branching can reduce many clauses simultaneously
-- Better captures problem hardness
-- Exploits clause structure through unit propagation
-],
-canvas({
-  import draw: *
-  // Example showing clause reduction
-  content((0, 0), align(left)[
-    *Before*: $F = (a or b or c) and (not a or d or e)$\
-    $rho = 2$
-  ])
+// *Our measure*: Number of non-2-SAT clauses
+// - Good branching can reduce many clauses simultaneously
+// - Better captures problem hardness
+// - Exploits clause structure through unit propagation
+// ],
+// canvas({
+//   import draw: *
+//   // Example showing clause reduction
+//   content((0, 0), align(left)[
+//     *Before*: $F = (a or b or c) and (not a or d or e)$\
+//     $rho = 2$
+//   ])
   
-  content((0, -1.5), align(left)[
-    *Branch*: $a = 1$
-  ])
+//   content((0, -1.5), align(left)[
+//     *Branch*: $a = 1$
+//   ])
   
-  content((0, -3), align(left)[
-    *After propagation*: $F = (d or e)$\
-    $rho = 0$ (2-SAT!) \ 
-    Reduction: $Delta rho = 2$
-  ])
-}))
+//   content((0, -3), align(left)[
+//     *After propagation*: $F = (d or e)$\
+//     $rho = 0$ (2-SAT!) \ 
+//     Reduction: $Delta rho = 2$
+//   ])
+// }))
 
 == Optimal Branching for Circuit SAT
-#timecounter(2)
 
 #slide[
 *Algorithm*:
@@ -1214,297 +1416,34 @@ canvas({
    where $Delta rho(c_i)$ is the reduction in non-2-SAT clauses after branch $c_i$
 4. Apply best branch, propagate, recurse
 ][
+#timecounter(2)
   #box(stroke: black, inset: 10pt, fill: yellow.lighten(80%))[
     *Key difference from MIS*: Measure is clause-based, not variable-based.
     This exploits the cascading effect of unit propagation.
   ]
 ]
 
-== Example: Circuit SAT Instance
-#timecounter(2)
+// == Example: Circuit SAT Instance
+// #timecounter(2)
 
-Consider a small circuit with variables $x_1, x_2, x_3, x_4$ and clauses:
-$ F = &(x_1 or x_2 or x_3) and (not x_1 or x_3 or x_4) \ 
-    &and (not x_2 or not x_3 or x_4) and (not x_3 or not x_4) $
+// Consider a small circuit with variables $x_1, x_2, x_3, x_4$ and clauses:
+// $ F = &(x_1 or x_2 or x_3) and (not x_1 or x_3 or x_4) \ 
+//     &and (not x_2 or not x_3 or x_4) and (not x_3 or not x_4) $
 
-- Initial: $rho = 4$ (all clauses have 3+ literals)
-- Traditional: branch on single variable, $Delta rho <= 2$
-- Our approach: compute oracle on ${x_1, x_2, x_3}$, find branching rule that reduces $rho$ maximally
+// - Initial: $rho = 4$ (all clauses have 3+ literals)
+// - Traditional: branch on single variable, $Delta rho <= 2$
+// - Our approach: compute oracle on ${x_1, x_2, x_3}$, find branching rule that reduces $rho$ maximally
 
-#box(stroke: black, inset: 10pt)[
-*Result*: Optimal branching may assign multiple variables simultaneously, achieving $Delta rho = 4$ in one branch!
-]
-
-== Computational Results - Placeholder
-#timecounter(2)
-
-#align(center)[
-  #box(stroke: black + 2pt, inset: 20pt, fill: gray.lighten(80%))[
-    #text(20pt)[
-      *Data Section*
-      
-      - Comparison table: DPLL vs CDCL vs Our method
-      - Branching factor comparison
-      - Runtime on benchmark instances
-      - Plot: $gamma$ vs problem size
-      
-      [To be filled with experimental results]
-    ]
-  ]
-]
-
-== Benchmark Problems - Placeholder  
-#timecounter(1)
-
-#grid(columns: 2, gutter: 20pt,
-box(stroke: black, inset: 10pt, width: 100%, height: 200pt)[
-  *Graph/Plot Area*
-  
-  (Reserved for performance plots)
-],
-[
-  *Test instances*:
-  - Random 3-SAT problems
-  - Circuit SAT (multiplication)
-  - Factoring problems
-  - Real-world SAT benchmarks
-  
-  *Metrics*:
-  - Average branching factor $gamma$
-  - Number of branches
-  - Total runtime
-])
-
-== Comparison with State-of-the-Art - Placeholder
-#timecounter(1)
-
-#align(center, table(
-  columns: (auto, auto, auto, auto),
-  table.header(hd[Method], hd[Branching Factor], hd[Branches], hd[Time (s)]),
-  s[DPLL], s[?], s[?], s[?],
-  s[CDCL], s[?], s[?], s[?],
-  s[Minisat], s[?], s[?], s[?],
-  s[Our method], s[?], s[?], s[?],
-))
-
-#box(stroke: black, inset: 10pt)[
-  [Data to be collected from experiments]
-]
-
-== Advantages of the Hybrid Approach
-#timecounter(1)
-
-*Combining tensor networks + optimal branching + unit propagation*:
-
-#grid(columns: 2, gutter: 20pt,
-[
-  ✓ *Exploits local structure* through tensor network oracle
-  
-  ✓ *Optimal branching rules* minimize complexity
-  
-  ✓ *Unit propagation* provides cascading simplifications
-  
-  ✓ *Problem-agnostic* measure (non-2-SAT clauses)
-  
-  ✓ *Adaptive* to problem structure
-],
-canvas({
-  import draw: *
-  circle((0, 0), radius: 1.5, fill: blue.lighten(80%), stroke: none)
-  content((0, 0.8), [TN])
-  content((0, 0.3), [Oracle])
-  
-  circle((0, -3), radius: 1.5, fill: green.lighten(80%), stroke: none)
-  content((0, -2.2), [Optimal])
-  content((0, -2.7), [Branching])
-  
-  circle((0, -6), radius: 1.5, fill: yellow.lighten(80%), stroke: none)
-  content((0, -5.2), [Unit])
-  content((0, -5.7), [Propagation])
-  
-  line((1.5, -6.5), (2.5, -6.5), (2.5, 1.5), (1.5, 1.5), mark: (end: "straight"))
-}))
-
-// == Circuit SAT
-// #timecounter(1)
-
-// #place(bottom + right, align(center, [
-//   #image("images/zhongyi.jpg", width: 50pt, height: 70pt) #text(14pt, [Zhong-Yi Ni])
-// ]))
-
-// #let multiplier-block(loc, size, sij, cij, pij, qij, pijp, qipj, sipjm, cimj) = {
-//   import draw: *
-//   rect((loc.at(0) - size/2, loc.at(1) - size/2), (loc.at(0) + size/2, loc.at(1) + size/2), stroke: black, fill: white)
-//   circle((loc.at(0) + size/2, loc.at(1) - size/2), name: sij, radius: 0)
-//   circle((loc.at(0) - size/2, loc.at(1) - size/4), name: cij, radius: 0)
-//   circle((loc.at(0) - size/2, loc.at(1) + size/4), name: qipj, radius: 0)
-//   circle((loc.at(0), loc.at(1) + size/2), name: pij, radius: 0)
-//   circle((loc.at(0) + size/2, loc.at(1) + size/4), name: qij, radius: 0)
-//   circle((loc.at(0), loc.at(1) - size/2), name: pijp, radius: 0)
-//   circle((loc.at(0) - size/2, loc.at(1) + size/2), name: sipjm, radius: 0)
-//   circle((loc.at(0) + size/2, loc.at(1) - size/4), name: cimj, radius: 0)
-// }
-
-// #let multiplier(m, n, size: 1) = {
-//   import draw: *
-//   for i in range(m){
-//     for j in range(n) {
-//       multiplier-block((-2 * i, -2 * j), size, "s" + str(i) + str(j), "c" + str(i) + str(j), "p" + str(i) + str(j), "q" + str(i) + str(j), "p" + str(i) + str(j+1) + "'", "q" + str(i+1) + str(j) + "'", "s" + str(i+1) + str(j - 1) + "'", "c" + str(i - 1) + str(j) + "'")
-//     }
-//   }
-//   for i in range(m){
-//     for j in range(n){
-//       if (i > 0) and (j < n - 1) {
-//         line("s" + str(i) + str(j), "s" + str(i) + str(j) + "'", mark: (end: "straight"))
-//       }
-//       if (i < m - 1){
-//         line("c" + str(i) + str(j), "c" + str(i) + str(j) + "'", mark: (end: "straight"))
-//       }
-//       if (j > 0){
-//         line("p" + str(i) + str(j), "p" + str(i) + str(j) + "'", mark: (start: "straight"))
-//       }
-//       if (i > 0){
-//         line("q" + str(i) + str(j), "q" + str(i) + str(j) + "'", mark: (start: "straight"))
-//       }
-//     }
-//   }
-//   for i in range(m){
-//     let a = "p" + str(i) + "0"
-//     let b = (rel: (0, 0.5), to: a)
-//     line(a, b, mark: (start: "straight"))
-//     content((rel: (0, 0.3), to: b), text(14pt)[$p_#i$])
-
-
-//     let a2 = "s" + str(i+1) + str(-1) + "'"
-//     let b2 = (rel: (-0.4, 0.4), to: a2)
-//     line(a2, b2, mark: (start: "straight"))
-//     content((rel: (-0.2, 0.2), to: b2), text(14pt)[$0$])
-
-//     let a3 = "s" + str(i) + str(n - 1)
-//     let b3 = (rel: (0.4, -0.4), to: a3)
-//     line(a3, b3, mark: (end: "straight"))
-//     content((rel: (0.2, -0.2), to: b3), text(14pt)[$m_#(i+m - 1)$])
-
-//   }
-//   for j in range(n){
-//     let a = "q0" + str(j)
-//     let b = (rel: (0.5, 0), to: a)
-//     line(a, b, mark: (start: "straight"))
-//     content((rel: (0.3, 0), to: b), text(14pt)[$q_#j$])
-
-//     let a2 = "q" + str(m) + str(j) + "'"
-//     let b2 = (rel: (-0.5, 0), to: a2)
-//     line(a2, b2, mark: (end: "straight"))
-
-
-//     let a3 = "c" + str(-1) + str(j) + "'"
-//     let b3 = (rel: (0.5, 0), to: a3)
-//     line(a3, b3, mark: (start: "straight"))
-//     content((rel: (0.3, 0), to: b3), text(14pt)[$0$])
-  
-//     if (j < n - 1) {
-//       let a4 = "c" + str(m - 1) + str(j)
-//       let b4 = "s" + str(m) + str(j) + "'"
-//       bezier(a4, b4, (rel: (-1, 0), to: a4), (rel: (-0.5, -1), to: a4), mark: (end: "straight"))
-//     } else {
-//       let a4 = "c" + str(m - 1) + str(j)
-//       line(a4, (rel: (-0.5, 0), to: a4), mark: (end: "straight"))
-//       content((rel: (-0.8, 0), to: a4), text(14pt)[$m_#(j+m)$])
-//     }
-//     if (j < n - 1) {
-//       let a5 = "s0" + str(j)
-//       let b5 = (rel: (0.4, -0.4), to: a5)
-//       line(a5, b5, mark: (end: "straight"))
-//       content((rel: (0.2, -0.2), to: b5), text(14pt)[$m_#j$])
-//     }
-//   }
-// }
-
-// #grid(columns: 2, gutter: 40pt, canvas({
-//   import draw: *
-//   let i = 0
-//   let j = 0
-//   multiplier(5, 5, size: 1.0)
-// }),
-// [#canvas({
-//   import draw: *
-//   multiplier-block((0, 0), 1.0, "so", "co", "pi", "qi", "po", "qo", "si", "ci")
-//   line("si", (rel:(-0.5, 0.5), to:"si"), mark: (start: "straight"))
-//   content((rel:(-0.75, 0.75), to:"si"), text(14pt)[$s_i$])
-//   line("ci", (rel:(0.5, 0), to:"ci"), mark: (start: "straight"))
-//   content((rel:(0.75, 0), to:"ci"), text(14pt)[$c_i$])
-//   line("pi", (rel:(0, 0.5), to:"pi"), mark: (start: "straight"))
-//   content((rel:(0, 0.75), to:"pi"), text(14pt)[$p_i$])
-//   line("qi", (rel:(0.5, 0), to:"qi"), mark: (start: "straight"))
-//   content((rel:(0.75, 0), to:"qi"), text(14pt)[$q_i$])
-//   line("po", (rel:(0, -0.5), to:"po"), mark: (end: "straight"))
-//   content((rel:(0, -0.75), to:"po"), text(14pt)[$p_i$])
-//   line("qo", (rel:(-0.5, 0), to:"qo"), mark: (end: "straight"))
-//   content((rel:(-0.75, 0), to:"qo"), text(14pt)[$q_i$])
-//   line("so", (rel:(0.5, -0.5), to:"so"), mark: (end: "straight"))
-//   content((rel:(0.75, -0.75), to:"so"), text(14pt)[$s_o$])
-//   line("co", (rel:(-0.5, 0), to:"co"), mark: (end: "straight"))
-//   content((rel:(-0.75, 0), to:"co"), text(14pt)[$c_o$])
-//   content((5, 0), text(14pt)[$2c_o + s_o = p_i q_i + c_i + s_i$])
-
-//   let gate(loc, label, size: 1, name:none) = {
-//     rect((loc.at(0) - size/2, loc.at(1) - size/2), (loc.at(0) + size/2, loc.at(1) + size/2), stroke: black, fill: white, name: name)
-//     content(loc, text(14pt)[$label$])
-//   }
-//   set-origin((-1.5, -3))
-//   line((4.5, 0), (-1, 0))  // q
-//   line((3, 1), (3, -4.5))  // p
-//   let si = (-1, 1)
-//   let ci = (4.5, -2.5)
-//   gate((0.5, -0.5), [$and$], size: 0.5, name: "a1")
-//   gate((2.5, -0.5), [$and$], size: 0.5, name: "a2")
-//   gate((2.0, -2.5), [$and$], size: 0.5, name: "a3")
-//   gate((0.5, -2.5), [$or$], size: 0.5, name: "o1")
-//   gate((1.5, -1.5), [$xor$], size: 0.5, name: "x1")
-//   gate((3.5, -3.5), [$xor$], size: 0.5, name: "x2")
-//   line("a2", (2.5, 0))
-//   line("x1", (1.5, -0.5))
-//   line("a2", (3, -0.5))
-//   line("a2", "a1")
-//   line("a1", "o1")
-//   line("a3", "o1")
-//   line("o1", (rel: (-1.5, 0), to: "o1"))
-//   line(si, "a1")
-//   line(ci, "a3")
-//   line((3.5, -2.5), "x2")
-//   let turn = (1.5, -3.5)
-//   line("x1",(rel: (0.5, -2.5), to: si), (rel: (0.5, -0.5), to: si))
-//   line("x1", turn, "x2")
-//   line("x2", (rel: (1, -1), to: "x2"))
-//   line("a3", (2.0, -0.5))
-//   rect((-0.75, -4), (4, 0.75), stroke: (dash: "dashed"))
-
-//   let gate_with_leg(loc, label, size: 1, name:none) = {
-//     gate(loc, label, size: size, name: name)
-//     line(name, (rel: (0.5, 0), to: name))
-//     line(name, (rel: (-0.5, 0), to: name))
-//     line(name, (rel: (0, 0.5), to: name))
-//   }
-//   gate_with_leg((6, 0), [$xor$], size: 0.5, name: "x3")
-//   content((8, 0), text(14pt)[$= mat(mat(0, 1; 1, 0); mat(1, 0; 0, 1))$])
-
-//   gate_with_leg((6, -2), [$or$], size: 0.5, name: "o3")
-//   content((8, -2), text(14pt)[$= mat(mat(1, 0; 0, 0); mat(0, 1; 1, 1))$])
-
-//   gate_with_leg((6, -4), [$and$], size: 0.5, name: "a4")
-//   content((8, -4), text(14pt)[$= mat(mat(1, 1; 1, 0); mat(0, 0; 0, 1))$])
-// })
-// #box(width:300pt, [Successfully the MILP branches in a simple test case.])
+// #box(stroke: black, inset: 10pt)[
+// *Result*: Optimal branching may assign multiple variables simultaneously, achieving $Delta rho = 4$ in one branch!
 // ]
-// )
-
-
 
 == Talk is cheap, show me the code
 #timecounter(1)
 
 #align(center, grid(columns: 1, gutter: 10pt, image("images/ob-logo.svg", width: 300pt), 
-[Source code available on GitHub: #link("https://github.com/OptimalBranching/OptimalBranching.jl")[OptimalBranching/OptimalBranching.jl].
+[Source code available on GitHub:
+#link("https://github.com/OptimalBranching/OptimalBranching.jl")[OptimalBranching/OptimalBranching.jl].
 ]))
 
 #align(center, grid(columns:2, gutter:20pt,image("images/barcode.png", width: 180pt)))
@@ -1563,7 +1502,7 @@ canvas({
 //   content((2.5, 0), [$+ quad dots$])
 // }))
 
-== Advanced materials thrust \u{2665} quantum science
+== Advanced materials thrust \u{2665} AI
 #timecounter(1)
 //#place(box(width: 200%, height: 200%, stroke: none, fill: white.transparentize(0%)), dx: -100pt, dy: -250pt)
 #grid(image("images/AMAT_Logo_Gold-Blue.png", width: 300pt), text(16pt)[Enablers for technological innovation in *new materials*, *new energy*, *sustainable environment* and *biomedical devices*], columns: 2, gutter: 20pt)
@@ -1572,7 +1511,7 @@ canvas({
 image("images/2025-01-13-09-19-10.png", height: 150pt),
 image("images/2025-01-13-09-26-32.png", height: 150pt)))
 
-Yummy food, world class gym and swimming pool!
+Yummy food, world class gym, swimming pool and nice colleagues!
 
 == Thank you!
 #timecounter(1)
