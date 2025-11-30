@@ -1503,18 +1503,6 @@ This exploits the *cascading effect* of constraint propagation.
 // *Result*: Optimal branching may assign multiple variables simultaneously, achieving $Delta rho = 4$ in one branch!
 // ]
 
-== Open Source Implementation
-#timecounter(1)
-
-#align(center, grid(columns: 1, gutter: 10pt, image("images/ob-logo.svg", width: 300pt), 
-[
-#link("https://github.com/OptimalBranching/OptimalBranching.jl")[github.com/OptimalBranching/OptimalBranching.jl]
-]))
-
-#align(center, image("images/barcode.png", width: 180pt))
-
-*Features*: MIS solver, Circuit SAT, extensible framework for CSP
-
 // == Take home message
 // #timecounter(2)
 // #align(left, text(16pt)[
@@ -1607,10 +1595,9 @@ image("images/yijiawang.png", width:50pt, height:60pt), [Yijia Wang],
 image("images/panzhang.png", width:50pt, height: 60pt), [Pan Zhang],
 image("images/fengpan.png", width:50pt, height: 60pt), [Feng Pan],
 image("images/zhongyi.jpg", width:50pt, height: 60pt), [Zhong-Yi Ni],
-image("images/zhongyi.jpg", width:50pt, height: 60pt), [Xi-Wei Pan],
+image("images/xiweipan.png", width:50pt, height: 60pt), [Xi-Wei Pan],
 columns: 6, column-gutter: 20pt, row-gutter: 10pt))
 
-// TODO: update avatar (xiwei)
 
 == References
 #bibliography("refs.bib", title: none)
