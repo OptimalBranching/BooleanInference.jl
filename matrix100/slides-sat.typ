@@ -148,7 +148,7 @@
 = Motivation: AI Needs Logical Reasoning
 
 == The Logic Reasoning Gap
-#timecounter(2)
+#timecounter(1)
 
 *Large language models (LLMs) suffers from complex reasoning*
 - Struggle with multi-step logical reasoning ("Hallucinations")
@@ -210,16 +210,17 @@ We can combine LLM + Reasoner! @Pan2023
 == Reasoners
 #timecounter(2)
 
-*Problem*: "Three people have different ages. Alice > Bob."
+*Problem*: "Fill a 9×9 Sudoku grid so each row, column, and 3×3 box contains 1-9."
 
-#grid(columns: 3, gutter: 50pt, align(top)[
+#grid(columns: 3, gutter: 30pt, align(top)[
   *FOL (Theorem Proving)*
   
-  #text(14pt)[```
-  ∀x,y (x≠y → Age(x)≠Age(y))
-  Age(Alice) > Age(Bob)
-  
-  Query: ?
+  #text(13pt)[```
+  ∀i,j,k (Cell(i,j)=Cell(i,k) 
+    → j=k)
+  ∀i,j,k (Cell(i,j)=Cell(k,j) 
+    → i=k)
+  ...
   ```]
   
   ✓ Most expressive\ 
@@ -227,12 +228,11 @@ We can combine LLM + Reasoner! @Pan2023
 ], align(top)[
   *SMT (Z3, CVC5)*
   
-  #text(14pt)[```smt
-  (declare-const a Int)
-  (declare-const b Int)
-  (declare-const c Int)
-  (assert (distinct a b c))
-  (assert (> a b))
+  #text(13pt)[```smt
+  (declare-const c11 Int)
+  ...
+  (assert (distinct row1))
+  (assert (distinct col1))
   (check-sat)
   ```]
   
@@ -241,13 +241,12 @@ We can combine LLM + Reasoner! @Pan2023
 ], align(top)[
   *CSP (Our Focus)*
   
-  #text(14pt)[```
-  Alice, Bob, Carol ∈ {1,2,3}
+  #text(13pt)[```
+  Each cell ∈ {1..9}
   
-  AllDifferent(·,·,·)
-  Alice > Bob
-  
-  → 12 solutions
+  AllDifferent(each row)
+  AllDifferent(each col)
+  AllDifferent(each box)
   ```]
   
   ✓ Highly efficient\
@@ -255,7 +254,7 @@ We can combine LLM + Reasoner! @Pan2023
 ])
 
 #align(center, box(stroke: black, inset: 8pt)[
-  *Constraint satisfaction problems* (CSPs) are the foundation of many SMT solvers and combinatorial algorithms
+  *CSP*: finite domains + constraints — foundation of SMT solvers
 ])
 
 // == Exact solvers
