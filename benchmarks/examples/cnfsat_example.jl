@@ -8,7 +8,7 @@ using BooleanInference.OptimalBranchingCore
 
 result_dir = resolve_results_dir("CNFSAT")
 
-for n in [100, 200, 300]
+for n in [100]
     for r in [350, 380, 400, 420, 430, 450]
     dataset_path = joinpath(@__DIR__, "..", "data", "3CNF", "random", "n=$(n)", "$(n)-$(r)")
 
@@ -30,13 +30,13 @@ for n in [100, 200, 300]
         )
     end
 
-        # result = benchmark_dataset(
-        #     CNFSATProblem,
-        #     dataset_path;
-        #     solver=KissatSolver(kissat_path="/opt/homebrew/bin/kissat", timeout=300.0, quiet=false),
-        #     verify=false,
-        #     save_result=result_dir
-        # )
+        result = benchmark_dataset(
+            CNFSATProblem,
+            dataset_path;
+            solver=MinisatSolver(minisat_path="/opt/homebrew/bin/minisat", timeout=300.0, quiet=false),
+            verify=false,
+            save_result=result_dir
+        )
 end
 end
 

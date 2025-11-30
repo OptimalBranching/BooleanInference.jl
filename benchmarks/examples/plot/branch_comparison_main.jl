@@ -25,7 +25,7 @@ for nn in n
     least_avg_branch_value = Inf
     least_avg_branch_index = 0
     for (i, result) in enumerate(bi_results)
-        if result.solver_config["selector_type"] == "MostOccurrenceSelector"
+        if result.solver_config["selector_type"] == "MostOccurrenceSelector" && result.solver_config["measure"] == "NumHardTensors"
             if mean(result.branches) < least_avg_branch_value
                 least_avg_branch_value = mean(result.branches)
                 least_avg_branch_index = i
@@ -54,7 +54,7 @@ end
 
 # ==================== Figure 1: Branch Count Comparison ====================
 begin
-    fig1 = Figure(size = (800, 500))
+    fig1 = Figure(size = (450, 300))
 
     # Flatten data for boxplot
     branches_x_bi = Float64[]
@@ -85,7 +85,7 @@ begin
     end
 
     ax1 = Axis(fig1[1, 1], xlabel = "Bit length", ylabel = "Branches", yscale = log10, 
-            xticks = (n, string.(2 .* n)), title = "Branch Count Comparison")
+            xticks = (n, string.(2 .* n)), title = "Branch Count (CircuitSAT-Factoring)")
     boxplot!(ax1, branches_x_bi, branches_y_bi; label = "BI", width = 0.35, color = :red)
     boxplot!(ax1, branches_x_kissat, branches_y_kissat; label = "Kissat", width = 0.35, color = :blue)
     boxplot!(ax1, branches_x_minisat, branches_y_minisat; label = "MiniSAT", width = 0.35, color = :green)
