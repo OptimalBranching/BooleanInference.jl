@@ -138,7 +138,7 @@
 
 #show: hkustgz-theme.with(
   config-info(
-    title: [Optimal Branching for Constraint Satisfaction],
+    title: [B&B Tensor Network for Combinatorial Optimization],
     subtitle: [arXiv:2412.07685],
     author: [Jin-Guo Liu],
     date: datetime.today(),
@@ -154,14 +154,13 @@
 == The Logic Reasoning Gap
 #timecounter(1)
 
-*Large language models (LLMs) suffers from complex reasoning*
+#v(10pt)
+*Large language models (LLMs) suffers from complex reasoning*#footnote([This statement is from year 2023, by @Pan2023.])
 - Struggle with multi-step logical reasoning ("Hallucinations")
 - Cannot strictly enforce hard constraints (e.g. rules of a game)
 
 #align(center, [? Machines cannot deep reason])
-
 #pause
-
 #align(center, [No! We have expert tools.])
 
 #figure(canvas({
@@ -175,6 +174,7 @@
   line((2, -1), (1, -1), mark: (end: "straight"))
 }))
 
+#v(-10pt)
 *Reasoner*: Given a problem statement, disired *consequences*, and constraints, find a *cause*,
 by exploring *exponentially large*, or even *infinitely many* configurations.
 
@@ -258,7 +258,7 @@ We can combine LLM + Reasoner! @Pan2023
 ]))
 
 #align(center, box(stroke: black, inset: 8pt)[
-  *CSP*: finite domains + constraints — foundation of SMT solvers
+  *Constraint Satisfaction Problem (CSP)*:\ finite domains + constraints — foundation of SMT solvers
 ])
 
 // == Exact solvers
@@ -334,13 +334,63 @@ Branching contributes to most state-of-the-art exact solvers for hard combinator
   #v(10pt)
   
   - *Variables*: $x_i in \{0, 1\}$ (true or false)
-  - *Constraint*: Clauses (OR of literals)
+  - *Constraint*: Clauses (OR of literals), generalized to gates later
   - *Goal*: Satisfy all clauses
 ])
 
 #align(center, box(stroke: black, inset: 10pt)[
-  Brute-force: $2^n$ configurations. Constraints prune the search space.
+  Brute-force: $2^n$ configurations. Wait! Constraints prune the search space.
 ])
+
+== 40 Years of Progress on MIS
+#timecounter(1)
+
+#let hd(name) = table.cell(text(10pt)[#name], fill: green.lighten(50%))
+#let s(name) = table.cell(text(10pt)[#name])
+#myslide(table(
+  columns: (auto, auto, auto, auto),
+  table.header(hd[Year], hd[Running times], hd[References], hd[Notes]),
+  s[1977], s[$O^*(1.2600^n)$], s[@Tarjan1977], s[],
+  s[1986], s[$O^*(1.2346^n)$], s[@Jian1986], s[],
+  s[1986], s[$O^*(1.2109^n)$], s[@Robson1986], s[],
+  s[1999], s[$O^*(1.0823^m)$], s[@Beigel1999], s[],
+  s[2001], s[$O^*(1.1893^n)$], s[@Robson2001], s[],
+  s[2003], s[$O^*(1.1254^n)$ for 3-MIS], s[@Chen2003], s[],
+  s[2005], s[$O^*(1.1034^n)$ for 3-MIS], s[@Xiao2005], s[],
+  s[2006], s[$O^*(1.2210^n)$], s[@Fomin2006], s[Measure and conquer,\ mirror rule],
+  s[2006], s[$O^*(1.1225^n)$ for 3-MIS], s[@Fomin2006b], s[Same as TN],
+  s[2006], s[$O^*(1.1120^n)$ for 3-MIS], s[@Furer2006], s[],
+  s[2006], s[$O^*(1.1034^n)$ for 3-MIS], s[@Razgon2006], s[],
+  s[2008], s[$O^*(1.0977^n)$ for 3-MIS], s[@Bourgeois2008], s[],
+  s[2009], s[$O^*(1.0919^n)$ for 3-MIS], s[@Xiao2009], s[],
+  s[2009], s[$O^*(1.2132^n)$], s[@Kneis2009], s[Satellite rule],
+  s[2013], s[$O^*(1.0836^n)$ for 3-MIS], s[@Xiao2013], s[SOTA],
+  s[2016], s[$O^*(1.2210^n)$], s[@Akiba2016], s[PACE winner],
+  s[2017], s[$O^*(1.1996^n)$], s[@Xiao2017], s[SOTA],
+),
+[
+#align(center, box([MIS is NP-complete — no polynomial-time algorithm exists (unless P=NP) @Karp1972.], stroke: black, inset: 10pt))
+
+#let formin() = {
+  import draw: *
+  let s = 2
+  let dy = 3.0
+  let la = (-s, 0)
+  let lb = (0, s)
+  let lc = (0, 0)
+  let ld = (s, 0)
+  let le = (s, s)
+ 
+  for (l, n, color) in ((la, "a", red), (lb, "b", black), (lc, "c", red), (ld, "d", black), (le, "e", red)){
+    circle((l.at(0), l.at(1)-s/2), radius:0.4, name: n, stroke: color)
+    content((l.at(0), l.at(1)-s/2), text(14pt)[$#n$])
+  }
+  for (a, b) in (("a", "b"), ("b", "c"), ("c", "d"), ("d", "e"), ("b", "d")){
+    line(a, b)
+  }
+}
+])
+
 
 // == Branching in Action: MIS Example @Fomin2006
 // #slide[
@@ -415,31 +465,6 @@ Branching contributes to most state-of-the-art exact solvers for hard combinator
 // Each branch reduces the problem size — that's the power of branching!
 // ]
 
-
-== The Math Behind Branching
-#timecounter(2)
-
-#myslide[
-*Branching* = Divide-and-conquer with a twist
-
-#figure(canvas(length: 1cm, {
-  import draw: *
-  mixmode_tree()
-}))
-Runtime: $T(rho) = O(gamma^rho)$, where $rho$ = *problem size* (e.g., number of unfixed variables)
-][
-1. Split into $k$ subproblems, each reducing size by $Delta rho_1, dots, Delta rho_k$. Total time satisfies the recurrence:
-  $
-  T(rho) = sum_(i=1)^k T(rho - Delta rho_i)
-  $
-3. Decide *branching factor* $gamma$:
-  $
-  1 = sum_(i=1)^k gamma^(-Delta rho_i)
-  $
-
-*Goal*: Minimize $gamma$ — fewer branches, larger size reductions!
-]
-
 // ==
 // #grid(columns: 2, gutter: 20pt,
 // align(top)[
@@ -498,7 +523,7 @@ Check a subset of variables $->$ Local constraints $->$ Limited local feasible s
     - Q: Does a *local subset of variables* include all information required for branching?
     - A: Yes. So far, every branching rule on MIS only check $N_2(v)$ - the second nearest neighbor.
 
-==
+== Our approach: online branching rule generation
 #timecounter(1)
 #align(center, grid(columns: 2, gutter: 40pt, box(width: 300pt, canvas({
   import draw: *
@@ -533,6 +558,30 @@ Check a subset of variables $->$ Local constraints $->$ Limited local feasible s
 ))
 
 *Key idea*: Generate optimal branching rules *on-the-fly* from the problem structure.
+
+== The Math Behind Branching
+#timecounter(2)
+
+#myslide[
+*Branching* = Divide-and-conquer with a twist
+
+#figure(canvas(length: 1cm, {
+  import draw: *
+  mixmode_tree()
+}))
+Runtime: $T(rho) = O(gamma^rho)$, where $rho$ = *problem size* (e.g., number of unfixed variables)
+][
+1. Split into $k$ subproblems, each reducing size by $Delta rho_1, dots, Delta rho_k$. Total time satisfies the recurrence:
+  $
+  T(rho) = sum_(i=1)^k T(rho - Delta rho_i)
+  $
+3. Decide *branching factor* $gamma$:
+  $
+  1 = sum_(i=1)^k gamma^(-Delta rho_i)
+  $
+
+*Goal*: Minimize $gamma$ — fewer branches, larger size reductions!
+]
 
 
 
@@ -728,71 +777,6 @@ $n=5$: $2^(243) approx 10^(73)$ formulas\
 // $
 // where $J_i$ is the indices of bitstrings that covered by the $i$-th clause.
 // - _Remark_: Although this problem is NP-hard, it is efficiently solvable with integer programming in practise. It allows us to handle number of vertices $>20$.
-
-== 40 Years of Progress on MIS
-#timecounter(1)
-
-#let hd(name) = table.cell(text(10pt)[#name], fill: green.lighten(50%))
-#let s(name) = table.cell(text(10pt)[#name])
-#myslide(table(
-  columns: (auto, auto, auto, auto),
-  table.header(hd[Year], hd[Running times], hd[References], hd[Notes]),
-  s[1977], s[$O^*(1.2600^n)$], s[@Tarjan1977], s[],
-  s[1986], s[$O^*(1.2346^n)$], s[@Jian1986], s[],
-  s[1986], s[$O^*(1.2109^n)$], s[@Robson1986], s[],
-  s[1999], s[$O^*(1.0823^m)$], s[@Beigel1999], s[],
-  s[2001], s[$O^*(1.1893^n)$], s[@Robson2001], s[],
-  s[2003], s[$O^*(1.1254^n)$ for 3-MIS], s[@Chen2003], s[],
-  s[2005], s[$O^*(1.1034^n)$ for 3-MIS], s[@Xiao2005], s[],
-  s[2006], s[$O^*(1.2210^n)$], s[@Fomin2006], s[Measure and conquer,\ mirror rule],
-  s[2006], s[$O^*(1.1225^n)$ for 3-MIS], s[@Fomin2006b], s[Same as TN],
-  s[2006], s[$O^*(1.1120^n)$ for 3-MIS], s[@Furer2006], s[],
-  s[2006], s[$O^*(1.1034^n)$ for 3-MIS], s[@Razgon2006], s[],
-  s[2008], s[$O^*(1.0977^n)$ for 3-MIS], s[@Bourgeois2008], s[],
-  s[2009], s[$O^*(1.0919^n)$ for 3-MIS], s[@Xiao2009], s[],
-  s[2009], s[$O^*(1.2132^n)$], s[@Kneis2009], s[Satellite rule],
-  s[2013], s[$O^*(1.0836^n)$ for 3-MIS], s[@Xiao2013], s[SOTA],
-  s[2016], s[$O^*(1.2210^n)$], s[@Akiba2016], s[PACE winner],
-  s[2017], s[$O^*(1.1996^n)$], s[@Xiao2017], s[SOTA],
-),
-[
-*Maximum Independent Set (MIS)*: Find the largest set of non-adjacent vertices.
-
-#align(center, box([MIS is NP-complete — no polynomial-time algorithm exists (unless P=NP) @Karp1972.], stroke: black, inset: 10pt))
-
-#let formin() = {
-  import draw: *
-  let s = 2
-  let dy = 3.0
-  let la = (-s, 0)
-  let lb = (0, s)
-  let lc = (0, 0)
-  let ld = (s, 0)
-  let le = (s, s)
- 
-  for (l, n, color) in ((la, "a", red), (lb, "b", black), (lc, "c", red), (ld, "d", black), (le, "e", red)){
-    circle((l.at(0), l.at(1)-s/2), radius:0.4, name: n, stroke: color)
-    content((l.at(0), l.at(1)-s/2), text(14pt)[$#n$])
-  }
-  for (a, b) in (("a", "b"), ("b", "c"), ("c", "d"), ("d", "e"), ("b", "d")){
-    line(a, b)
-  }
-}
-
-
-#grid([
-#pad(canvas({
-  import draw: *
-  formin()
-  content((0.5, -2), [$G = (V, E)$])
-}), x:20pt)
-],
-[
-  Red vertices form an independent set of size 3.
-],
-columns: 2, gutter: 30pt
-)
-])
 
 // == Showcase: King's subgraph at 0.8 filling
 // #timecounter(1)
@@ -1062,7 +1046,7 @@ image("images/fig5.svg", width: 350pt), [
 // ])
 
 
-= Application 1: Branching + Tensor Networks
+= Application 1: Maximal Independent Set (MIS)
 
 == Tensor Networks for Combinatorial Optimization
 #timecounter(2)
@@ -1451,18 +1435,15 @@ image("images/fig5.svg", width: 350pt), [
   ]
 ]
 
-==
+== Benchmark: Number of branches
 #timecounter(1)
-*Result*: Much less branching steps to 2-SAT subproblems!
-
-#grid(columns: 2, gutter: 10pt,
-[
+- Much less branching steps to 2-SAT subproblems!
+- Directly applicable to all boolean satisfiability problems, i.e. Circuit SAT and $K$-SAT.
+#myslide[
   #image("images/branch_comparison.png", width: 100%)
-],[
+][
   #image("images/branch_comparison_3sat.png", width: 100%)
 ]
-)
-
 
 
 // == Example: Circuit SAT Instance
@@ -1563,10 +1544,9 @@ image("images/fig5.svg", width: 350pt), [
 #timecounter(1)
 
 *Key Takeaways*:
-1. *CSP* is the foundation of logical reasoning — LLMs need solvers for hard constraints
-2. *Branching* = divide-and-conquer with provable complexity bounds
-3. *Optimal branching* can be computed automatically — no expert rules needed!
-4. *Applications*: MIS (physics), Circuit SAT (cryptography), and more
+1. LLMs need a reasoner to take care of hard constraints.
+2. *Branching*, reflect human wisdom of case by case analysis, has an (locally) optimal strategy, in terms of \# of branches.
+4. *Applications*: Maximum independent set, Circuit SAT and more.
 
 #align(center, box(stroke: black, inset: 15pt, fill: yellow.lighten(80%))[
   *Case by case* - there is a better way. 
