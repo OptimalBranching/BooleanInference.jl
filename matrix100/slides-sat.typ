@@ -1443,6 +1443,51 @@ This exploits the *cascading effect* of constraint propagation.
   *Result*: Much faster convergence to 2-SAT subproblems!
 ]
 
+*Selecting Strategy*
+
+  - We define the degree of a clause is the number of variables in the clause that are not fixed.
+	- Score variables based on how many high-degree clauses (deg $ > 2$) they appear in
+	- Weight = deg − 2 → higher structural impact = higher score
+	- Pick the highest-score variable as branching target
+	- If all scores = 0 → already 2-SAT → solve directly
+
+
+
+// == Example: Circuit SAT Instance
+// #timecounter(2)
+
+// Consider a small circuit with variables $x_1, x_2, x_3, x_4$ and clauses:
+// $ F = &(x_1 or x_2 or x_3) and (not x_1 or x_3 or x_4) \ 
+//     &and (not x_2 or not x_3 or x_4) and (not x_3 or not x_4) $
+
+// - Initial: $rho = 4$ (all clauses have 3+ literals)
+// - Traditional: branch on single variable, $Delta rho <= 2$
+// - Our approach: compute oracle on ${x_1, x_2, x_3}$, find branching rule that reduces $rho$ maximally
+
+// #box(stroke: black, inset: 10pt)[
+// *Result*: Optimal branching may assign multiple variables simultaneously, achieving $Delta rho = 4$ in one branch!
+// ]
+
+== Open Source Implementation
+#timecounter(1)
+
+#align(center, grid(columns: 1, gutter: 10pt, image("images/ob-logo.svg", width: 300pt), 
+[
+#link("https://github.com/OptimalBranching/OptimalBranching.jl")[github.com/OptimalBranching/OptimalBranching.jl]
+]))
+
+#align(center, image("images/barcode.png", width: 180pt))
+
+*Features*: MIS solver, Circuit SAT, extensible framework for CSP
+
+#grid(columns: 2, gutter: 10pt,
+[
+  #image("images/branch_comparison.png", width: 100%)
+],[
+  #image("images/branch_comparison_3sat.png", width: 100%)
+]
+)
+
 // == Example: Circuit SAT Instance
 // #timecounter(2)
 
