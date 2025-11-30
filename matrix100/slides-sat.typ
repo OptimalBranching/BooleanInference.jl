@@ -567,32 +567,32 @@ align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
 // It must be *positive*, *non-increasing* during branching, measure 0 problem is directly solvable.
 
 
-== Key: Valid and good branching rule
-#timecounter(2)
+// == Key: Valid and good branching rule
+// #timecounter(2)
 
-- Valid: all elements in *feasible set* are true assignments of $cal(D)$ (exploring all possibilities).
-- Good: create less branches, eliminate more variables.
+// - Valid: all elements in *feasible set* are true assignments of $cal(D)$ (exploring all possibilities).
+// - Good: create less branches, eliminate more variables.
 
-#grid(columns:2, gutter: 20pt, canvas({
-    import draw: *
-    circle((0, 0), radius: (4, 2))
-    circle((1, 0), radius: 1, fill: silver, stroke: none)
-    circle((1.4, 0), radius: (1.8, 1.2), fill: aqua.transparentize(80%))
-    content((1, 0), text(14pt)[oracle])
-    content((-1.5, 0), text(14pt)[Total])
-    content((2.5, 0), text(14pt)[$cal(D)$])
-}),
-[
-$ cal(D) = underbrace((b and not c) or overbrace(( not b and c and d), "size reduction (longer is better)"), "number of branches (less is better)") $
+// #grid(columns:2, gutter: 20pt, canvas({
+//     import draw: *
+//     circle((0, 0), radius: (4, 2))
+//     circle((1, 0), radius: 1, fill: silver, stroke: none)
+//     circle((1.4, 0), radius: (1.8, 1.2), fill: aqua.transparentize(80%))
+//     content((1, 0), text(14pt)[oracle])
+//     content((-1.5, 0), text(14pt)[Total])
+//     content((2.5, 0), text(14pt)[$cal(D)$])
+// }),
+// [
+// $ cal(D) = underbrace((b and not c) or overbrace(( not b and c and d), "size reduction (longer is better)"), "number of branches (less is better)") $
 
-]
-)
+// ]
+// )
 
-#align(left, box(stroke: black, inset: 10pt)[Objective $gamma$: Let $Delta rho(c_i)$ be the size reduction after applying the clause $c_i$.
-Then the branching factor is given by $gamma^rho = sum_i gamma^(rho - Delta rho(c_i))$, i.e.
-$
-  1 = sum_i gamma^(- Delta rho(c_i))
-$])
+// #align(left, box(stroke: black, inset: 10pt)[Objective $gamma$: Let $Delta rho(c_i)$ be the size reduction after applying the clause $c_i$.
+// Then the branching factor is given by $gamma^rho = sum_i gamma^(rho - Delta rho(c_i))$, i.e.
+// $
+//   1 = sum_i gamma^(- Delta rho(c_i))
+// $])
 
 == Exercises
 #timecounter(2)
@@ -614,6 +614,9 @@ $])
 
   Optimal branching: $(not a) or (a and not b and not c and not d)$.
 
+
+==
+#figure(image("images/ob_new.svg", width: 400pt))
 
 == Bruteforce is infeasible
 #timecounter(1)
@@ -722,7 +725,7 @@ dots.v$
 // where $J_i$ is the indices of bitstrings that covered by the $i$-th clause.
 // - _Remark_: Although this problem is NP-hard, it is efficiently solvable with integer programming in practise. It allows us to handle number of vertices $>20$.
 
-== The branching algorithms for MIS
+== History: the branching algorithms for MIS
 
 #let hd(name) = table.cell(text(10pt)[#name], fill: green.lighten(50%))
 #let s(name) = table.cell(text(10pt)[#name])
@@ -1062,22 +1065,20 @@ image("images/fig5.svg", width: 350pt), [
 - Tensor networks with *tropical algebra* can be used for solving CSP @Liu2021@Liu2023
 - Due to hard constraints and bounding, *sparsity* emerged in the tensor network contraction: only a small subset of configurations are needed to be considered.
 - The sparsity helps a lot! but still *not surpass* branching. 😞
-- Now we understand: direct use of sparsity is not the most efficient.
+- New understanding: direct use of sparsity is not the most efficient.
 
-==
+== Branching and Bound Tensor Network (BBTN)
 
 #slide[
-#figure(image("images/bbtn.svg", width: 400pt))
+#figure(image("images/bbtn.svg", width: 380pt))
 ][
-  Branching and Bound Tensor Network (BBTN)
-  - *Key*: Use the right *measure*! Use the tree-width of a tensor network, which measures the contraction complexity.
+  - *Key*: Use branching and bound to cut the originally intractable large scale problem into multiple smaller nets.
+  - *Trick*: Use the right *measure*! Use the tree-width of a tensor network, which measures the contraction complexity.
 
   (Left) *Slicing*, which "branch" on one variable at a time.
 
   (Right) BBTN can be viewed as *non-uniform* version of *slicing*, which more effectively reduce the tree-width.
 ]
-// ==
-// #figure(image("images/ob_new.svg", width: 400pt))
 
 == Time complexity v.s. space complexity
 #slide[
@@ -1088,7 +1089,8 @@ image("images/fig5.svg", width: 350pt), [
 ]
 
 
-==
+== Performance comparison
+#timecounter(2)
 #figure(image("images/time_complexity.svg", width: 70%))
 
 #let namebox(src, name) = box(align(center, [#image(src, width:60pt, height:80pt)#v(-10pt)#name]))
