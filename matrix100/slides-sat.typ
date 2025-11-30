@@ -150,7 +150,7 @@
 == The Logic Reasoning Gap
 #timecounter(2)
 
-*Large language models (LLMs) suffers from complex reasoning* @Pan2023
+*Large language models (LLMs) suffers from complex reasoning*
 - Struggle with multi-step logical reasoning ("Hallucinations")
 - Cannot strictly enforce hard constraints (e.g. rules of a game)
 
@@ -164,34 +164,35 @@
   import draw: *
   content((-5, 0), [*LLM*])
   content((0, 0), [*Human*])
-  content((5, 0), [*SAT Solvers*])
+  content((5, 0), [*Reasoner*])
   content((-3, -1), text(12pt)[Reasoning])
   line((-2, -1), (-1, -1), mark: (end: "straight"))
   content((3.2, -1), text(12pt)[Knowledge])
   line((2, -1), (1, -1), mark: (end: "straight"))
 }))
-  
-== LLM + Solver: The Neuro-Symbolic Future
-#timecounter(2)
 
-*New Scheme*: LLM + SAT Solvers
+*Reasoner*: Given a problem statement, disired *consequences*, and constraints, find a *cause* that satisfies all constraints.
+Usually by searching through *exponentially large*, or even *infinitely many* configurations.
 
-1. *First-Order Logic* (FOL): Theorem provers (e.g., Prover9)
-   - Most expressive, but undecidable
+We can combine LLM + Reasoner! @Pan2023
+
+// == LLM + Solver: The Neuro-Symbolic Future
+// #timecounter(2)
+
+// *New Scheme*: LLM + SAT Solvers
+
+// 1. *First-Order Logic* (FOL): Undecidable
    
-2. *Satisfiability Modulo Theories* (SMT): Z3, CVC5 @deMoura2008
-   - Decidable, widely used in software verification et. al.
+// 2. *SMT* (Z3, CVC5): Decidable, software verification @deMoura2008
    
-#box(stroke: (paint: black, dash: "dashed"), outset: 10pt, [
-3. *Constraint Satisfaction Problems* (CSP): Kissat, X-SAT
-   - Least expressive, simplest (although NP-complete)
-   - Foundation of SMT
-])
+// #box(stroke: (paint: black, dash: "dashed"), outset: 10pt, [
+// 3. *CSP* (Kissat, X-SAT): Simplest, foundation of SMT
+// ])
 
-#place(dx: 70%, dy: -20%, [*$checkmark$ Our Focus*
-- Simple, but powerful
-- Connects to Tensor Networks
-])
+// #place(dx: 70%, dy: -20%, [*$checkmark$ Our Focus*
+// - Simple, but powerful
+// - Connects to Tensor Networks
+// ])
 
 // == Why CSP Matters for AI + Science
 // #timecounter(1)
@@ -206,56 +207,56 @@
 // - Circuit verification, control systems
 // - Combinatorial optimization (spin systems, scheduling)
 
-// == Comparing the Three Paradigms
-// #timecounter(2)
+== Reasoners
+#timecounter(2)
 
-// *Problem*: "Three people have different ages. Alice > Bob."
+*Problem*: "Three people have different ages. Alice > Bob."
 
-// #grid(columns: 3, gutter: 25pt, align(top)[
-//   *FOL (Theorem Proving)*
+#grid(columns: 3, gutter: 50pt, align(top)[
+  *FOL (Theorem Proving)*
   
-//   #text(14pt)[```
-//   ∀x,y (x≠y → Age(x)≠Age(y))
-//   Age(Alice) > Age(Bob)
+  #text(14pt)[```
+  ∀x,y (x≠y → Age(x)≠Age(y))
+  Age(Alice) > Age(Bob)
   
-//   Query: ?
-//   ```]
+  Query: ?
+  ```]
   
-//   ✓ Most expressive\ 
-//   ✗ Undecidable
-// ], align(top)[
-//   *SMT (Z3, CVC5)*
+  ✓ Most expressive\ 
+  ✗ Undecidable
+], align(top)[
+  *SMT (Z3, CVC5)*
   
-//   #text(14pt)[```smt
-//   (declare-const a Int)
-//   (declare-const b Int)
-//   (declare-const c Int)
-//   (assert (distinct a b c))
-//   (assert (> a b))
-//   (check-sat)
-//   ```]
+  #text(14pt)[```smt
+  (declare-const a Int)
+  (declare-const b Int)
+  (declare-const c Int)
+  (assert (distinct a b c))
+  (assert (> a b))
+  (check-sat)
+  ```]
   
-//   ✓ Boolean + theories\
-//   ✓ Decidable
-// ], align(top)[
-//   *CSP (Our Focus)*
+  ✓ Boolean + theories\
+  ✓ Decidable
+], align(top)[
+  *CSP (Our Focus)*
   
-//   #text(14pt)[```
-//   Alice, Bob, Carol ∈ {1,2,3}
+  #text(14pt)[```
+  Alice, Bob, Carol ∈ {1,2,3}
   
-//   AllDifferent(·,·,·)
-//   Alice > Bob
+  AllDifferent(·,·,·)
+  Alice > Bob
   
-//   → 12 solutions
-//   ```]
+  → 12 solutions
+  ```]
   
-//   ✓ Highly efficient\
-//   ✓ Combinatorial opt.
-// ])
+  ✓ Highly efficient\
+  ✓ Combinatorial opt.
+])
 
-// #align(center, box(stroke: black, inset: 8pt)[
-//   *CSP is the foundation of many SMT solvers and combinatorial algorithms*
-// ])
+#align(center, box(stroke: black, inset: 8pt)[
+  *Constraint satisfaction problems* (CSPs) are the foundation of many SMT solvers and combinatorial algorithms
+])
 
 // == Exact solvers
 // - Branching algorithms.
