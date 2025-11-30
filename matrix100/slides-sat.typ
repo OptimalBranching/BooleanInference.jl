@@ -610,8 +610,8 @@ Exactly one variable is 1. Optimal: branch on whether $a = 1$ or not.
 *Key insight*: The structure of feasible solutions reveals efficient branching strategies.
 
 
-== Visualizing the Search Space
-#figure(image("images/ob_new.svg", width: 400pt))
+// == Visualizing the Search Space
+// #figure(image("images/ob_new.svg", width: 400pt))
 
 == The Challenge: Exponentially Many Strategies
 #timecounter(1)
@@ -625,7 +625,7 @@ $
 "# of DNF formulas" &= 2^(3^n)
 $
 
-#align(left, box(text(14pt)[
+#align(center, box(text(14pt)[
 $n=3$: $2^(27) approx 10^8$ formulas\
 $n=4$: $2^(81) approx 10^(24)$ formulas\
 $n=5$: $2^(243) approx 10^(73)$ formulas\
@@ -1058,6 +1058,7 @@ image("images/fig5.svg", width: 350pt), [
 = Application 1: Branching + Tensor Networks
 
 == Tensor Networks for Combinatorial Optimization
+#timecounter(2)
 *Background for TN experts*:
 - Tensor networks with *tropical algebra* can solve CSP @Liu2021@Liu2023
 - Hard constraints create *sparsity* — many tensor elements are zero
@@ -1065,11 +1066,20 @@ image("images/fig5.svg", width: 350pt), [
 
 *New insight*: Don't just exploit sparsity — use branching to *decompose* the network!
 
+#let namebox(src, name) = box(align(center, [#image(src, width:60pt, height:80pt)#v(-10pt)#name]))
+#align(center,[
+#namebox("images/yijiawang.png", text(16pt)[Yijia Wang (IOTP)])#h(20pt)
+#namebox("images/xuanzhao.png", text(16pt)[Xuanzhao Gao (HKUST)])
+])
+
+
+
 == Branch-and-Bound Tensor Network (BBTN)
 
 #slide[
 #figure(image("images/bbtn.svg", width: 380pt))
 ][
+#timecounter(2)
   *Key idea*: Use branching to decompose a large network into smaller, tractable pieces.
 
   *The right measure*: Tree-width of the tensor network (contraction complexity).
@@ -1078,7 +1088,7 @@ image("images/fig5.svg", width: 350pt), [
 
   *Right*: BBTN — *non-uniform slicing* that more effectively reduces tree-width.
   
-  *Result*: Each subproblem is much easier to contract!
+  *Result*: Much less number of sub-networks.
 ]
 
 == Time vs. Space Complexity
@@ -1097,13 +1107,8 @@ image("images/fig5.svg", width: 350pt), [
 #timecounter(2)
 #figure(image("images/time_complexity.svg", width: 70%))
 
-*BBTN scales to much larger instances than pure tensor network methods.*
-
-#let namebox(src, name) = box(align(center, [#image(src, width:60pt, height:80pt)#v(-10pt)#name]))
-#align(center,[
-#namebox("images/yijiawang.png", "Yijia Wang (IOTP)")#h(20pt)
-#namebox("images/xuanzhao.png", "Xuanzhao Gao (HKUST)")
-])
+1. BBTN scales to much larger instances than pure tensor network methods.
+2. BBTN outperform SOTA open source integer programming solvers.
 
 // ==
 // #figure(image("images/tc_different_target.svg", width: 50%))
