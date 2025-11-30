@@ -28,7 +28,7 @@
 #let globalvars = state("t", 0)
 #let timecounter(minutes) = [
   #globalvars.update(t => t + minutes)
-  #place(dx: 100%, dy: -5%, align(right, text(16pt, red)[#context globalvars.get()min]))
+  #place(top + right, dx: 0%, dy: -5%, align(right, text(16pt, red)[#context globalvars.get()min]))
 ]
 #let clip(image, top: 0pt, bottom: 0pt, left: 0pt, right: 0pt) = {
   box(clip: true, image, inset: (top: -top, right: -right, left: -left, bottom: -bottom))
@@ -49,6 +49,10 @@
 }
 #let codebox(txt, width: auto, size: 14pt) = {
   box(inset: 10pt, stroke: blue.lighten(70%), radius:4pt, fill: blue.transparentize(90%), text(size, txt), width: width)
+}
+
+#let myslide(left, right, gutter: 20pt) = {
+  grid(columns: (1fr, 1fr), gutter: gutter, left, right)
 }
 
 #let strokered(loc, radius) = {
@@ -213,7 +217,7 @@ We can combine LLM + Reasoner! @Pan2023
 *Problem*: "Fill a 9×9 Sudoku grid so each row, column, and 3×3 box contains 1-9."
 
 #align(center, grid(columns: 3, gutter: 30pt, align: left, align(top)[
-  *FOL (Theorem Proving)*
+  *First order logic*
   
   #text(13pt)[```
   ∀i,j,k (Cell(i,j)=Cell(i,k) 
@@ -301,8 +305,8 @@ Branching contributes to most state-of-the-art exact solvers for hard combinator
 // Think of it as a *puzzle*: you have pieces (variables) and rules (constraints) — find a valid configuration.
 
 == Two Examples (used in later sections)
-#grid(columns: 2, gutter: 30pt,
-align(top)[
+#timecounter(1)
+#myslide(align(top)[
   *Maximum Independent Set (MIS)*
   #figure(canvas({
     import draw: *
@@ -319,8 +323,7 @@ align(top)[
   - *Variables*: $x_i in \{0, 1\}$ (selected or not)
   - *Constraint*: No two neighbors both selected
   - *Goal*: Maximize $sum x_i$
-],
-align(top)[
+], align(top)[
   *Boolean Satisfiability (SAT)*
   
   #figure(canvas({
@@ -414,22 +417,22 @@ align(top)[
 
 
 == The Math Behind Branching
+#timecounter(2)
 
-#slide[
+#myslide[
 *Branching* = Divide-and-conquer with a twist
 
 #figure(canvas(length: 1cm, {
   import draw: *
   mixmode_tree()
 }))
-We assume runtime $T(rho) = O(gamma^rho)$, where $rho$ = problem size (e.g., number of unfixed variables)
+Runtime: $T(rho) = O(gamma^rho)$, where $rho$ = *problem size* (e.g., number of unfixed variables)
 ][
-#timecounter(2)
 1. Split into $k$ subproblems, each reducing size by $Delta rho_1, dots, Delta rho_k$. Total time satisfies the recurrence:
   $
   T(rho) = sum_(i=1)^k T(rho - Delta rho_i)
   $
-3. The *branching factor* $gamma$ is the solution to:
+3. Decide *branching factor* $gamma$:
   $
   1 = sum_(i=1)^k gamma^(-Delta rho_i)
   $
@@ -483,13 +486,20 @@ align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
 ))
 
 *Limitations:*
-- Each rule has a worst-case $gamma$ — overall complexity bounded by the worst rule
 - Rules are *problem-specific* — years of expert effort to design
-- Hard to know if your rules are optimal
+- Rules do not know *subgraph structure*, and are not optimal (都是预制菜)
 
-== Our Approach: Automatic Branching
+== General principle that applicable to all boolean CSP?
 #timecounter(1)
 
+*Chain of thought*
+
+Check a subset of variables $->$ Local constraints $->$ Limited local feasible solutions
+    - Q: Does a *local subset of variables* include all information required for branching?
+    - A: Yes. So far, every branching rule on MIS only check $N_2(v)$ - the second nearest neighbor.
+
+==
+#timecounter(1)
 #align(center, grid(columns: 2, gutter: 40pt, box(width: 300pt, canvas({
   import draw: *
   scale(x:60%, y:60%)
@@ -618,8 +628,7 @@ Exactly one variable is 1. Optimal: branch on whether $a = 1$ or not.
 #align(center, box(stroke: black, inset: 10pt)[*Q*: How do we find the optimal branching rule?])
 
 *The search space is astronomically large!*
-
-A branching rule is a formula in Disjunctive Normal Form (DNF):
+The number of branching rule on $n$ variables is equal to the number of Disjunctive Normal Form (DNF):
 $
 "# of possible clauses" &= 3^n \
 "# of DNF formulas" &= 2^(3^n)
@@ -632,7 +641,7 @@ $n=5$: $2^(243) approx 10^(73)$ formulas\
 ...
 ], stroke: black, inset: 10pt))
 
-*Our solution*: Formulate as a weighted set cover problem $arrow.r$ solve efficiently with integer programming.
+*Our solution*: arXiv:2412.07685
 
 // == Not as easy as it seems
 // #timecounter(1)
@@ -721,10 +730,11 @@ $n=5$: $2^(243) approx 10^(73)$ formulas\
 // - _Remark_: Although this problem is NP-hard, it is efficiently solvable with integer programming in practise. It allows us to handle number of vertices $>20$.
 
 == 40 Years of Progress on MIS
+#timecounter(1)
 
 #let hd(name) = table.cell(text(10pt)[#name], fill: green.lighten(50%))
 #let s(name) = table.cell(text(10pt)[#name])
-#slide(table(
+#myslide(table(
   columns: (auto, auto, auto, auto),
   table.header(hd[Year], hd[Running times], hd[References], hd[Notes]),
   s[1977], s[$O^*(1.2600^n)$], s[@Tarjan1977], s[],
@@ -746,8 +756,6 @@ $n=5$: $2^(243) approx 10^(73)$ formulas\
   s[2017], s[$O^*(1.1996^n)$], s[@Xiao2017], s[SOTA],
 ),
 [
-#timecounter(1)
-
 *Maximum Independent Set (MIS)*: Find the largest set of non-adjacent vertices.
 
 #align(center, box([MIS is NP-complete — no polynomial-time algorithm exists (unless P=NP) @Karp1972.], stroke: black, inset: 10pt))
@@ -1020,7 +1028,7 @@ align(center + top, text(80pt)[\u{1F4CF}])
 //   figure(image("images/fig5.svg", width: 380pt), caption : [#text(15pt)[Average number of branches generated by different branching algorithms on 1000 random graphs.]])
 // ))
 
-== Benchmark: Fewer Branches = Faster Solving
+== Benchmark: Fewer Branches $approx$ Faster Solving
 #timecounter(3)
 
 #grid(columns: 2, gutter: 0pt,
@@ -1034,9 +1042,8 @@ image("images/fig5.svg", width: 350pt), [
   
   #v(10pt)
   *Key findings*:
-  - #text(red)[`ob`] generates the fewest branches across all graph types
-  - On 3-regular graphs: $gamma = 1.0455$ (vs. 1.0836 for hand-crafted)
-  - *No hand-crafted rule can beat automatic optimization!*
+  - #text(red)[`ob`] generates the fewest branches across all graph types, given the same reduction rule
+  - On 3-regular graphs: $gamma = 1.0441$ (vs. 1.0487 for hand-crafted)
 ])
 
 // == The branching overhead matters? Branching hierachy
@@ -1062,7 +1069,7 @@ image("images/fig5.svg", width: 350pt), [
 *Background for TN experts*:
 - Tensor networks with *tropical algebra* can solve CSP @Liu2021@Liu2023
 - Hard constraints create *sparsity* — many tensor elements are zero
-- Direct sparse contraction helps, but *still slower than branching* 😞
+- #v(-7pt)Sparse tensor network contraction helps, but *still slower than branching* 😞
 
 *New insight*: Don't just exploit sparsity — use branching to *decompose* the network!
 
@@ -1075,11 +1082,11 @@ image("images/fig5.svg", width: 350pt), [
 
 
 == Branch-and-Bound Tensor Network (BBTN)
-
-#slide[
-#figure(image("images/bbtn.svg", width: 380pt))
-][
 #timecounter(2)
+
+#myslide[
+#figure(image("images/bbtn.svg", width: 360pt))
+][
   *Key idea*: Use branching to decompose a large network into smaller, tractable pieces.
 
   *The right measure*: Tree-width of the tensor network (contraction complexity).
@@ -1092,9 +1099,11 @@ image("images/fig5.svg", width: 350pt), [
 ]
 
 == Time vs. Space Complexity
-#slide[
-    #image("images/ksg_60x60_tc_s1.svg", width: 100%)][
 #timecounter(1)
+
+#myslide[
+  #image("images/ksg_60x60_tc_s1.svg", width: 100%)
+][
   *Dynamic slicing*: Time grows as you slice more variables.
   
   *BBTN (our method)*: Both time and space complexity *decrease* with more branching!
@@ -1116,7 +1125,7 @@ image("images/fig5.svg", width: 350pt), [
 // ==
 // #figure(image("images/compare_nu_u.svg", width: 50%))
 
-= Application 2: Circuit SAT (Integer Factoring)
+= Application 2: Circuit SAT
 
 // == DPLL Algorithm
 
@@ -1196,7 +1205,7 @@ image("images/fig5.svg", width: 350pt), [
 //   }))
 // ]
 
-== Integer Factoring as Circuit SAT
+== Example of Circuit SAT: Integer factoring
 #timecounter(1)
 
 *Problem*: Given $m = p times q$, find the factors $p$ and $q$.
@@ -1204,7 +1213,8 @@ image("images/fig5.svg", width: 350pt), [
 *Approach*: Model a multiplier circuit as a CSP — each gate is a constraint.
 
 #place(bottom + right, align(center, [
-  #image("images/zhongyi.jpg", width: 50pt, height: 70pt) #text(14pt, [Zhong-Yi Ni])
+  #image("images/xiweipan.png", width: 50pt, height: 70pt) #text(14pt, [#v(-15pt)Xi-Wei Pan])
+  #image("images/zhongyi.jpg", width: 50pt, height: 70pt) #text(14pt, [#v(-15pt)Zhong-Yi Ni])
 ]))
 
 #let multiplier-block(loc, size, sij, cij, pij, qij, pijp, qipj, sipjm, cimj) = {
@@ -1299,7 +1309,7 @@ image("images/fig5.svg", width: 350pt), [
   import draw: *
   let i = 0
   let j = 0
-  multiplier(5, 5, size: 1.0)
+  multiplier(4, 4, size: 1.0)
 }),
 [#canvas({
   import draw: *
@@ -1320,75 +1330,75 @@ image("images/fig5.svg", width: 350pt), [
   content((rel:(0.75, -0.75), to:"so"), text(14pt)[$s_o$])
   line("co", (rel:(-0.5, 0), to:"co"), mark: (end: "straight"))
   content((rel:(-0.75, 0), to:"co"), text(14pt)[$c_o$])
-  content((5, 0), text(14pt)[$2c_o + s_o = p_i q_i + c_i + s_i$])
+  content((5, 0), text(14pt)[Logical constraints:\ $2c_o + s_o = p_i q_i + c_i + s_i$])
 
-  let gate(loc, label, size: 1, name:none) = {
-    rect((loc.at(0) - size/2, loc.at(1) - size/2), (loc.at(0) + size/2, loc.at(1) + size/2), stroke: black, fill: white, name: name)
-    content(loc, text(14pt)[$label$])
-  }
-  set-origin((-1.5, -3))
-  line((4.5, 0), (-1, 0))  // q
-  line((3, 1), (3, -4.5))  // p
-  let si = (-1, 1)
-  let ci = (4.5, -2.5)
-  gate((0.5, -0.5), [$and$], size: 0.5, name: "a1")
-  gate((2.5, -0.5), [$and$], size: 0.5, name: "a2")
-  gate((2.0, -2.5), [$and$], size: 0.5, name: "a3")
-  gate((0.5, -2.5), [$or$], size: 0.5, name: "o1")
-  gate((1.5, -1.5), [$xor$], size: 0.5, name: "x1")
-  gate((3.5, -3.5), [$xor$], size: 0.5, name: "x2")
-  line("a2", (2.5, 0))
-  line("x1", (1.5, -0.5))
-  line("a2", (3, -0.5))
-  line("a2", "a1")
-  line("a1", "o1")
-  line("a3", "o1")
-  line("o1", (rel: (-1.5, 0), to: "o1"))
-  line(si, "a1")
-  line(ci, "a3")
-  line((3.5, -2.5), "x2")
-  let turn = (1.5, -3.5)
-  line("x1",(rel: (0.5, -2.5), to: si), (rel: (0.5, -0.5), to: si))
-  line("x1", turn, "x2")
-  line("x2", (rel: (1, -1), to: "x2"))
-  line("a3", (2.0, -0.5))
-  rect((-0.75, -4), (4, 0.75), stroke: (dash: "dashed"))
+//   let gate(loc, label, size: 1, name:none) = {
+//     rect((loc.at(0) - size/2, loc.at(1) - size/2), (loc.at(0) + size/2, loc.at(1) + size/2), stroke: black, fill: white, name: name)
+//     content(loc, text(14pt)[$label$])
+//   }
+//   set-origin((-1.5, -3))
+//   line((4.5, 0), (-1, 0))  // q
+//   line((3, 1), (3, -4.5))  // p
+//   let si = (-1, 1)
+//   let ci = (4.5, -2.5)
+//   gate((0.5, -0.5), [$and$], size: 0.5, name: "a1")
+//   gate((2.5, -0.5), [$and$], size: 0.5, name: "a2")
+//   gate((2.0, -2.5), [$and$], size: 0.5, name: "a3")
+//   gate((0.5, -2.5), [$or$], size: 0.5, name: "o1")
+//   gate((1.5, -1.5), [$xor$], size: 0.5, name: "x1")
+//   gate((3.5, -3.5), [$xor$], size: 0.5, name: "x2")
+//   line("a2", (2.5, 0))
+//   line("x1", (1.5, -0.5))
+//   line("a2", (3, -0.5))
+//   line("a2", "a1")
+//   line("a1", "o1")
+//   line("a3", "o1")
+//   line("o1", (rel: (-1.5, 0), to: "o1"))
+//   line(si, "a1")
+//   line(ci, "a3")
+//   line((3.5, -2.5), "x2")
+//   let turn = (1.5, -3.5)
+//   line("x1",(rel: (0.5, -2.5), to: si), (rel: (0.5, -0.5), to: si))
+//   line("x1", turn, "x2")
+//   line("x2", (rel: (1, -1), to: "x2"))
+//   line("a3", (2.0, -0.5))
+//   rect((-0.75, -4), (4, 0.75), stroke: (dash: "dashed"))
 
-  let gate_with_leg(loc, label, size: 1, name:none) = {
-    gate(loc, label, size: size, name: name)
-    line(name, (rel: (0.5, 0), to: name))
-    line(name, (rel: (-0.5, 0), to: name))
-    line(name, (rel: (0, 0.5), to: name))
-  }
-  gate_with_leg((6, 0), [$xor$], size: 0.5, name: "x3")
-  content((8, 0), text(14pt)[$= mat(mat(0, 1; 1, 0); mat(1, 0; 0, 1))$])
+//   let gate_with_leg(loc, label, size: 1, name:none) = {
+//     gate(loc, label, size: size, name: name)
+//     line(name, (rel: (0.5, 0), to: name))
+//     line(name, (rel: (-0.5, 0), to: name))
+//     line(name, (rel: (0, 0.5), to: name))
+//   }
+//   gate_with_leg((6, 0), [$xor$], size: 0.5, name: "x3")
+//   content((8, 0), text(14pt)[$= mat(mat(0, 1; 1, 0); mat(1, 0; 0, 1))$])
 
-  gate_with_leg((6, -2), [$or$], size: 0.5, name: "o3")
-  content((8, -2), text(14pt)[$= mat(mat(1, 0; 0, 0); mat(0, 1; 1, 1))$])
+//   gate_with_leg((6, -2), [$or$], size: 0.5, name: "o3")
+//   content((8, -2), text(14pt)[$= mat(mat(1, 0; 0, 0); mat(0, 1; 1, 1))$])
 
-  gate_with_leg((6, -4), [$and$], size: 0.5, name: "a4")
-  content((8, -4), text(14pt)[$= mat(mat(1, 1; 1, 0); mat(0, 0; 0, 1))$])
+//   gate_with_leg((6, -4), [$and$], size: 0.5, name: "a4")
+//   content((8, -4), text(14pt)[$= mat(mat(1, 1; 1, 0); mat(0, 0; 0, 1))$])
 })
 ]
 )
 
-== Smart Measure: Reducing to 2-SAT
-#timecounter(2)
+// == Smart Measure: Reducing to 2-SAT
+// #timecounter(2)
 
-*Key observation*: After branching, many clauses simplify:
-- *Unit clauses* — directly propagate
-- *Binary clauses* — 2-SAT, solvable in linear time!
-- *Larger clauses* — still need branching
+// *Key observation*: After branching, many clauses simplify:
+// - *Unit clauses* — directly propagate
+// - *Binary clauses* — 2-SAT, solvable in linear time!
+// - *Larger clauses* — still need branching
 
-#definition("Measure: Number of Hard Clauses")[
-  $ rho(F) = |{c in F : |c| >= 3}| $
+// #definition("Measure: Number of Hard Clauses")[
+//   $ rho(F) = |{c in F : |c| >= 3}| $
   
-  When $rho = 0$, the problem reduces to 2-SAT — solvable in $O(n)$ time!
-]
+//   When $rho = 0$, the problem reduces to 2-SAT — solvable in $O(n)$ time!
+// ]
 
-*Goal*: Branch to maximize reduction of $rho$, not just the number of variables.
+// *Goal*: Branch to maximize reduction of $rho$, not just the number of variables.
 
-This exploits the *cascading effect* of constraint propagation.
+// This exploits the *cascading effect* of constraint propagation.
 
 // == Why This Measure?
 // #timecounter(1)
@@ -1424,8 +1434,9 @@ This exploits the *cascading effect* of constraint propagation.
 // }))
 
 == Optimal Branching for Circuit SAT
+#timecounter(2)
 
-#slide[
+#myslide[
 *Algorithm*:
 1. Select a local region (nearby gates)
 2. Enumerate feasible configurations (via tensor contraction)
@@ -1433,23 +1444,24 @@ This exploits the *cascading effect* of constraint propagation.
    $ 1 = sum_(i) gamma^(-Delta rho(c_i)) $
 4. Apply branch, propagate, and recurse
 ][
-#timecounter(2)
   #box(stroke: black, inset: 10pt, fill: yellow.lighten(80%))[
     *Key difference from MIS*: 
-    - Measure = number of hard clauses (not variables)
-    - Exploits cascading propagation effects
+    - Measure = number of hard clauses (involving $>2$ varaibles), since 2-SAT is easy.
+    - Exploits unit propagation to reduce the number of hard clauses.
   ]
-  
-  *Result*: Much faster convergence to 2-SAT subproblems!
 ]
 
-*Selecting Strategy*
+==
+#timecounter(1)
+*Result*: Much less branching steps to 2-SAT subproblems!
 
-  - We define the degree of a clause is the number of variables in the clause that are not fixed.
-	- Score variables based on how many high-degree clauses (deg $ > 2$) they appear in
-	- Weight = deg − 2 → higher structural impact = higher score
-	- Pick the highest-score variable as branching target
-	- If all scores = 0 → already 2-SAT → solve directly
+#grid(columns: 2, gutter: 10pt,
+[
+  #image("images/branch_comparison.png", width: 100%)
+],[
+  #image("images/branch_comparison_3sat.png", width: 100%)
+]
+)
 
 
 
@@ -1473,20 +1485,10 @@ This exploits the *cascading effect* of constraint propagation.
 
 #align(center, grid(columns: 1, gutter: 10pt, image("images/ob-logo.svg", width: 300pt), 
 [
-#link("https://github.com/OptimalBranching/OptimalBranching.jl")[github.com/OptimalBranching/OptimalBranching.jl]
+#link("https://github.com/OptimalBranching/OptimalBranching.jl")[OptimalBranching/OptimalBranching.jl]
 ]))
 
-#align(center, image("images/barcode.png", width: 180pt))
-
-*Features*: MIS solver, Circuit SAT, extensible framework for CSP
-
-#grid(columns: 2, gutter: 10pt,
-[
-  #image("images/branch_comparison.png", width: 100%)
-],[
-  #image("images/branch_comparison_3sat.png", width: 100%)
-]
-)
+#align(center, image("images/barcode.png", width: 150pt))
 
 // == Example: Circuit SAT Instance
 // #timecounter(2)
@@ -1567,7 +1569,7 @@ This exploits the *cascading effect* of constraint propagation.
 4. *Applications*: MIS (physics), Circuit SAT (cryptography), and more
 
 #align(center, box(stroke: black, inset: 15pt, fill: yellow.lighten(80%))[
-  *The best branching rule is the one tailored to your specific problem.*
+  *Case by case* - there is a better way. 
 ])
 
 == Advanced Materials Thrust \u{2665} AI
