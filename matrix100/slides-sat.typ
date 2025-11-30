@@ -176,7 +176,7 @@
 
 #v(-10pt)
 *Reasoner*: Given a problem statement, disired *consequences*, and constraints, find a *cause*,
-by exploring *exponentially large*, or even *infinitely many* configurations.
+by exploring *exponentially large*, or even *infinitely many* solution space.
 
 We can combine LLM + Reasoner! @Pan2023
 
@@ -519,9 +519,10 @@ align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
 
 *Chain of thought*
 
-Check a subset of variables $->$ Local constraints $->$ Limited local feasible solutions
-    - Q: Does a *local subset of variables* include all information required for branching?
-    - A: Yes. So far, every branching rule on MIS only check $N_2(v)$ - the second nearest neighbor.
+Check a subset of variables $->$ Local constraints $->$ Limited local feasible solutions $->$ Optimal branching rule
+
+- Q: Does a *local subset of variables* include all information required for branching?
+- A: Yes. So far, every branching rule on MIS only check $N_2(v)$ - the second nearest neighbor.
 
 == Our approach: online branching rule generation
 #timecounter(1)
@@ -1423,9 +1424,8 @@ image("images/fig5.svg", width: 350pt), [
 #myslide[
 *Algorithm*:
 1. Select a local region (nearby gates)
-2. Enumerate feasible configurations (via tensor contraction)
-3. Find optimal branching rule:
-   $ 1 = sum_(i) gamma^(-Delta rho(c_i)) $
+2. Enumerate feasible configurations (via tensor contraction), and apply unit propagation
+3. Find optimal branching rule
 4. Apply branch, propagate, and recurse
 ][
   #box(stroke: black, inset: 10pt, fill: yellow.lighten(80%))[
