@@ -171,8 +171,8 @@
   line((2, -1), (1, -1), mark: (end: "straight"))
 }))
 
-*Reasoner*: Given a problem statement, disired *consequences*, and constraints, find a *cause* that satisfies all constraints.
-Usually by searching through *exponentially large*, or even *infinitely many* configurations.
+*Reasoner*: Given a problem statement, disired *consequences*, and constraints, find a *cause*,
+by exploring *exponentially large*, or even *infinitely many* configurations.
 
 We can combine LLM + Reasoner! @Pan2023
 
@@ -212,7 +212,7 @@ We can combine LLM + Reasoner! @Pan2023
 
 *Problem*: "Fill a 9×9 Sudoku grid so each row, column, and 3×3 box contains 1-9."
 
-#grid(columns: 3, gutter: 30pt, align(top)[
+#align(center, grid(columns: 3, gutter: 30pt, align: left, align(top)[
   *FOL (Theorem Proving)*
   
   #text(13pt)[```
@@ -251,7 +251,7 @@ We can combine LLM + Reasoner! @Pan2023
   
   ✓ Highly efficient\
   ✓ Combinatorial opt.
-])
+]))
 
 #align(center, box(stroke: black, inset: 8pt)[
   *CSP*: finite domains + constraints — foundation of SMT solvers
@@ -274,11 +274,9 @@ We can combine LLM + Reasoner! @Pan2023
 #timecounter(2)
 
 *What you will learn:*
-- What is a constraint satisfaction problem (CSP)?
-- Why *branching* matters, why is it so powerful, and what is the general principle?
-- How to combine branching with tensor networks for hard problems
-
-*Branching*: Contributes to most state-of-the-art exact solvers for hard combinatorial problems @Fomin2013.
+- Constraint satisfaction problem (CSP)?
+- *Branching* matters, why is it so powerful, and what is the general principle?
+- Combine branching with *tensor networks* for solving large scale CSPs
 
 #align(center, box(stroke: black, inset: 8pt)[
 Branching formalizes human reasoning: *case by case* analysis.
@@ -286,42 +284,24 @@ Branching formalizes human reasoning: *case by case* analysis.
 
 *Example*: Solving a Sudoku — assume a cell is `1`. If this leads to a conflict, backtrack and try `2`. This is branching!
 
+Branching contributes to most state-of-the-art exact solvers for hard combinatorial problems @Fomin2013.
+
 = The Branching Principle
 
-== What is a Constraint Satisfaction Problem (CSP)?
-#timecounter(2)
+// == What is a Constraint Satisfaction Problem (CSP)?
+// #timecounter(2)
 
-#definition("Constraint Satisfaction Problem")[
-  Given:
-  - *Variables*: $bold(x) = {x_1, x_2, dots, x_n}$, each taking values from a finite set (e.g., $\{0, 1\}$, colors, etc.)
-  - *Constraints*: Rules that restrict which combinations of values are allowed
-  - *Goal*: Find an assignment that satisfies all constraints (or optimize an objective)
-]
+// #definition("Constraint Satisfaction Problem")[
+//   Given:
+//   - *Variables*: $bold(x) = {x_1, x_2, dots, x_n}$, each taking values from a finite set (e.g., $\{0, 1\}$, colors, etc.)
+//   - *Constraints*: Rules that restrict which combinations of values are allowed
+//   - *Goal*: Find an assignment that satisfies all constraints (or optimize an objective)
+// ]
 
-Think of it as a *puzzle*: you have pieces (variables) and rules (constraints) — find a valid configuration.
+// Think of it as a *puzzle*: you have pieces (variables) and rules (constraints) — find a valid configuration.
 
-== Two Classic Examples
+== Two Examples (used in later sections)
 #grid(columns: 2, gutter: 30pt,
-align(top)[
-  *Graph Coloring*
-  
-  #figure(canvas({
-    import draw: *
-    let nodes = ((0, (0,0)), (1, (1.5,0)), (2, (0.75,1.3)))
-    for (i, pos) in nodes {
-      circle(pos, radius: 0.3, name: str(i))
-      content(pos, text(12pt)[$v_#i$])
-    }
-    line("0", "1")
-    line("1", "2")
-    line("2", "0")
-  }))
-  
-  - *Variables*: Color of each vertex
-  - *Domain*: $\{$Red, Green, Blue$\}$
-  - *Constraint*: Neighbors must differ
-  - *Goal*: Find a valid 3-coloring
-],
 align(top)[
   *Maximum Independent Set (MIS)*
   #figure(canvas({
@@ -338,87 +318,99 @@ align(top)[
   
   - *Variables*: $x_i in \{0, 1\}$ (selected or not)
   - *Constraint*: No two neighbors both selected
-  - *Goal*: Maximize the number selected
+  - *Goal*: Maximize $sum x_i$
+],
+align(top)[
+  *Boolean Satisfiability (SAT)*
+  
+  #figure(canvas({
+    import draw: *
+    content((0, 0.8), text(14pt)[$(x_1 or x_2) and (not x_1 or x_3)$])
+    content((0, 0), text(14pt)[$ and (not x_2 or not x_3)$])
+  }))
+  #v(10pt)
+  
+  - *Variables*: $x_i in \{0, 1\}$ (true or false)
+  - *Constraint*: Clauses (OR of literals)
+  - *Goal*: Satisfy all clauses
 ])
 
 #align(center, box(stroke: black, inset: 10pt)[
-  Brute-force: check all $|D|^n$ configurations. *Exponential!*
-
-  *Key insight*: Constraints dramatically prune the search space.
+  Brute-force: $2^n$ configurations. Constraints prune the search space.
 ])
 
-== Branching in Action: MIS Example @Fomin2006
-#slide[
-#canvas(length: 0.71cm, {
-  import draw: *
-  let scircle(loc, radius, name) = {
-    circle((loc.at(0)-0.1, loc.at(1)-0.1), radius: radius, fill:black)
-    circle(loc, radius: radius, stroke:black, name: name, fill:white)
-  }
-  let s = 1.5
-  let dy = 3.0
-  let la = (-s, 0)
-  let lb = (0, s)
-  let lc = (0, 0)
-  let ld = (s, 0)
-  let le = (s, s)
-  scircle((0, 0), (3, 2), "branch")
-  for (l, n) in ((la, "a"), (lb, "b"), (lc, "c"), (ld, "d"), (le, "e")){
-    circle((l.at(0), l.at(1)-s/2), radius:0.4, name: n, stroke: if n == "a" {red} else {black})
-    content((l.at(0), l.at(1)-s/2), text(14pt)[$#n$])
-  }
-  for (a, b) in (("a", "b"), ("b", "c"), ("c", "d"), ("d", "e"), ("b", "d")){
-    line(a, b)
-  }
-  scircle((-4, -dy), (2, 1.5), "brancha")
-  for (l, n) in ((lc, "c"), (ld, "d"), (le, "e")){
-    let loc = (l.at(0)-5, l.at(1)-s/2-dy)
-    circle(loc, radius:0.4, name: n, stroke: if n == "c" {red} else {black})
-    content(loc, text(14pt)[$#n$])
-  }
-  for (a, b) in (("c", "d"), ("d", "e"), ("c", "d")){
-    line(a, b)
-  }
-  scircle((4, -dy), (1, 1), "branchb")
-  circle((4, -dy), radius:0.4, name: "e", stroke: red)
-  content((4, -dy), text(14pt)[$e$])
-  scircle((-6, -2*dy), (1, 1), "branchaa")
-  circle((-6, -2*dy), radius:0.4, name: "e", stroke: red)
-  content((-6, -2*dy), text(14pt)[$e$])
-  scircle((-2, -2*dy), (0.5, 0.5), "branchab")
-  scircle((4, -2*dy), (0.5, 0.5), "branchba")
-  scircle((-6, -3*dy), (0.5, 0.5), "branchaaa")
-  line("branch", "brancha")
-  line("branch", "branchb")
-  line("brancha", "branchaa")
-  line("brancha", "branchab")
-  line("branchb", "branchba")
-  line("branchaa", "branchaaa")
-  content((-5, -dy/2+0.5), text(12pt)[$G \\ N[a]$])
-  content((3.5, -dy/2), text(12pt)[$G \\ N[b]$])
-  content((-6.8, -3*dy/2), text(12pt)[$G \\ N[c]$])
-  content((-1.5, -3*dy/2-0.4), text(12pt)[$G \\ N[d]$])
-  content((-4.8, -5*dy/2-0.4), text(12pt)[$G \\ N[e]$])
-  content((5.2, -3*dy/2-0.4), text(12pt)[$G \\ N[e]$])
-})
-- Time complexity: $gamma^(|V|)$
-- MIS size: $alpha(G) = 3$
-][
-#timecounter(3)
-*Step 1.* Pick a vertex (e.g., $a$) and consider two cases:
-  - *Case 1*: $a$ is in the MIS $arrow.r$ remove $a$ and its neighbors
-  - *Case 2*: $a$ is not in the MIS $arrow.r$ some neighbor (e.g., $b$) must be
+// == Branching in Action: MIS Example @Fomin2006
+// #slide[
+// #canvas(length: 0.71cm, {
+//   import draw: *
+//   let scircle(loc, radius, name) = {
+//     circle((loc.at(0)-0.1, loc.at(1)-0.1), radius: radius, fill:black)
+//     circle(loc, radius: radius, stroke:black, name: name, fill:white)
+//   }
+//   let s = 1.5
+//   let dy = 3.0
+//   let la = (-s, 0)
+//   let lb = (0, s)
+//   let lc = (0, 0)
+//   let ld = (s, 0)
+//   let le = (s, s)
+//   scircle((0, 0), (3, 2), "branch")
+//   for (l, n) in ((la, "a"), (lb, "b"), (lc, "c"), (ld, "d"), (le, "e")){
+//     circle((l.at(0), l.at(1)-s/2), radius:0.4, name: n, stroke: if n == "a" {red} else {black})
+//     content((l.at(0), l.at(1)-s/2), text(14pt)[$#n$])
+//   }
+//   for (a, b) in (("a", "b"), ("b", "c"), ("c", "d"), ("d", "e"), ("b", "d")){
+//     line(a, b)
+//   }
+//   scircle((-4, -dy), (2, 1.5), "brancha")
+//   for (l, n) in ((lc, "c"), (ld, "d"), (le, "e")){
+//     let loc = (l.at(0)-5, l.at(1)-s/2-dy)
+//     circle(loc, radius:0.4, name: n, stroke: if n == "c" {red} else {black})
+//     content(loc, text(14pt)[$#n$])
+//   }
+//   for (a, b) in (("c", "d"), ("d", "e"), ("c", "d")){
+//     line(a, b)
+//   }
+//   scircle((4, -dy), (1, 1), "branchb")
+//   circle((4, -dy), radius:0.4, name: "e", stroke: red)
+//   content((4, -dy), text(14pt)[$e$])
+//   scircle((-6, -2*dy), (1, 1), "branchaa")
+//   circle((-6, -2*dy), radius:0.4, name: "e", stroke: red)
+//   content((-6, -2*dy), text(14pt)[$e$])
+//   scircle((-2, -2*dy), (0.5, 0.5), "branchab")
+//   scircle((4, -2*dy), (0.5, 0.5), "branchba")
+//   scircle((-6, -3*dy), (0.5, 0.5), "branchaaa")
+//   line("branch", "brancha")
+//   line("branch", "branchb")
+//   line("brancha", "branchaa")
+//   line("brancha", "branchab")
+//   line("branchb", "branchba")
+//   line("branchaa", "branchaaa")
+//   content((-5, -dy/2+0.5), text(12pt)[$G \\ N[a]$])
+//   content((3.5, -dy/2), text(12pt)[$G \\ N[b]$])
+//   content((-6.8, -3*dy/2), text(12pt)[$G \\ N[c]$])
+//   content((-1.5, -3*dy/2-0.4), text(12pt)[$G \\ N[d]$])
+//   content((-4.8, -5*dy/2-0.4), text(12pt)[$G \\ N[e]$])
+//   content((5.2, -3*dy/2-0.4), text(12pt)[$G \\ N[e]$])
+// })
+// - Time complexity: $gamma^(|V|)$
+// - MIS size: $alpha(G) = 3$
+// ][
+// #timecounter(3)
+// *Step 1.* Pick a vertex (e.g., $a$) and consider two cases:
+//   - *Case 1*: $a$ is in the MIS $arrow.r$ remove $a$ and its neighbors
+//   - *Case 2*: $a$ is not in the MIS $arrow.r$ some neighbor (e.g., $b$) must be
 
-#pause
-#box(stroke: black, inset: 10pt, [*Branching factor*: $gamma approx 1.27$, from $gamma^n = gamma^(n-2) + gamma^(n-4)$])
+// #pause
+// #box(stroke: black, inset: 10pt, [*Branching factor*: $gamma approx 1.27$, from $gamma^n = gamma^(n-2) + gamma^(n-4)$])
 
-#pause
-*Step 2.* Solve subproblems recursively:
-$
-  alpha(G) = max(alpha(G \\ N[a]) + 1, alpha(G \\ N[b]) + 1)
-$
-Each branch reduces the problem size — that's the power of branching!
-]
+// #pause
+// *Step 2.* Solve subproblems recursively:
+// $
+//   alpha(G) = max(alpha(G \\ N[a]) + 1, alpha(G \\ N[b]) + 1)
+// $
+// Each branch reduces the problem size — that's the power of branching!
+// ]
 
 
 == The Math Behind Branching
@@ -433,9 +425,7 @@ Each branch reduces the problem size — that's the power of branching!
 We assume runtime $T(rho) = O(gamma^rho)$, where $rho$ = problem size (e.g., number of unfixed variables)
 ][
 #timecounter(2)
-*How it works:*
-1. Split into $k$ subproblems, each reducing size by $Delta rho_1, dots, Delta rho_k$
-2. Total time satisfies the recurrence:
+1. Split into $k$ subproblems, each reducing size by $Delta rho_1, dots, Delta rho_k$. Total time satisfies the recurrence:
   $
   T(rho) = sum_(i=1)^k T(rho - Delta rho_i)
   $
