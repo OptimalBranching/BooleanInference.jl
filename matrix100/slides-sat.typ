@@ -151,7 +151,7 @@
 
 = Motivation: AI Needs Logical Reasoning
 
-== The Logic Reasoning Gap
+== LLM needs a reasoner
 #timecounter(1)
 
 #v(10pt)
@@ -512,7 +512,7 @@ align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
 
 *Limitations:*
 - Rules are *problem-specific* — years of expert effort to design
-- Rules do not know *subgraph structure*, and are not optimal (都是预制菜)
+- Rules do not know *subgraph structure*, and are not optimal (all precooked)
 
 == General principle that applicable to all boolean CSP?
 #timecounter(1)
@@ -1074,7 +1074,7 @@ image("images/fig5.svg", width: 350pt), [
 ][
   *Key idea*: Use branching to decompose a large network into smaller, tractable pieces.
 
-  *The right measure*: Tree-width of the tensor network (contraction complexity).
+  *The right measure*: "Tree-width" of the tensor network (contraction complexity).
 
   *Left*: Traditional *slicing* — branch on one variable at a time.
 
