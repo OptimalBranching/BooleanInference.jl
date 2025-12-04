@@ -43,4 +43,4 @@ OptimalBranching.jl/
 *.out
 *.history
 /discs/
-/*.png
+/notes/temp/*.png
