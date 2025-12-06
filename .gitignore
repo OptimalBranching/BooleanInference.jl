@@ -6,9 +6,7 @@
 
 # Benchmark
 benchmarks/Manifest.toml
-benchmarks/data/aig
-benchmarks/data/iscas85
-benchmarks/data/factoring
+benchmarks/data/
 
 # IDE
 .vscode/
@@ -43,4 +41,4 @@ OptimalBranching.jl/
 *.out
 *.history
 /discs/
-/notes/temp/*.png
+/notes/
