@@ -65,6 +65,7 @@ export MostOccurrenceSelector, MinGammaSelector
 export TNContractionSolver
 
 export contract_region, contract_tensors
+export slicing, tensor_unwrapping
 
 export propagate, get_active_tensors
 

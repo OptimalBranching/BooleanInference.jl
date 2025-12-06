@@ -30,7 +30,7 @@ function TNProblem(static::BipartiteGraph, ::Type{INT}=UInt64) where {INT<:Integ
     return TNProblem{INT}(static, doms)
 end
 
-### Reduce the number of interfaces
+# TODO: Reduce the number of interfaces
 # Constructor with explicit domains
 function TNProblem(static::BipartiteGraph, doms::Vector{DomainMask}, ::Type{INT}=UInt64) where {INT<:Integer}
     return TNProblem{INT}(static, doms)

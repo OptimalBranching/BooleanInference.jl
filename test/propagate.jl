@@ -1,9 +1,16 @@
 using Test
 using BooleanInference
 using TropicalNumbers
-using BooleanInference: setup_from_cnf, propagate, has1, is_fixed, has0,setup_from_circuit
+using BooleanInference: setup_from_cnf, propagate, has1, is_fixed, has0, setup_from_circuit, has_contradiction
 using ProblemReductions: @circuit, Assignment, BooleanExpr, Factoring, reduceto
 using GenericTensorNetworks
+
+# Helper function to propagate over all tensors
+function propagate_all(static::BipartiteGraph, doms::Vector{DomainMask})
+    touched_tensors = collect(1:length(static.tensors))
+    new_doms, _ = propagate(static, doms, touched_tensors)
+    return new_doms
+end
 
 @testset "propagate" begin
     # Test 1: Simple AND gate (x1 ∧ x2 = 1)
@@ -32,7 +39,7 @@ using GenericTensorNetworks
         @test doms[2] == BooleanInference.DM_BOTH
         
         # After propagation, both should be fixed to 1
-        propagated = BooleanInference.propagate(static, doms)
+        propagated = propagate_all(static, doms)
         @test propagated[1] == BooleanInference.DM_1
         @test propagated[2] == BooleanInference.DM_1
     end
@@ -56,7 +63,7 @@ using GenericTensorNetworks
         doms = BooleanInference.init_doms(static)
         
         # No unit propagation should occur
-        propagated = BooleanInference.propagate(static, doms)
+        propagated = propagate_all(static, doms)
         @test propagated[1] == BooleanInference.DM_BOTH
         @test propagated[2] == BooleanInference.DM_BOTH
     end
@@ -82,7 +89,7 @@ using GenericTensorNetworks
         doms[1] = BooleanInference.DM_1
         
         # Propagation should fix x2 = 1
-        propagated = BooleanInference.propagate(static, doms)
+        propagated = propagate_all(static, doms)
         @test propagated[1] == BooleanInference.DM_1
         @test propagated[2] == BooleanInference.DM_1
     end
@@ -107,9 +114,9 @@ using GenericTensorNetworks
         doms = BooleanInference.init_doms(static)
         doms[1] = BooleanInference.DM_0
         
-        # Propagation should detect contradiction
-        propagated = BooleanInference.propagate(static, doms)
-        @test all(d -> d == BooleanInference.DM_NONE, propagated)
+        # Propagation should detect contradiction (at least one variable should be DM_NONE)
+        propagated = propagate_all(static, doms)
+        @test has_contradiction(propagated)
     end
     
     # Test 5: Chain propagation
@@ -142,7 +149,7 @@ using GenericTensorNetworks
         doms[1] = BooleanInference.DM_1
         
         # Propagation should fix x2 = 1 and x3 = 1
-        propagated = BooleanInference.propagate(static, doms)
+        propagated = propagate_all(static, doms)
         @test propagated[1] == BooleanInference.DM_1
         @test propagated[2] == BooleanInference.DM_1
         @test propagated[3] == BooleanInference.DM_1
@@ -153,7 +160,7 @@ end
     @bools a b c d e f g
     cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c), ∨(¬a))
     problem = setup_from_cnf(cnf)
-    new_doms = propagate(problem.static, problem.doms)
+    new_doms = propagate_all(problem.static, problem.doms)
     @show new_doms[1]
     @test has0(new_doms[1]) && is_fixed(new_doms[1]) == true
     # TODO: undecided_literal has not been refactored yet
@@ -161,7 +168,7 @@ end
     @bools x1 x2 x3 x4 x5
     cnf = ∧(∨(x1), ∨(x2, ¬x3), ∨(x4, ¬x1), ∨(¬x3, ¬x4), ∨(x2, x5), ∨(x2, x5, ¬x3))
     problem = setup_from_cnf(cnf)
-    new_doms = propagate(problem.static, problem.doms)
+    new_doms = propagate_all(problem.static, problem.doms)
     # TODO: undecided_literal has not been refactored yet
 
     circuit = @circuit begin
@@ -169,6 +176,6 @@ end
     end
     push!(circuit.exprs, Assignment([:c], BooleanExpr(true)))
     problem = setup_from_circuit(circuit)
-    new_doms = propagate(problem.static, problem.doms)
+    new_doms = propagate_all(problem.static, problem.doms)
     @show new_doms
 end
