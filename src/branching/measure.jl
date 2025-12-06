@@ -72,9 +72,3 @@ function OptimalBranchingCore.measure(problem::TNProblem, ::HardSetSize)
     return length(selected)
 end
 
-# const GRB_ENV = Ref{Gurobi.Env}()
-
-# function __init__()
-#     GRB_ENV[] = Gurobi.Env()
-#     return
-# end

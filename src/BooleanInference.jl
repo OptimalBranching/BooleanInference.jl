@@ -19,7 +19,6 @@ using NetworkLayout: SFDP, Spring, Stress, Spectral
 import ProblemReductions: BooleanExpr, simple_form, extract_symbols!
 using Gurobi
 
-include("core/types.jl")
 include("core/static.jl")
 include("core/domain.jl")
 include("core/stats.jl")
@@ -45,8 +44,8 @@ include("branching/branch.jl")
 include("interface.jl")
 
 
-export Variable, EdgeRef, BoolTensor, BipartiteGraph, DomainMask, TNProblem, Result
-export DM_BOTH, DM_0, DM_1, DM_NONE
+export Variable, BoolTensor, BipartiteGraph, DomainMask, TNProblem, Result
+export DomainMask
 export Region
 
 export is_fixed, has0, has1, init_doms, get_var_value, bits
@@ -61,36 +60,28 @@ export solve_circuit_sat
 
 export NumUnfixedVars
 
-export MostOccurrenceSelector, LeastOccurrenceSelector, MinGammaSelector, LocalTensorSelector, AbstractSelector
+export MostOccurrenceSelector, MinGammaSelector
 
-export TNContractionSolver, SingleTensorSolver, AbstractTableSolver, NewTNContractionSolver
-export partition_tensor_variables
+export TNContractionSolver
 
-export contract_region, contract_tensors, slicing, tensor_unwrapping
+export contract_region, contract_tensors
 
-export propagate, get_active_tensors, build_tensor_masks
-export TensorMasks
-
-export cache_region!, get_cached_region, clear_all_region_caches!
+export propagate, get_active_tensors
 
 export k_neighboring
 
 export get_unfixed_vars, count_unfixed, bits_to_int
-export circuit_output_distances
 export compute_circuit_info, map_tensor_to_circuit_info
 
-export get_branching_stats, reset_problem!, print_branching_stats
+export get_branching_stats, reset_problem!
 
 export BranchingStats
 export print_stats_summary
 
-export extract_inner_configs, combine_configs, slice_region_contraction
-export handle_no_boundary_case_unfixed
-
 export to_graph, visualize_problem, visualize_highest_degree_vars
 export get_highest_degree_variables, get_tensors_containing_variables
 
-export branching_table!, branch_and_reduce!, bbsat!
+export bbsat!
 export BranchingStrategy, AbstractReducer, NoReducer
 export NumHardTensors, NumUnfixedVars, NumUnfixedTensors, HardSetSize
 export TNContractionSolver

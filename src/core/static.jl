@@ -1,11 +1,24 @@
+struct Variable
+    deg::Int
+end
+
+function Base.show(io::IO, v::Variable)
+    print(io, "Variable(deg=$(v.deg))")
+end
+
+struct BoolTensor
+    var_axes::Vector{Int}
+    tensor::Vector{Tropical{Float64}}
+end
+
+function Base.show(io::IO, f::BoolTensor)
+    print(io, "BoolTensor(vars=[$(join(f.var_axes, ", "))], size=$(length(f.tensor)))")
+end
+
 struct BipartiteGraph
     vars::Vector{Variable}
     tensors::Vector{BoolTensor}
     v2t::Vector{Vector{Int}}
-    # tensor_depths::Vector{Int}
-    # tensor_fanin::Vector{Vector{Int}}
-    # tensor_fanout::Vector{Vector{Int}}
-    # tensor_symbols::Vector{Symbol}  # Circuit gate type for each tensor (:and, :or, :not, :var, etc.)
 end
 
 function Base.show(io::IO, tn::BipartiteGraph)
@@ -22,10 +35,6 @@ end
 function setup_problem(var_num::Int,
                        tensors_to_vars::Vector{Vector{Int}},
                        tensor_data::Vector{Vector{Tropical{Float64}}})
-                    #    tensor_depths::Vector{Int}=Int[],
-                    #    tensor_fanin::Vector{Vector{Int}}=Vector{Int}[],
-                    #    tensor_fanout::Vector{Vector{Int}}=Vector{Int}[],
-                    #    tensor_symbols::Vector{Symbol}=Symbol[])
     F = length(tensors_to_vars)
     tensors = Vector{BoolTensor}(undef, F)
     vars_to_tensors = [Int[] for _ in 1:var_num]
@@ -43,20 +52,6 @@ function setup_problem(var_num::Int,
         vars[i] = Variable(length(vars_to_tensors[i]))
     end
     return BipartiteGraph(vars, tensors, vars_to_tensors)
-
-    # if isempty(tensor_depths)
-    #     tensor_depths = zeros(Int, F)
-    # end
-    # if isempty(tensor_fanin)
-    #     tensor_fanin = [Int[] for _ in 1:F]
-    # end
-    # if isempty(tensor_fanout)
-    #     tensor_fanout = [Int[] for _ in 1:F]
-    # end
-    # if isempty(tensor_symbols)
-    #     tensor_symbols = fill(:unknown, F)
-    # end
-    # return BipartiteGraph(vars, tensors, vars_to_tensors, tensor_depths, tensor_fanin, tensor_fanout, tensor_symbols)
 end
 
 function setup_from_tensor_network(tn)

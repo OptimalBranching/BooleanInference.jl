@@ -54,7 +54,7 @@ end
 
 # ==================== Figure 1: Branch Count Comparison ====================
 begin
-    fig1 = Figure(size = (450, 300))
+    fig1 = Figure(size = (450, 300), backgroundcolor = :transparent)
 
     # Flatten data for boxplot
     branches_x_bi = Float64[]
@@ -84,15 +84,21 @@ begin
         end
     end
 
-    ax1 = Axis(fig1[1, 1], xlabel = "Bit length", ylabel = "Branches", yscale = log10, 
-            xticks = (n, string.(2 .* n)), title = "Branch Count (CircuitSAT-Factoring)")
+    ax1 = Axis(fig1[1, 1],
+        xlabel = "Bit length",
+        ylabel = "Branches",
+        yscale = log10,
+        xticks = (n, string.(2 .* n)),
+        title = "Branch Count (CircuitSAT-Factoring)",
+        backgroundcolor = :transparent,
+    )
     boxplot!(ax1, branches_x_bi, branches_y_bi; label = "BI", width = 0.35, color = :red)
     boxplot!(ax1, branches_x_kissat, branches_y_kissat; label = "Kissat", width = 0.35, color = :blue)
     boxplot!(ax1, branches_x_minisat, branches_y_minisat; label = "MiniSAT", width = 0.35, color = :green)
 
     Legend(fig1[2, 1], ax1, orientation = :horizontal, framevisible = false, nbanks = 1)
 
-    save("branch_comparison.png", fig1)
+    save("notes/temp/branch_comparison.png", fig1)
     fig1
 end
 

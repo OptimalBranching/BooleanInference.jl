@@ -74,7 +74,7 @@ end
 
 n = [3.5, 3.8, 4.0, 4.2, 4.3, 4.5]
 begin
-    fig1 = Figure(size = (450, 300))
+    fig1 = Figure(size = (450, 300), backgroundcolor = :transparent)
 
     # Flatten data for boxplot
     branches_x_bi = Float64[]
@@ -104,8 +104,14 @@ begin
         end
     end
 
-    ax1 = Axis(fig1[1, 1], xlabel = "Clause-Variable Ratio", ylabel = "Branches", yscale = log10, 
-            xticks = (n, string.(n)), title = "Branch Count (3SAT)")
+    ax1 = Axis(fig1[1, 1],
+        xlabel = "Clause-Variable Ratio",
+        ylabel = "Branches",
+        yscale = log10,
+        xticks = (n, string.(n)),
+        title = "Branch Count (Random 3-SAT)",
+        backgroundcolor = :transparent,
+    )
     boxplot!(ax1, branches_x_bi, branches_y_bi; label = "BI", width = 0.03, color = :red)
     boxplot!(ax1, branches_x_kissat, branches_y_kissat; label = "Kissat", width = 0.03, color = :blue)
     boxplot!(ax1, branches_x_minisat, branches_y_minisat; label = "MiniSAT", width = 0.03, color = :green)
@@ -117,6 +123,5 @@ begin
 end
 
 
-save("cnfsat_branch_comparison.png", fig)
-fig
-
+save("notes/temp/cnfsat_branch_comparison.png", fig1)
+fig1
