@@ -43,7 +43,7 @@ end
     @show tnproblem.static.tensors[2]
     
     # Test solving the circuit
-    br_strategy = BranchingStrategy(table_solver = TNContractionSolver(), selector = MostOccurrenceSelector(1,2), measure = NumUnfixedVars())
+    br_strategy = BranchingStrategy(table_solver = TNContractionSolver(), selector = MostOccurrenceSelector(1,2), measure = NumUnfixedVars(), set_cover_solver = GreedyMerge())
     result = bbsat!(tnproblem, br_strategy, NoReducer())
     # The circuit can be satisfied (out=false can be achieved), so just check result exists
     @test result isa Result
