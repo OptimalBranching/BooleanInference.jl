@@ -44,8 +44,8 @@ end
     @test res == true
     @test satisfiable(cnf, dict) == true
     # Test that stats are recorded
-    @test stats.total_branches >= 0
-    @test stats.total_subproblems >= 0
+    @test stats.branching_nodes >= 0
+    @test stats.total_visited_nodes >= 0
 
     cnf = ∧(∨(a), ∨(a,¬c), ∨(d,¬b), ∨(¬c,¬d), ∨(a,e), ∨(a,e,¬c), ∨(¬a))
     sat = Satisfiability(cnf; use_constraints=true)
@@ -55,9 +55,9 @@ end
 @testset "solve_factoring" begin
     a, b, stats = solve_factoring(5, 5, 31*29)
     @test a*b == 31*29
-    @test stats.total_branches >= 0
-    @test stats.total_subproblems >= 0
-    println("Factoring stats: branches=$(stats.total_branches), subproblems=$(stats.total_subproblems)")
+    @test stats.branching_nodes >= 0
+    @test stats.total_visited_nodes >= 0
+    println("Factoring stats: branches=$(stats.branching_nodes), visited=$(stats.total_visited_nodes)")
 end
 
 @testset "branching_statistics" begin
@@ -69,8 +69,8 @@ end
     
     # Test initial stats are zero
     initial_stats = get_branching_stats(tn_problem)
-    @test initial_stats.total_branches == 0
-    @test initial_stats.total_subproblems == 0
+    @test initial_stats.branching_nodes == 0
+    @test initial_stats.total_visited_nodes == 0
 
     # Solve and check stats are recorded
     result = BooleanInference.solve(tn_problem,
@@ -80,8 +80,8 @@ end
         NoReducer())
 
     # Stats should have been recorded
-    @test result.stats.total_branches >= 0
-    @test result.stats.total_subproblems >= 0
+    @test result.stats.branching_nodes >= 0
+    @test result.stats.total_visited_nodes >= 0
     @test result.stats.avg_branching_factor >= 0.0
 
     # Print stats for debugging
@@ -91,6 +91,6 @@ end
     # Test reset functionality
     reset_problem!(tn_problem)
     reset_stats = get_branching_stats(tn_problem)
-    @test reset_stats.total_branches == 0
-    @test reset_stats.total_subproblems == 0
+    @test reset_stats.branching_nodes == 0
+    @test reset_stats.total_visited_nodes == 0
 end

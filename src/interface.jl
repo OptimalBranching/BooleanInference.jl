@@ -61,7 +61,7 @@ function solve_sat_with_assignments(
     sat::ConstraintSatisfactionProblem;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector==MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
+        selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
         measure=NumUnfixedVars(),
         set_cover_solver=GreedyMerge()
     ),

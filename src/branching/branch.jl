@@ -37,12 +37,6 @@ function bbsat!(problem::TNProblem, config::OptimalBranchingCore.BranchingStrate
     return _bbsat!(problem, config, reducer, cache)
 end
 
-# const tmp_measure = Int[]
-# const tmp_count_unfixed = Int[]
-# const tmp_count_unfixed_tensors = Int[]
-
-# reset_temp!() = (empty!(tmp_measure); empty!(tmp_count_unfixed); empty!(tmp_count_unfixed_tensors))
-
 function _bbsat!(problem::TNProblem, config::OptimalBranchingCore.BranchingStrategy, reducer::OptimalBranchingCore.AbstractReducer, region_cache::RegionCache)
     stats = problem.stats
     # println("================================================")
