@@ -32,40 +32,24 @@ function print_benchmark_summary(results)
     println(repeat("=", 60))
     
     successful = filter(r -> r["status"] == "success", results)
-    failed = filter(r -> r["status"] == "failed", results)
     
     if !isempty(successful)
         println("Successful benchmarks: $(length(successful))")
         println(repeat("+", 90))
-        println("| Config      | Median Time | Memory      | Instances | Correct | Accuracy | Timed |")
+        println("| Config      | Median Time | Instances |")
         println(repeat("-", 90))
         
         for result in successful
             config = result["config"]
             median_time = result["median_time"]
-            median_memory = result["median_memory"]
             instances = get(result, "instances_tested", 0)
-            correct = get(result, "correct_runs", 0)
-            accuracy = get(result, "accuracy_rate", 0.0)
-            timed = get(result, "successful_runs", 0)
             
             config_str = "$(config.m)x$(config.n)"
             time_str = format_time(median_time)
-            memory_str = format_bytes(median_memory)
-            accuracy_str = "$(round(accuracy * 100, digits=1))%"
-            
-            println("| $(rpad(config_str, 11)) | $(rpad(time_str, 11)) | $(rpad(memory_str, 11)) | $(rpad(string(instances), 9)) | $(rpad(string(correct), 7)) | $(rpad(accuracy_str, 8)) | $(rpad(string(timed), 5)) |")
+
+            println("| $(rpad(config_str, 11)) | $(rpad(time_str, 11)) | $(rpad(string(instances), 9)) |")
         end
         println(repeat("+", 90))
-    end
-    
-    if !isempty(failed)
-        println("\nFailed benchmarks: $(length(failed))")
-        for result in failed
-            config = result["config"]
-            reason = result["reason"]
-            println("  - $(config): $reason")
-        end
     end
     println(repeat("=", 60))
 end

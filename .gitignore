@@ -4,9 +4,9 @@
 *.jl.mem
 /Manifest.toml
 
-# Benchmark data
-benchmarks/data/
+# Benchmark
 benchmarks/Manifest.toml
+benchmarks/data/
 
 # IDE
 .vscode/
@@ -41,3 +41,6 @@ OptimalBranching.jl/
 *.out
 *.history
 /discs/
+/notes/
+
+/benchmarks/results/

@@ -16,6 +16,7 @@ using OptimalBranchingCore
 
 include("abstract_types.jl")
 include("utils.jl")
+include("result_io.jl")
 include("benchmark.jl")
 include("formatting.jl")
 include("comparison.jl")
@@ -53,6 +54,11 @@ export solve_instance, verify_solution, read_instances, generate_instance
 export available_solvers, default_solver, solver_name, problem_id
 export benchmark_dataset, run_solver_comparison
 export list_available_solvers, print_solver_comparison_summary, compare_solver_results
+export BenchmarkResult, save_benchmark_result, load_benchmark_result
+export print_result_summary, find_result_file, solver_config_dict
+export resolve_results_dir
+export load_all_results, load_dataset_results, compare_results, filter_results
+export print_detailed_comparison, get_config_summary
 export FactoringProblem, FactoringConfig, FactoringInstance, generate_factoring_datasets
 export CircuitSATProblem, CircuitSATConfig, CircuitSATInstance
 export load_circuit_instance, load_verilog_dataset, load_aag_dataset
@@ -65,5 +71,6 @@ export CNFSATProblem, CNFSATConfig, CNFSATInstance
 export parse_cnf_file, cnf_instantiation
 export load_cnf_dataset, load_cnf_datasets, discover_cnf_files, create_cnfsat_configs
 export load_cnf_instance, is_cnf_satisfiable
+export resolve_data_dir
 
 end

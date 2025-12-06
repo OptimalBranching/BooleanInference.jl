@@ -7,10 +7,53 @@ struct MostOccurrenceSelector <: AbstractSelector
     max_tensors::Int
 end
 
-function select_region(problem::TNProblem, ::AbstractMeasure, selector::MostOccurrenceSelector)
-    unfixed_vars = get_unfixed_vars(problem)
-    most_show_var_idx = argmax(length(problem.static.v2t[u]) for u in unfixed_vars)
-    return create_region(problem, unfixed_vars[most_show_var_idx], selector)
+function compute_var_cover_scores_weighted(problem::TNProblem)
+    num_vars = length(problem.static.vars)
+    scores = zeros(Float64, num_vars)
+
+    active_tensors = get_active_tensors(problem.static, problem.doms)
+    degrees = zeros(Int, length(problem.static.tensors))
+
+    @inbounds for tensor_id in active_tensors
+        vars = problem.static.tensors[tensor_id].var_axes
+        degree = 0
+        @inbounds for var in vars
+            !is_fixed(problem.doms[var]) && (degree += 1)
+        end
+        degrees[tensor_id] = degree
+    end
+
+    @inbounds for v in 1:num_vars
+        is_fixed(problem.doms[v]) && continue
+        for t in problem.static.v2t[v]
+            deg = degrees[t]
+            if deg > 2
+                scores[v] += (deg - 2)
+            end
+        end
+    end
+    return scores
+end
+function findbest(cache::RegionCache, problem::TNProblem{INT}, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, ::MostOccurrenceSelector) where {INT}
+    var_scores = compute_var_cover_scores_weighted(problem)
+
+    # Check if all scores are zero - problem has reduced to 2-SAT
+    if maximum(var_scores) == 0.0
+        solution = solve_2sat(problem)
+        if isnothing(solution)
+            return []
+        else
+            return [solution]
+        end
+    end
+
+    var_id = argmax(var_scores)
+    reset_propagated_cache!(problem)
+    result = compute_branching_result(cache, problem, var_id, measure, set_cover_solver)
+    isnothing(result) && return []
+    clauses = OptimalBranchingCore.get_clauses(result)
+    @assert haskey(problem.propagated_cache, clauses[1])
+    return [problem.propagated_cache[clauses[i]] for i in 1:length(clauses)]
 end
 
 struct MinGammaSelector <: AbstractSelector
@@ -20,26 +63,38 @@ struct MinGammaSelector <: AbstractSelector
     set_cover_solver::AbstractSetCoverSolver
 end
 
-# Constructor will be defined after TNContractionSolver is available
-function select_region(problem::TNProblem, measure::AbstractMeasure, selector::MinGammaSelector)
+function findbest(cache::RegionCache, problem::TNProblem{INT}, m::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, ::MinGammaSelector) where {INT}
+    best_subproblem = nothing
+    best_γ = Inf
+
+    # Check all unfixed variables
     unfixed_vars = get_unfixed_vars(problem)
-    best_region = nothing
-    best_gamma = Inf
-
-    @inbounds for var in unfixed_vars
-        region = create_region(problem, var, selector)
-        # TODO: improve the performance
-        tbl, variables = branching_table!(problem, selector.table_solver, region; cache=false)
-        isempty(tbl.table) && continue
-
-        # Compute optimal branching rule for this variable
-        result = OptimalBranchingCore.optimal_branching_rule(tbl, variables, problem, measure, selector.set_cover_solver)
-
-        # Update best variable if this gamma is smaller
-        if result.γ < best_gamma
-            best_gamma = result.γ
-            best_region = copy(region)
+    if length(unfixed_vars) != 0 && measure(problem, NumHardTensors()) == 0
+        solution = solve_2sat(problem)
+        if isnothing(solution)
+            return []
+        else
+            return [solution]
         end
     end
-    return best_region
+    @inbounds for var_id in unfixed_vars
+        reset_propagated_cache!(problem)
+        result = compute_branching_result(cache, problem, var_id, m, set_cover_solver)
+        isnothing(result) && continue
+
+        if result.γ < best_γ
+            best_γ = result.γ
+            clauses = OptimalBranchingCore.get_clauses(result)
+
+            @assert haskey(problem.propagated_cache, clauses[1])
+            best_subproblem = [problem.propagated_cache[clauses[i]] for i in 1:length(clauses)]
+
+            fixed_indices = findall(iszero, count_unfixed.(best_subproblem))
+            !isempty(fixed_indices) && (best_subproblem = [best_subproblem[fixed_indices[1]]])
+
+            best_γ == 1.0 && break
+        end
+    end
+    best_γ === Inf && return []    
+    return best_subproblem
 end

@@ -2,6 +2,7 @@ struct CNFSolverResult
     status::Symbol                 # :sat | :unsat | :unknown
     model::Union{Nothing, Dict{Int, Bool}}  # Variable -> value (present only when SAT)
     raw::String                    # Raw console output for debugging/logging
+    decisions::Union{Nothing, Int}  # Number of decisions (branches) made by solver
 end
 
 function parse_dimacs_model(raw_output::String)::Dict{Int, Bool}
@@ -38,7 +39,17 @@ function parse_dimacs_output(solver::KissatSolver, raw_output::String)::CNFSolve
     # Parse model if SAT
     model = status == :sat ? parse_dimacs_model(raw_output) : nothing
     
-    return CNFSolverResult(status, model, raw_output)
+    # Parse decisions (branches) from kissat output
+    # Example: "c decisions:                            13555                1.49 per conflict"
+    decisions = nothing
+    if !solver.quiet
+        m = match(r"(?m)^c\s+decisions:\s+(\d+)", raw_output)
+        if m !== nothing
+            decisions = parse(Int, m.captures[1])
+        end
+    end
+    
+    return CNFSolverResult(status, model, raw_output, decisions)
 end
 
 function parse_dimacs_output(solver::MinisatSolver, raw_output::String)::CNFSolverResult
@@ -54,15 +65,28 @@ function parse_dimacs_output(solver::MinisatSolver, raw_output::String)::CNFSolv
     # Parse model if SAT
     model = status == :sat ? parse_dimacs_model(raw_output) : nothing
     
-    return CNFSolverResult(status, model, raw_output)
+    # Parse decisions from MiniSAT output
+    # Example: "decisions             : 13753          (0.00 % random) (75275 /sec)"
+    decisions = nothing
+    if !solver.quiet
+        m = match(r"(?m)^decisions\s+:\s+(\d+)", raw_output)
+        if m !== nothing
+            decisions = parse(Int, m.captures[1])
+        end
+    end
+    
+    return CNFSolverResult(status, model, raw_output, decisions)
 end
 
 
 function run_kissat_and_parse(kissat_path::String, cnf_path::String, solver::KissatSolver)::CNFSolverResult
     # Kissat exit codes: 10=SAT, 20=UNSAT, 0=unknown/timeout, others=error
     # We need to capture output even when exit code is non-zero
-    cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $kissat_path -q $cnf_path`
-    @show cmd
+    if solver.quiet
+        cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $kissat_path -q $cnf_path`
+    else
+        cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $kissat_path $cnf_path`
+    end
     # Capture stdout and stderr separately, allow non-zero exit codes
     stdout_pipe = Pipe()
     stderr_pipe = Pipe()
@@ -86,7 +110,11 @@ end
 function run_minisat_and_parse(minisat_path::String, cnf_path::String, solver::MinisatSolver)::CNFSolverResult
     # MiniSAT with -verb=0 for quiet mode (only outputs status)
     # MiniSAT exit codes: 10=SAT, 20=UNSAT, 0=unknown/timeout
-    cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $minisat_path -verb=0 $cnf_path`
+    if solver.quiet
+        cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $minisat_path -verb=0 $cnf_path`
+    else
+        cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $minisat_path $cnf_path`
+    end
     
     # Capture stdout and stderr separately, allow non-zero exit codes
     stdout_pipe = Pipe()

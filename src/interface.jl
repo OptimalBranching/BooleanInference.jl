@@ -14,17 +14,17 @@ function setup_from_sat(sat::CircuitSAT)
     # Merge vec + replace to avoid intermediate allocation
     tensor_data = [replace(vec(t), Tropical(1.0) => zero(Tropical{Float64})) for t in tensors]
 
-    # Extract circuit metadata and symbols
-    circuit = sat.circuit
-    n_tensors = length(t2v)
-    tensor_symbols = [circuit.exprs[i].expr.head for i in 1:min(n_tensors, length(circuit.exprs))]
+    # # Extract circuit metadata and symbols
+    # circuit = sat.circuit
+    # n_tensors = length(t2v)
+    # tensor_symbols = [circuit.exprs[i].expr.head for i in 1:min(n_tensors, length(circuit.exprs))]
 
-    # Compute circuit topology (depths, fanin, fanout)
-    circuit_info = compute_circuit_info(sat)
-    tensor_info = map_tensor_to_circuit_info(tn, circuit_info, sat)
+    # # Compute circuit topology (depths, fanin, fanout)
+    # circuit_info = compute_circuit_info(sat)
+    # tensor_info = map_tensor_to_circuit_info(tn, circuit_info, sat)
 
     # Build BipartiteGraph
-    static = setup_problem(length(sat.symbols), t2v, tensor_data; tensor_depths=tensor_info.depths, tensor_fanin=tensor_info.fanin, tensor_fanout=tensor_info.fanout, tensor_symbols=tensor_symbols)
+    static = setup_problem(length(sat.symbols), t2v, tensor_data)
     TNProblem(static)
 end
 
@@ -45,8 +45,9 @@ function solve_sat_problem(
     sat::ConstraintSatisfactionProblem;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector==MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
-        measure=NumUnfixedVars()
+        selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
+        measure=NumUnfixedVars(),
+        set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
     show_stats::Bool=false
@@ -60,8 +61,9 @@ function solve_sat_with_assignments(
     sat::ConstraintSatisfactionProblem;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector==MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
-        measure=NumUnfixedVars()
+        selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
+        measure=NumUnfixedVars(),
+        set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
     show_stats::Bool=false
@@ -90,8 +92,9 @@ function solve_factoring(
     n::Int, m::Int, N::Int;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
-        measure=NumUnfixedVars(),
+        # selector=MinGammaSelector(2,4,TNContractionSolver(), GreedyMerge()),
+        selector=MostOccurrenceSelector(3,3),
+        measure=NumHardTensors(),
         set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
