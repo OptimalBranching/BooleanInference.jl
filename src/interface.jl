@@ -11,17 +11,8 @@ function setup_from_sat(sat::CircuitSAT)
     tn = GenericTensorNetwork(sat)
     t2v = getixsv(tn.code)
     tensors = GenericTensorNetworks.generate_tensors(Tropical(1.0), tn)
-    # Merge vec + replace to avoid intermediate allocation
+    
     tensor_data = [replace(vec(t), Tropical(1.0) => zero(Tropical{Float64})) for t in tensors]
-
-    # # Extract circuit metadata and symbols
-    # circuit = sat.circuit
-    # n_tensors = length(t2v)
-    # tensor_symbols = [circuit.exprs[i].expr.head for i in 1:min(n_tensors, length(circuit.exprs))]
-
-    # # Compute circuit topology (depths, fanin, fanout)
-    # circuit_info = compute_circuit_info(sat)
-    # tensor_info = map_tensor_to_circuit_info(tn, circuit_info, sat)
 
     # Build BipartiteGraph
     static = setup_problem(length(sat.symbols), t2v, tensor_data)
