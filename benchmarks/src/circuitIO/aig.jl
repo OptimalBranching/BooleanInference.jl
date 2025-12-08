@@ -96,6 +96,7 @@ Build a ProblemReductions.Circuit from an AIG (no latches allowed).
 - Each AND gate (lhs, r0, r1) becomes:  n_<lhsvar> = ∧(expr(r0), expr(r1))
 - Each primary output becomes:          out<i>     = expr(lit)
 Inputs do not need explicit assignments; they are just symbols used by gates.
+Note: CircuitSAT(...; use_constraints=true) will automatically constrain outputs.
 """
 function aig_to_circuit(aig::AIG; output_prefix::AbstractString="out")
     if !isempty(aig.latches)
@@ -112,9 +113,11 @@ function aig_to_circuit(aig::AIG; output_prefix::AbstractString="out")
         push!(assigns, "$lhs_nm = ∧($(lit_str(r0)), $(lit_str(r1)))")
     end
 
-    # Outputs: give them stable names
+    # Outputs: give them stable names and collect them
+    output_syms = Symbol[]
     for (i, l) in enumerate(aig.outputs)
         outnm = Symbol(output_prefix, "_", i)
+        push!(output_syms, outnm)
         push!(assigns, string(outnm, " = ", lit_str(l)))
     end
 
@@ -127,7 +130,14 @@ function aig_to_circuit(aig::AIG; output_prefix::AbstractString="out")
     code_str = String(take!(src))
 
     # Evaluate macro call to get a `Circuit`
-    # This is the public, documented entry: @circuit returns a Circuit.  [oai_citation:1‡giggleliu.github.io](https://giggleliu.github.io/ProblemReductions.jl/dev/rules/spinglass_sat/)
-    return Base.invokelatest(eval, Meta.parse(code_str))
+    circuit = Base.invokelatest(eval, Meta.parse(code_str))
+    
+    # Add constraint: each output must be true
+    # This follows the pattern in test/interface.jl
+    for out_sym in output_syms
+        push!(circuit.exprs, Assignment([out_sym], BooleanExpr(true)))
+    end
+    
+    return circuit
 end
 

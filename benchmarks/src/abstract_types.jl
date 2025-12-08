@@ -3,16 +3,31 @@ abstract type AbstractProblemConfig end
 abstract type AbstractInstance end
 abstract type AbstractSolver end
 
-@kwdef struct BooleanInferenceSolver <: AbstractSolver 
-    warmup::Bool = true
+# CNF-based SAT solvers share common characteristics
+abstract type CNFSolver <: AbstractSolver end
+
+struct BooleanInferenceSolver <: AbstractSolver 
+    warmup::Bool
+    bsconfig::BranchingStrategy
+    reducer::AbstractReducer
+    show_stats::Bool
+    verify::Bool
+    function BooleanInferenceSolver(;bsconfig=BranchingStrategy(
+        table_solver=TNContractionSolver(),
+        selector=MinGammaSelector(1,2, TNContractionSolver(), OptimalBranchingCore.GreedyMerge()),
+        measure=NumUnfixedVars()
+    ), reducer=NoReducer(), show_stats=false)
+        new(true, bsconfig, reducer, show_stats, true)
+    end
 end
 
 struct IPSolver <: AbstractSolver 
     warmup::Bool
     optimizer::Any
     env::Any
+    verify::Bool
     function IPSolver(optimizer=Gurobi.Optimizer, env=nothing)
-        new(true, optimizer, env)
+        new(true, optimizer, env, true)
     end
 end
 
@@ -20,8 +35,9 @@ struct XSATSolver <: AbstractSolver
     warmup::Bool
     csat_path::String
     yosys_path::String
-    satisfiable_when_high::Bool
-    function XSATSolver(;csat_path=joinpath(dirname(@__DIR__), "artifacts", "bin", "csat"), yosys_path=nothing)
+    verify::Bool
+    timeout::Real
+    function XSATSolver(;csat_path=joinpath(dirname(@__DIR__), "artifacts", "bin", "csat"), yosys_path=nothing, timeout=600.0)
         !isfile(csat_path) && error("File $csat_path for X-SAT solver does not exist")
         # check if yosys is installed by homebrew or apt
 
@@ -34,27 +50,40 @@ struct XSATSolver <: AbstractSolver
         else
             !isfile(yosys_path) && error("File $yosys_path for Yosys does not exist")
         end
-        new(false, csat_path, yosys_path, true)
+        new(false, csat_path, yosys_path, true, timeout)
     end
 end
 
-struct KissatSolver <: AbstractSolver
+
+struct KissatSolver <: CNFSolver
     warmup::Bool
     kissat_path::String
-    yosys_path::String
-    abc_path::String
-    satisfiable_when_high::Bool
-    function KissatSolver(;kissat_path=nothing, yosys_path=nothing, abc_path=nothing)
-        if isnothing(kissat_path)
-            kissat_path = try
-                kissat_path = strip(read(`which kissat`, String))
-            catch
-                error("Kissat not found in PATH, and kissat_path is not provided")
-            end
-        else
-            !isfile(kissat_path) && error("File $kissat_path for Kissat does not exist")
-        end
-        new(true, kissat_path, yosys_path, abc_path, false)
+    abc_path::Union{String, Nothing}
+    verify::Bool
+    timeout::Real
+    quiet::Bool
+    function KissatSolver(;kissat_path=nothing, abc_path=joinpath(dirname(@__DIR__), "artifacts", "bin", "abc"), timeout=600.0, quiet=false)
+        kissat_path = isnothing(kissat_path) ? 
+            find_executable_in_path("kissat", "Kissat") : 
+            validate_executable_path(kissat_path, "Kissat")
+        abc_path = validate_executable_path(abc_path, "ABC")
+        new(false, kissat_path, abc_path, false, timeout, quiet)  # CNF solvers typically don't need warmup
+    end
+end
+
+struct MinisatSolver <: CNFSolver
+    warmup::Bool
+    minisat_path::String
+    abc_path::Union{String, Nothing}
+    verify::Bool
+    timeout::Real
+    quiet::Bool
+    function MinisatSolver(;minisat_path=nothing, abc_path=joinpath(dirname(@__DIR__), "artifacts", "bin", "abc"), timeout=600.0, quiet=false)
+        minisat_path = isnothing(minisat_path) ? 
+            find_executable_in_path("minisat", "MiniSAT") : 
+            validate_executable_path(minisat_path, "MiniSAT")
+        abc_path = validate_executable_path(abc_path, "ABC")
+        new(false, minisat_path, abc_path, false, timeout, quiet)
     end
 end
 
@@ -82,4 +111,12 @@ end
 
 function solver_name(::XSATSolver)
     return "X-SAT"
+end
+
+function solver_name(::KissatSolver)
+    return "Kissat"
+end
+
+function solver_name(::MinisatSolver)
+    return "MiniSAT"
 end

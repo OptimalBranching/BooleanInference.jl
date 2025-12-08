@@ -9,92 +9,68 @@ struct FactoringInstance <: AbstractInstance
     m::Int
     n::Int
     N::BigInt
-    id::String
     # Optional solution fields
     p::Union{BigInt, Nothing}
     q::Union{BigInt, Nothing}
-    # Optional metadata fields
-    metadata_hash::Union{String, Nothing}
-    generation_seed::Union{UInt64, Nothing}
-    generation_timestamp::Union{String, Nothing}
-    
-    function FactoringInstance(m::Int, n::Int, N::Integer, id::String; 
-                               p=nothing, q=nothing,
-                               metadata_hash=nothing, 
-                               generation_seed=nothing,
-                               generation_timestamp=nothing)
-        new(m, n, BigInt(N), id, 
+
+    function FactoringInstance(m::Int, n::Int, N::Integer;
+                               p=nothing, q=nothing)
+        new(m, n, BigInt(N),
             isnothing(p) ? nothing : BigInt(p),
-            isnothing(q) ? nothing : BigInt(q),
-            metadata_hash, generation_seed, generation_timestamp)
+            isnothing(q) ? nothing : BigInt(q))
     end
 end
 
 
 # ----------------------------------------
-# Dataset I/O Implementation (JSON format)
+# Dataset I/O Implementation (Text format)
 # ----------------------------------------
+# Format: m n N [p q]
+# Each line contains space-separated values:
+# - m, n: bit sizes of the two prime factors
+# - N: the semiprime to factor
+# - p, q: optional prime factors (only if include_solution=true)
+#
+# Example without solution:
+#   10 10 893077
+#   10 10 742891
+#
+# Example with solution:
+#   10 10 893077 971 919
+#   10 10 742891 883 841
 
-# Write a single instance to IO (JSON format)
+# Write a single instance to IO (text format)
 function write_instance(io::IO, instance::FactoringInstance)
-    obj = Dict{String, Any}(
-        "m" => instance.m,
-        "n" => instance.n,
-        "N" => string(instance.N),
-        "id" => instance.id
-    )
-    
-    if !isnothing(instance.p)
-        obj["p"] = string(instance.p)
+    print(io, instance.m, " ", instance.n, " ", instance.N)
+
+    if !isnothing(instance.p) && !isnothing(instance.q)
+        print(io, " ", instance.p, " ", instance.q)
     end
-    if !isnothing(instance.q)
-        obj["q"] = string(instance.q)
-    end
-    if !isnothing(instance.metadata_hash)
-        obj["_metadata_hash"] = instance.metadata_hash
-    end
-    if !isnothing(instance.generation_seed)
-        obj["_generation_seed"] = instance.generation_seed
-    end
-    if !isnothing(instance.generation_timestamp)
-        obj["_generation_timestamp"] = instance.generation_timestamp
-    end
-    
-    JSON3.write(io, obj)
-    write(io, '\n')
+
+    println(io)
 end
 
-# Read instances from file (JSON format)
+# Read instances from file (text format)
 function read_instances(::Type{FactoringProblem}, path::AbstractString)
     instances = FactoringInstance[]
     open(path, "r") do io
         for line in eachline(io)
             isempty(strip(line)) && continue
-            data = JSON3.read(line)
-            
-            m = data["m"]
-            n = data["n"]
-            N = parse(BigInt, data["N"])
-            id = data["id"]
-            
-            p = haskey(data, "p") ? parse(BigInt, data["p"]) : nothing
-            q = haskey(data, "q") ? parse(BigInt, data["q"]) : nothing
-            metadata_hash = haskey(data, "_metadata_hash") ? data["_metadata_hash"] : nothing
-            generation_seed = haskey(data, "_generation_seed") ? UInt64(data["_generation_seed"]) : nothing
-            generation_timestamp = haskey(data, "_generation_timestamp") ? data["_generation_timestamp"] : nothing
-            
-            instance = FactoringInstance(m, n, N, id; 
-                                        p=p, q=q,
-                                        metadata_hash=metadata_hash,
-                                        generation_seed=generation_seed,
-                                        generation_timestamp=generation_timestamp)
+
+            parts = split(strip(line))
+            length(parts) < 3 && continue
+
+            m = parse(Int, parts[1])
+            n = parse(Int, parts[2])
+            N = parse(BigInt, parts[3])
+
+            # Check if solution is included
+            p = length(parts) >= 5 ? parse(BigInt, parts[4]) : nothing
+            q = length(parts) >= 5 ? parse(BigInt, parts[5]) : nothing
+
+            instance = FactoringInstance(m, n, N; p=p, q=q)
             push!(instances, instance)
         end
     end
     return instances
-end
-
-# Check metadata
-function has_metadata(instance::FactoringInstance, expected_hash::String)
-    return !isnothing(instance.metadata_hash) && instance.metadata_hash == expected_hash
 end

@@ -29,30 +29,15 @@ function random_semiprime(m::Int, n::Int; rng=Random.GLOBAL_RNG, distinct::Bool=
     return p, q, N
 end
 
-function generate_instance(::Type{FactoringProblem}, config::FactoringConfig; 
-                          rng::AbstractRNG=Random.GLOBAL_RNG, 
+function generate_instance(::Type{FactoringProblem}, config::FactoringConfig;
+                          rng::AbstractRNG=Random.GLOBAL_RNG,
                           include_solution::Bool=false)
     p, q, N = random_semiprime(config.m, config.n; rng=rng, distinct=true)
-    id = problem_id(config, N)
-    
+
     return FactoringInstance(
-        config.m, config.n, N, id;
+        config.m, config.n, N;
         p = include_solution ? p : nothing,
         q = include_solution ? q : nothing
-    )
-end
-
-# Helper function to add metadata to an instance
-function add_metadata(instance::FactoringInstance; 
-                     metadata_hash=nothing, 
-                     generation_seed=nothing,
-                     generation_timestamp=nothing)
-    return FactoringInstance(
-        instance.m, instance.n, instance.N, instance.id;
-        p=instance.p, q=instance.q,
-        metadata_hash=metadata_hash,
-        generation_seed=generation_seed,
-        generation_timestamp=generation_timestamp
     )
 end
 
