@@ -18,6 +18,7 @@ struct SolverBuffer
     in_queue::BitVector           # Track which tensors are queued for processing
     scratch_doms::Vector{DomainMask}  # Temporary domain storage for propagation
     branching_cache::Dict{Clause{UInt64}, Vector{DomainMask}}  # Cache propagated domains for branching configurations
+    activity_scores::Vector{Float64}
 end
 
 function SolverBuffer(cn::ConstraintNetwork)
@@ -27,7 +28,8 @@ function SolverBuffer(cn::ConstraintNetwork)
         sizehint!(Int[], n_tensors),
         falses(n_tensors),
         Vector{DomainMask}(undef, n_vars),
-        Dict{Clause{UInt64}, Vector{DomainMask}}()
+        Dict{Clause{UInt64}, Vector{DomainMask}}(),
+        zeros(Float64, n_vars)
     )
 end
 

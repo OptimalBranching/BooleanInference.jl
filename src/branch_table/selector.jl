@@ -6,29 +6,28 @@ struct MostOccurrenceSelector <: AbstractSelector
     k::Int
     max_tensors::Int
 end
-
 function compute_var_cover_scores_weighted(problem::TNProblem)
     num_vars = length(problem.static.vars)
-    scores = zeros(Float64, num_vars)
+    scores = problem.buffer.activity_scores
+    fill!(scores, 0.0)
 
     active_tensors = get_active_tensors(problem.static, problem.doms)
-    degrees = zeros(Int, length(problem.static.tensors))
 
+    # Compute scores by directly iterating active tensors and their variables
     @inbounds for tensor_id in active_tensors
         vars = problem.static.tensors[tensor_id].var_axes
+        
+        # Count unfixed variables in this tensor
         degree = 0
         @inbounds for var in vars
             !is_fixed(problem.doms[var]) && (degree += 1)
         end
-        degrees[tensor_id] = degree
-    end
-
-    @inbounds for v in 1:num_vars
-        is_fixed(problem.doms[v]) && continue
-        for t in problem.static.v2t[v]
-            deg = degrees[t]
-            if deg > 2
-                scores[v] += (deg - 2)
+        
+        # Only contribute to scores if degree > 2
+        if degree > 2
+            weight = degree - 2
+            @inbounds for var in vars
+                !is_fixed(problem.doms[var]) && (scores[var] += weight)
             end
         end
     end
@@ -37,17 +36,21 @@ end
 function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, ::MostOccurrenceSelector)
     var_scores = compute_var_cover_scores_weighted(problem)
 
-    # Check if all scores are zero - problem has reduced to 2-SAT
-    if maximum(var_scores) == 0.0
-        solution = solve_2sat(problem)
-        if isnothing(solution)
-            return []
-        else
-            return [solution]
+    # Find maximum and its index in a single pass
+    max_score = 0.0
+    var_id = 0
+    @inbounds for i in eachindex(var_scores)
+        if var_scores[i] > max_score
+            max_score = var_scores[i]
+            var_id = i
         end
+    end    
+    # Check if all scores are zero - problem has reduced to 2-SAT
+    if max_score == 0.0
+        solution = solve_2sat(problem)
+        return isnothing(solution) ? [] : [solution]
     end
 
-    var_id = argmax(var_scores)
     result = compute_branching_result(cache, problem, var_id, measure, set_cover_solver)
     isnothing(result) && return []
     clauses = OptimalBranchingCore.get_clauses(result)
@@ -61,7 +64,6 @@ struct MinGammaSelector <: AbstractSelector
     table_solver::AbstractTableSolver
     set_cover_solver::AbstractSetCoverSolver
 end
-
 function findbest(cache::RegionCache, problem::TNProblem, m::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, ::MinGammaSelector)
     best_subproblem = nothing
     best_γ = Inf
