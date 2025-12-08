@@ -34,7 +34,7 @@ function compute_var_cover_scores_weighted(problem::TNProblem)
     end
     return scores
 end
-function findbest(cache::RegionCache, problem::TNProblem{INT}, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, ::MostOccurrenceSelector) where {INT}
+function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, ::MostOccurrenceSelector)
     var_scores = compute_var_cover_scores_weighted(problem)
 
     # Check if all scores are zero - problem has reduced to 2-SAT
@@ -48,12 +48,11 @@ function findbest(cache::RegionCache, problem::TNProblem{INT}, measure::Abstract
     end
 
     var_id = argmax(var_scores)
-    reset_propagated_cache!(problem)
     result = compute_branching_result(cache, problem, var_id, measure, set_cover_solver)
     isnothing(result) && return []
     clauses = OptimalBranchingCore.get_clauses(result)
-    @assert haskey(problem.propagated_cache, clauses[1])
-    return [problem.propagated_cache[clauses[i]] for i in 1:length(clauses)]
+    # @assert haskey(problem.buffer.branching_cache, clauses[1])
+    return [problem.buffer.branching_cache[clauses[i]] for i in 1:length(clauses)]
 end
 
 struct MinGammaSelector <: AbstractSelector
@@ -63,7 +62,7 @@ struct MinGammaSelector <: AbstractSelector
     set_cover_solver::AbstractSetCoverSolver
 end
 
-function findbest(cache::RegionCache, problem::TNProblem{INT}, m::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, ::MinGammaSelector) where {INT}
+function findbest(cache::RegionCache, problem::TNProblem, m::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, ::MinGammaSelector)
     best_subproblem = nothing
     best_γ = Inf
 
@@ -86,8 +85,8 @@ function findbest(cache::RegionCache, problem::TNProblem{INT}, m::AbstractMeasur
             best_γ = result.γ
             clauses = OptimalBranchingCore.get_clauses(result)
 
-            @assert haskey(problem.propagated_cache, clauses[1])
-            best_subproblem = [problem.propagated_cache[clauses[i]] for i in 1:length(clauses)]
+            @assert haskey(problem.buffer.branching_cache, clauses[1])
+            best_subproblem = [problem.buffer.branching_cache[clauses[i]] for i in 1:length(clauses)]
 
             fixed_indices = findall(iszero, count_unfixed.(best_subproblem))
             !isempty(fixed_indices) && (best_subproblem = [best_subproblem[fixed_indices[1]]])

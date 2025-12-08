@@ -23,7 +23,7 @@ count_unfixed(doms::Vector{DomainMask}) = count(dom -> !is_fixed(dom), doms)
 
 bits_to_int(v::Vector{Bool}) = sum(b << (i - 1) for (i, b) in enumerate(v))
   
-function get_active_tensors(static::BipartiteGraph, doms::Vector{DomainMask})
+function get_active_tensors(static::ConstraintNetwork, doms::Vector{DomainMask})
     active = Int[]
     sizehint!(active, length(static.tensors))
     @inbounds for (tid, tensor) in enumerate(static.tensors)

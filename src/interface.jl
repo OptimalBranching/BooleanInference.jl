@@ -7,22 +7,10 @@ function setup_from_circuit(cir::Circuit)
 end
 
 # Use multiple dispatch for different SAT types
-function setup_from_sat(sat::CircuitSAT)
-    tn = GenericTensorNetwork(sat)
-    t2v = getixsv(tn.code)
-    tensors = GenericTensorNetworks.generate_tensors(Tropical(1.0), tn)
-    
-    tensor_data = [replace(vec(t), Tropical(1.0) => zero(Tropical{Float64})) for t in tensors]
-
-    # Build BipartiteGraph
-    static = setup_problem(length(sat.symbols), t2v, tensor_data)
-    TNProblem(static)
-end
-
 function setup_from_sat(sat::ConstraintSatisfactionProblem)
-    tn = GenericTensorNetwork(sat)
-    static = setup_from_tensor_network(tn)
-    TNProblem(static)
+    # Direct conversion from CSP to BipartiteGraph, avoiding GenericTensorNetwork overhead
+    static = setup_from_csp(sat)
+    return TNProblem(static)
 end
 
 function solve(problem::TNProblem, bsconfig::BranchingStrategy, reducer::AbstractReducer; show_stats::Bool=false)

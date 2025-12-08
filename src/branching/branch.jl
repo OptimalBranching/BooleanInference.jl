@@ -1,55 +1,51 @@
-# Apply clause assignments to domains
-function apply_clause(clause::Clause, variables::Vector{Int}, original_doms::Vector{DomainMask})
-    doms = copy(original_doms)
-    changed_vars = Int[]
+@inline probe_branch!(cn::ConstraintNetwork, buffer::SolverBuffer, base_doms::Vector{DomainMask}, clause::Clause, variables::Vector{Int}) = probe_assignment_core!(cn, buffer, base_doms, variables, clause.mask, clause.val)
 
-    @inbounds for (var_idx, var_id) in enumerate(variables)
-        if ismasked(clause, var_idx)
-            new_domain = getbit(clause, var_idx) ? DM_1 : DM_0
-            if doms[var_id] != new_domain
-                doms[var_id] = new_domain
-                push!(changed_vars, var_id)
-            end
-        end
+function OptimalBranchingCore.size_reduction(p::TNProblem, m::AbstractMeasure, cl::Clause{UInt64}, variables::Vector{Int})
+    if haskey(p.buffer.branching_cache, cl)
+        newdoms = p.buffer.branching_cache[cl]
+    else
+        newdoms = probe_branch!(p.static, p.buffer, p.doms, cl, variables)
+        p.buffer.branching_cache[cl] = copy(newdoms)
     end
-    return doms, changed_vars
-end
-function apply_branch!(problem::TNProblem, clause::OptimalBranchingCore.Clause, variables::Vector{Int})
-    doms, changed_vars = apply_clause(clause, variables, problem.doms)
-    isempty(changed_vars) && (problem.propagated_cache[clause] = doms; return doms)
-    touched_tensors = unique(vcat([problem.static.v2t[v] for v in changed_vars]...))
-    propagated_doms, _ = propagate(problem.static, doms, touched_tensors)
-    @assert !has_contradiction(propagated_doms) "Contradiction found when applying clause $clause"
-    
-    problem.propagated_cache[clause] = propagated_doms
-    return propagated_doms
+    # @assert !has_contradiction(newdoms) "Contradiction found when probing branch $cl"
+    r = measure(p, m) - measure_core(p.static, newdoms, m)
+    return r
 end
 
-function OptimalBranchingCore.size_reduction(p::TNProblem{INT}, m::AbstractMeasure, cl::Clause{INT}, variables::Vector{Int}) where {INT}
-    newdoms = haskey(p.propagated_cache, cl) ? p.propagated_cache[cl] : apply_branch!(p, cl, variables)
-    r = measure(p, m) - measure(TNProblem(p.static, newdoms, INT), m)
-    return r
+# the static parameters are not changed during the search
+struct SearchContext
+    static::ConstraintNetwork
+    stats::BranchingStats
+    buffer::SolverBuffer
+    config::OptimalBranchingCore.BranchingStrategy
+    reducer::OptimalBranchingCore.AbstractReducer
+    region_cache::RegionCache
 end
 
 # Main branch-and-reduce algorithm
 function bbsat!(problem::TNProblem, config::OptimalBranchingCore.BranchingStrategy, reducer::OptimalBranchingCore.AbstractReducer)
+    empty!(problem.buffer.branching_cache)
     cache = init_cache(problem, config.table_solver, config.measure, config.set_cover_solver, config.selector)
-    return _bbsat!(problem, config, reducer, cache)
+    ctx = SearchContext(problem.static, problem.stats, problem.buffer, config, reducer, cache)
+    return _bbsat!(ctx, problem.doms)
 end
 
-function _bbsat!(problem::TNProblem, config::OptimalBranchingCore.BranchingStrategy, reducer::OptimalBranchingCore.AbstractReducer, region_cache::RegionCache)
-    stats = problem.stats
-    # println("================================================")
-    is_solved(problem) && return Result(true, problem.doms, copy(stats))
+function _bbsat!(ctx::SearchContext, doms::Vector{DomainMask})
+    count_unfixed(doms) == 0 && return Result(true, doms, copy(ctx.stats))
 
-    subproblems = findbest(region_cache, problem, config.measure, config.set_cover_solver, config.selector)
-    isempty(subproblems) && return Result(false, DomainMask[], copy(stats))
-    record_branch!(stats, length(subproblems))
-    @inbounds for (i, subproblem_doms) in enumerate(subproblems)
-        record_visit!(stats)
-        subproblem = TNProblem(problem.static, subproblem_doms, problem.stats, Dict{Clause{UInt64}, Vector{DomainMask}}())
-        result = _bbsat!(subproblem, config, reducer, region_cache)
+    empty!(ctx.buffer.branching_cache)
+    
+    temp_problem = TNProblem(ctx.static, doms, ctx.stats, ctx.buffer)
+    
+    subproblem_doms_list = findbest(ctx.region_cache, temp_problem, ctx.config.measure, ctx.config.set_cover_solver, ctx.config.selector)
+    isempty(subproblem_doms_list) && return Result(false, DomainMask[], copy(ctx.stats))
+    
+    record_branch!(ctx.stats, length(subproblem_doms_list))
+    @inbounds for subproblem_doms in subproblem_doms_list
+        record_visit!(ctx.stats)
+        result = _bbsat!(ctx, subproblem_doms)
         result.found && return result
     end
-    return Result(false, DomainMask[], copy(stats))
+    
+    return Result(false, DomainMask[], copy(ctx.stats))
 end

@@ -15,7 +15,7 @@ using OptimalBranchingCore
         push!(he2v, tensor.var_axes)
     end
     @test he2v == [[1, 2, 3, 4], [1, 3, 4, 5], [5, 6], [2, 7], [1]]
-    @show tnproblem.static.tensors[3].tensor[1] == zero(Tropical{Float64})
+    @show tnproblem.static.tensors[3].satisfied_configs[1] == false  # zero(Tropical{Float64}) maps to false
     @test count_unfixed(tnproblem) == 6
 end
 
@@ -30,8 +30,11 @@ end
         push!(he2v, tensor.var_axes)
     end
     @test he2v == [[1, 2, 3],[1]]
-    @test tnproblem.static.tensors[1].tensor == vec(Tropical.([0.0 0.0; -Inf -Inf;;; 0.0 -Inf; -Inf 0.0]))
-    @test tnproblem.static.tensors[2].tensor == [Tropical(-Inf), Tropical(0.0)]
+    # Check satisfied_configs instead of .tensor
+    expected_tensor1 = vec(Tropical.([0.0 0.0; -Inf -Inf;;; 0.0 -Inf; -Inf 0.0]))
+    @test tnproblem.static.tensors[1].satisfied_configs == BitVector([t == one(Tropical{Float64}) for t in expected_tensor1])
+    expected_tensor2 = [Tropical(-Inf), Tropical(0.0)]
+    @test tnproblem.static.tensors[2].satisfied_configs == BitVector([t == one(Tropical{Float64}) for t in expected_tensor2])
     # After initial propagation, all variables are fixed (problem is solved)
     @test count_unfixed(tnproblem) == 0
 end

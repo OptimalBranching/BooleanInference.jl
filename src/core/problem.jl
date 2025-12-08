@@ -13,42 +13,61 @@ function Base.show(io::IO, r::Result)
     end
 end
 
-struct TNProblem{INT<:Integer} <: AbstractProblem
-    static::BipartiteGraph   # TODO: simplify the graph type
+struct SolverBuffer
+    touched_tensors::Vector{Int}  # Tensors that need propagation
+    in_queue::BitVector           # Track which tensors are queued for processing
+    scratch_doms::Vector{DomainMask}  # Temporary domain storage for propagation
+    branching_cache::Dict{Clause{UInt64}, Vector{DomainMask}}  # Cache propagated domains for branching configurations
+end
+
+function SolverBuffer(cn::ConstraintNetwork)
+    n_tensors = length(cn.tensors)
+    n_vars = length(cn.vars)
+    SolverBuffer(
+        sizehint!(Int[], n_tensors),
+        falses(n_tensors),
+        Vector{DomainMask}(undef, n_vars),
+        Dict{Clause{UInt64}, Vector{DomainMask}}()
+    )
+end
+
+struct TNProblem <: AbstractProblem
+    static::ConstraintNetwork
     doms::Vector{DomainMask}
     stats::BranchingStats
-    propagated_cache::Dict{Clause{INT}, Vector{DomainMask}}
+    buffer::SolverBuffer
 
-    function TNProblem{INT}(static::BipartiteGraph, doms::Vector{DomainMask}, stats::BranchingStats=BranchingStats(), propagated_cache::Dict{Clause{INT}, Vector{DomainMask}}=Dict{Clause{INT}, Vector{DomainMask}}()) where {INT<:Integer}
-        new{INT}(static, doms, stats, propagated_cache)
+    # Internal constructor: final constructor that creates the instance
+    function TNProblem(
+        static::ConstraintNetwork,
+        doms::Vector{DomainMask},
+        stats::BranchingStats,
+        buffer::SolverBuffer
+    )
+        new(static, doms, stats, buffer)
     end
 end
 
-function TNProblem(static::BipartiteGraph, ::Type{INT}=UInt64) where {INT<:Integer}
-    doms, _ = propagate(static, init_doms(static), collect(1:length(static.tensors)))
+# Constructor 1: Initialize from ConstraintNetwork (auto-propagate)
+function TNProblem(static::ConstraintNetwork)
+    buffer = SolverBuffer(static)
+    doms = propagate(static, init_doms(static), collect(1:length(static.tensors)), buffer)
     has_contradiction(doms) && error("Domain has contradiction")
-    return TNProblem{INT}(static, doms)
+    return TNProblem(static, doms, BranchingStats(), buffer)
 end
 
-# TODO: Reduce the number of interfaces
-# Constructor with explicit domains
-function TNProblem(static::BipartiteGraph, doms::Vector{DomainMask}, ::Type{INT}=UInt64) where {INT<:Integer}
-    return TNProblem{INT}(static, doms)
-end
-
-# Constructor with all parameters (for internal use)
-function TNProblem(static::BipartiteGraph, doms::Vector{DomainMask}, stats::BranchingStats, propagated_cache::Dict{Clause{INT}, Vector{DomainMask}}) where {INT<:Integer}
-    return TNProblem{INT}(static, doms, stats, propagated_cache)
+# Constructor 2: Create with explicit domains (creates new buffer)
+function TNProblem(
+    static::ConstraintNetwork,
+    doms::Vector{DomainMask},
+    stats::BranchingStats=BranchingStats()
+)
+    buffer = SolverBuffer(static)
+    return TNProblem(static, doms, stats, buffer)
 end
 
 function Base.show(io::IO, problem::TNProblem)
     print(io, "TNProblem(unfixed=$(count_unfixed(problem))/$(length(problem.static.vars)))")
-end
-
-# Custom show for propagated_cache: only display keys
-function Base.show(io::IO, cache::Dict{Clause{INT}, Vector{DomainMask}}) where {INT<:Integer}
-    print(io, "Dict{Clause{", INT, "}, Vector{DomainMask}} with keys: ")
-    print(io, collect(keys(cache)))
 end
 
 get_var_value(problem::TNProblem, var_id::Int) = get_var_value(problem.doms, var_id)
@@ -59,5 +78,5 @@ is_solved(problem::TNProblem) = count_unfixed(problem) == 0
 
 get_branching_stats(problem::TNProblem) = copy(problem.stats)
 
-reset_problem!(problem::TNProblem) = (reset!(problem.stats); empty!(problem.propagated_cache))
-reset_propagated_cache!(problem::TNProblem) = empty!(problem.propagated_cache)
+reset_problem!(problem::TNProblem) = (reset!(problem.stats); empty!(problem.buffer.branching_cache))
+reset_propagated_cache!(problem::TNProblem) = empty!(problem.buffer.branching_cache)

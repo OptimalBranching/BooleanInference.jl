@@ -44,13 +44,13 @@ include("branching/branch.jl")
 include("interface.jl")
 
 
-export Variable, BoolTensor, BipartiteGraph, DomainMask, TNProblem, Result
+export Variable, BoolTensor, ConstraintNetwork, DomainMask, TNProblem, Result
 export DomainMask
 export Region
 
 export is_fixed, has0, has1, init_doms, get_var_value, bits
 
-export setup_problem, setup_from_tensor_network, setup_from_cnf, setup_from_circuit, setup_from_sat
+export setup_problem, setup_from_cnf, setup_from_circuit, setup_from_sat
 export factoring_problem, factoring_circuit, factoring_csp
 
 export is_solved
@@ -83,7 +83,7 @@ export to_graph, visualize_problem, visualize_highest_degree_vars
 export get_highest_degree_variables, get_tensors_containing_variables
 
 export bbsat!
-export BranchingStrategy, AbstractReducer, NoReducer
+export BranchingStrategy, NoReducer
 export NumHardTensors, NumUnfixedVars, NumUnfixedTensors, HardSetSize
 export TNContractionSolver
 

@@ -1,4 +1,4 @@
-function to_graph(bg::BipartiteGraph)
+function to_graph(bg::ConstraintNetwork)
     n_vars = length(bg.vars)
     n_tensors = length(bg.tensors)
     n_nodes = n_vars + n_tensors
@@ -16,7 +16,7 @@ function to_graph(bg::BipartiteGraph)
         node_labels[i] = "$i"
     end
     for i in 1:n_tensors
-        node_labels[n_vars + i] = "t$(i)$(bg.tensor_symbols[i])"
+        node_labels[n_vars + i] = "t$i"
     end
 
     return g, node_labels
@@ -72,7 +72,7 @@ function to_graph(problem::TNProblem, tensor_indices::Union{Nothing, Vector{Int}
             node_labels[i] = "$var_id"
         end
         for (i, tensor_id) in enumerate(tensor_indices)
-            node_labels[n_relevant_vars + i] = "t$(tensor_id)$(bg.tensor_symbols[tensor_id])"
+            node_labels[n_relevant_vars + i] = "t$tensor_id"
         end
 
         # Create colors

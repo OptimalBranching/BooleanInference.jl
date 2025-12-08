@@ -11,6 +11,3 @@ end
 function Base.copy(region::Region)
     return Region(region.id, region.tensors, region.vars)
 end
-
-
-

@@ -1,4 +1,4 @@
-function _k_neighboring(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var::Int; max_tensors::Int, k::Int = 2, hard_only::Bool = false)
+function _k_neighboring(tn::ConstraintNetwork, doms::Vector{DomainMask}, focus_var::Int; max_tensors::Int, k::Int = 2, hard_only::Bool = false)
     @assert !is_fixed(doms[focus_var]) "Focus variable must be unfixed"
 
     visited_vars = Set{Int}()
@@ -57,10 +57,10 @@ function _k_neighboring(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var:
     return Region(focus_var, collected_tensors, collected_vars)
 end
 
-function k_neighboring(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var::Int; max_tensors::Int, k::Int = 2)
+function k_neighboring(tn::ConstraintNetwork, doms::Vector{DomainMask}, focus_var::Int; max_tensors::Int, k::Int = 2)
     return _k_neighboring(tn, doms, focus_var; max_tensors = max_tensors, k = k, hard_only = false)
 end
 
-function k_neighboring_hard(tn::BipartiteGraph, doms::Vector{DomainMask}, focus_var::Int; max_tensors::Int, k::Int = 2)
+function k_neighboring_hard(tn::ConstraintNetwork, doms::Vector{DomainMask}, focus_var::Int; max_tensors::Int, k::Int = 2)
     return _k_neighboring(tn, doms, focus_var; max_tensors = max_tensors, k = k, hard_only = true)
 end

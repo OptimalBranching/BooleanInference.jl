@@ -9,19 +9,21 @@ function OptimalBranchingCore.measure(problem::TNProblem, ::NumUnfixedTensors)
 end
 
 struct NumHardTensors <: AbstractMeasure end
-function OptimalBranchingCore.measure(problem::TNProblem, ::NumHardTensors)
-    active_tensors = get_active_tensors(problem.static, problem.doms)
+function measure_core(cn::ConstraintNetwork, doms::Vector{DomainMask}, ::NumHardTensors)
+    active_tensors = get_active_tensors(cn, doms)
     total_excess = 0
     for tensor_id in active_tensors
-        vars = problem.static.tensors[tensor_id].var_axes
+        vars = cn.tensors[tensor_id].var_axes
         degree = 0
         @inbounds for var in vars
-            !is_fixed(problem.doms[var]) && (degree += 1)
+            !is_fixed(doms[var]) && (degree += 1)
         end
         degree > 2 && (total_excess += (degree - 2))
     end
     return total_excess
 end
+@inline OptimalBranchingCore.measure(problem::TNProblem, ::NumHardTensors) = measure_core(problem.static, problem.doms, NumHardTensors())
+
 
 struct HardSetSize <: AbstractMeasure end
 function OptimalBranchingCore.measure(problem::TNProblem, ::HardSetSize)

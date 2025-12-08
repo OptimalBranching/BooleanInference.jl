@@ -1,88 +1,143 @@
-# Main propagate function: returns (new_doms, propagated_vars)
-function propagate(static::BipartiteGraph, doms::Vector{DomainMask}, touched_tensors::Vector{Int})
-    isempty(touched_tensors) && return doms, Int[]
-    working_doms = copy(doms); propagated_vars = Int[]
+@inline function scan_supports(support::Vector{UInt16}, query_mask0::UInt16, query_mask1::UInt16)
+    # the OR of all feasible configs
+    valid_or_agg = UInt16(0)
+    # the AND of all feasible configs
+    valid_and_agg = UInt16(0xFFFF)
+    found_any = false
 
-    # Track tensors currently enqueued; once processed they can be re-enqueued
-    in_queue = falses(length(static.tensors))
-    @inbounds for t in touched_tensors
-        in_queue[t] = true
+    @inbounds for config in support
+        if (config & query_mask0) == 0 && (config & query_mask1) == query_mask1
+            valid_or_agg |= config
+            valid_and_agg &= config
+            found_any = true
+        end
+    end
+    return valid_or_agg, valid_and_agg, found_any
+end
+
+# return (query_mask0, query_mask1, has_confict)
+@inline function compute_query_masks(doms::Vector{DomainMask}, var_axes::Vector{Int})
+    mask0 = UInt16(0); mask1 = UInt16(0);
+
+    @inbounds for (axis, var_id) in enumerate(var_axes)
+        domain = doms[var_id]
+        if domain == DM_0
+            mask0 |= (UInt16(1) << (axis - 1))
+        elseif domain == DM_1
+            mask1 |= (UInt16(1) << (axis - 1))
+        elseif domain == DM_NONE
+            return mask0, mask1, true
+        end
+    end
+    return mask0, mask1, false
+end
+
+@inline function apply_updates!(doms::Vector{DomainMask}, var_axes::Vector{Int}, valid_or::UInt16, valid_and::UInt16, cn::ConstraintNetwork, queue::Vector{Int}, inqueue::BitVector)
+    @inbounds for (i, var_id) in enumerate(var_axes)
+        old_domain = doms[var_id]
+        (old_domain == DM_0 || old_domain == DM_1) && continue
+
+        can_be_1 = (valid_or >> (i - 1)) & 1 == 1
+        must_be_1 = (valid_and >> (i - 1)) & 1 == 1
+
+        new_dom = if must_be_1
+            DM_1
+        elseif !can_be_1
+            DM_0
+        else
+            DM_BOTH
+        end
+
+        if new_dom != old_domain
+            doms[var_id] = new_dom
+            enqueue_neighbors!(queue, inqueue, cn.v2t[var_id])
+        end
+    end
+end
+
+@inline function enqueue_neighbors!(queue, in_queue, neighbors)
+    for t_idx in neighbors
+        if !in_queue[t_idx]
+            in_queue[t_idx] = true
+            push!(queue, t_idx)
+        end
+    end
+end
+
+# Main propagate function: returns new_doms
+function propagate(cn::ConstraintNetwork, doms::Vector{DomainMask}, initial_touched::Vector{Int}, buffer::SolverBuffer)
+    isempty(initial_touched) && return doms
+
+    queue = buffer.touched_tensors
+    empty!(queue)
+
+    in_queue = buffer.in_queue
+    fill!(in_queue, false)
+
+    for t_idx in initial_touched
+        if !in_queue[t_idx]
+            in_queue[t_idx] = true
+            push!(queue, t_idx)
+        end
     end
 
-    queue_index = 1
-    while queue_index <= length(touched_tensors)
-        tensor_id = touched_tensors[queue_index]
-        queue_index += 1
+    return propagate_core!(cn, doms, buffer)
+end
+
+function propagate_core!(cn::ConstraintNetwork, doms::Vector{DomainMask}, buffer::SolverBuffer)
+    queue = buffer.touched_tensors
+    in_queue = buffer.in_queue
+    queue_head = 1
+
+    while queue_head <= length(queue)
+        tensor_id = queue[queue_head]
+        queue_head += 1
         in_queue[tensor_id] = false
 
-        tensor = static.tensors[tensor_id]
-        feasible_configs = find_feasible_configs(working_doms, tensor)
-        isempty(feasible_configs) && (working_doms[1]=DM_NONE; return working_doms, propagated_vars)
+        tensor = cn.tensors[tensor_id]
+        q_mask0, q_mask1, has_conflict = compute_query_masks(doms, tensor.var_axes)
+        has_conflict && (doms[1] = DM_NONE; return doms)
 
-        updated_vars = update_domains_from_configs!(working_doms, tensor, feasible_configs)
-        append!(propagated_vars, updated_vars)
+        support = get_support(cn, tensor)
+        valid_or, valid_and, found = scan_supports(support, q_mask0, q_mask1)
+        !found && (doms[1] = DM_NONE; return doms)
 
-        @inbounds for v in updated_vars
-            for t in static.v2t[v]
-                if !in_queue[t]
-                    in_queue[t] = true
-                    push!(touched_tensors, t)
+        apply_updates!(doms, tensor.var_axes, valid_or, valid_and, cn, queue, in_queue)
+    end
+    return doms
+end
+
+# probe variable assignments specified by mask and value
+# mask: which variables are being set (1 = set, 0 = skip)
+# value: the values to set (only meaningful where mask = 1)
+function probe_assignment_core!(cn::ConstraintNetwork, buffer::SolverBuffer, base_doms::Vector{DomainMask}, vars::Vector{Int}, mask::UInt64, value::UInt64)
+    scratch_doms = buffer.scratch_doms
+    copyto!(scratch_doms, base_doms)
+
+    queue = buffer.touched_tensors
+    empty!(queue)
+    in_queue = buffer.in_queue
+    fill!(in_queue, false)
+
+    has_change = false
+    @inbounds for (i, var_id) in enumerate(vars)
+        if (mask >> (i - 1)) & 1 == 1
+            new_domain = ((value >> (i - 1)) & 1) == 1 ? DM_1 : DM_0
+            if scratch_doms[var_id] != new_domain
+                scratch_doms[var_id] = new_domain
+                has_change = true
+
+                for t_idx in cn.v2t[var_id]
+                    if !in_queue[t_idx]
+                        in_queue[t_idx] = true
+                        push!(queue, t_idx)
+                    end
                 end
             end
         end
     end
-    return working_doms, propagated_vars
-end
 
-# Find all configurations of the tensor that are feasible given current variable domains
-function find_feasible_configs(doms::Vector{DomainMask}, tensor::BoolTensor)
-    num_configs = 1 << length(tensor.var_axes)
-    feasible = Int[]
-
-    # For each variable: compute which bit value (0 or 1) is allowed
-    must_be_one_mask = 0  # Variables that must be 1
-    must_be_zero_mask = 0  # Variables that must be 0
-
-    @inbounds for (axis, var_id) in enumerate(tensor.var_axes)
-        domain = doms[var_id]
-        if domain == DM_1
-            must_be_one_mask |= (1 << (axis - 1))
-        elseif domain == DM_0
-            must_be_zero_mask |= (1 << (axis - 1))
-        elseif domain == DM_NONE
-            # No feasible configs
-            return feasible
-        end
-    end
-
-    @inbounds for config in 0:(num_configs-1)
-        (config & must_be_zero_mask) == 0 || continue
-        (config & must_be_one_mask) == must_be_one_mask || continue
-
-        tensor.tensor[config + 1] == one(Tropical{Float64}) && push!(feasible, config)
-    end
-
-    return feasible
-end
-
-# Update variable domains based on feasible configurations
-function update_domains_from_configs!(doms::Vector{DomainMask}, tensor::BoolTensor, feasible_configs::Vector{Int})
-    updated_vars = Int[]
-
-    for (axis, var_id) in enumerate(tensor.var_axes)
-        current_domain = doms[var_id]
-        (current_domain == DM_0 || current_domain == DM_1) && continue
-
-        bit_values = [(config >> (axis - 1)) & 1 for config in feasible_configs]
-        has_zero, has_one = (0 ∈ bit_values), (1 ∈ bit_values)
-
-        new_domain = has_zero && has_one ? DM_BOTH : has_zero ? DM_0 : has_one ? DM_1 : DM_NONE
-
-        if new_domain != current_domain
-            doms[var_id] = new_domain
-            push!(updated_vars, var_id)
-        end
-    end
-
-    return updated_vars
+    !has_change && return scratch_doms
+    propagate_core!(cn, scratch_doms, buffer)
+    return scratch_doms
 end

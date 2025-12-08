@@ -39,7 +39,7 @@ function solve_2sat(problem::TNProblem)
         elseif length(unfixed_vars) == 2
             # Binary clause: add implications
             var1, var2 = unfixed_vars
-            add_binary_implications!(graph, tensor_obj, vars, problem.doms, var1, var2)
+            add_binary_implications!(problem.static, graph, tensor_obj, vars, problem.doms, var1, var2)
         end
     end
 
@@ -82,23 +82,23 @@ function solve_2sat(problem::TNProblem)
 end
 
 """
-    add_binary_implications!(graph, tensor, vars, doms, var1, var2)
+    add_binary_implications!(static, graph, tensor, vars, doms, var1, var2)
 
 Add implications to the graph based on a binary constraint.
 For a clause (¬a ∨ ¬b), we add: a → ¬b and b → ¬a
 For a clause (a ∨ b), we add: ¬a → b and ¬b → a
 """
-function add_binary_implications!(graph, tensor, vars, doms, var1, var2)
+function add_binary_implications!(static, graph, tensor, vars, doms, var1, var2)
     # Find positions of var1 and var2 in the tensor
     pos1 = findfirst(==(var1), vars)
     pos2 = findfirst(==(var2), vars)
-
+    
     # Check which assignments are valid
     # We need to check all 4 combinations of (var1, var2)
-    valid_00 = is_valid_assignment(tensor, vars, doms, pos1, false, pos2, false)
-    valid_01 = is_valid_assignment(tensor, vars, doms, pos1, false, pos2, true)
-    valid_10 = is_valid_assignment(tensor, vars, doms, pos1, true, pos2, false)
-    valid_11 = is_valid_assignment(tensor, vars, doms, pos1, true, pos2, true)
+    valid_00 = is_valid_assignment(static, tensor, vars, doms, pos1, false, pos2, false)
+    valid_01 = is_valid_assignment(static, tensor, vars, doms, pos1, false, pos2, true)
+    valid_10 = is_valid_assignment(static, tensor, vars, doms, pos1, true, pos2, false)
+    valid_11 = is_valid_assignment(static, tensor, vars, doms, pos1, true, pos2, true)
 
     # Add implications based on invalid assignments
     # If (0,0) is invalid: ¬var1 → var1, ¬var2 → var2 (contradiction, should be caught earlier)
@@ -132,11 +132,11 @@ function add_binary_implications!(graph, tensor, vars, doms, var1, var2)
 end
 
 """
-    is_valid_assignment(tensor, vars, doms, pos1, val1, pos2, val2) -> Bool
+    is_valid_assignment(static, tensor, vars, doms, pos1, val1, pos2, val2) -> Bool
 
 Check if assigning var at pos1 to val1 and var at pos2 to val2 is valid for the tensor.
 """
-function is_valid_assignment(tensor, vars, doms, pos1, val1, pos2, val2)
+function is_valid_assignment(static, tensor, vars, doms, pos1, val1, pos2, val2)
     # Build configuration as a bit pattern
     config = 0
     for (i, var) in enumerate(vars)
@@ -158,8 +158,9 @@ function is_valid_assignment(tensor, vars, doms, pos1, val1, pos2, val2)
     end
 
     # Check if this assignment is satisfiable
-    # tensor.tensor[config + 1] != Tropical(0.0) means unsatisfiable
-    return tensor.tensor[config + 1] == Tropical(0.0)
+    # dense_tensor[config + 1] == true means satisfiable (equivalent to one(Tropical{Float64}))
+    dense_tensor = get_dense_tensor(static, tensor)
+    return dense_tensor[config + 1]
 end
 
 """

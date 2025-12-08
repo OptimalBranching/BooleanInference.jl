@@ -1,7 +1,7 @@
 using Test
 using BooleanInference
-using BooleanInference: setup_from_tensor_network, TNProblem, setup_problem, select_variables, MostOccurrenceSelector, NumUnfixedVars
-using BooleanInference: Region, slicing, tensor_unwrapping, DomainMask
+using BooleanInference: TNProblem, setup_problem, select_variables, MostOccurrenceSelector, NumUnfixedVars
+using BooleanInference: Region, slicing, DomainMask, BoolTensor
 using BooleanInference: DM_BOTH, DM_0, DM_1, has0, has1, is_fixed
 using BooleanInference: contract_tensors, contract_region, TNContractionSolver
 using OptimalBranchingCore: branching_table
@@ -19,127 +19,88 @@ using GenericTensorNetworks
     @test length(region.vars) == 4
 end
 
-@testset "tensor_unwrapping" begin
-    # Test 2x2 tensor (2^1 = 2)
-    @test_throws AssertionError tensor_unwrapping([1.0, 2.0, 3.0])  # not power of 2
-    
-    # Test 2-element vector (2^1)
-    vec2 = [1.0, 2.0]
-    t2 = tensor_unwrapping(vec2)
-    @test size(t2) == (2,)
-    @test t2[1] == 1.0
-    @test t2[2] == 2.0
-    
-    # Test 4-element vector (2^2)
-    vec4 = [1.0, 2.0, 3.0, 4.0]
-    t4 = tensor_unwrapping(vec4)
-    @test size(t4) == (2, 2)
-    @test t4[1,1] == 1.0
-    @test t4[2,1] == 2.0
-    @test t4[1,2] == 3.0
-    @test t4[2,2] == 4.0
-    
-    # Test 8-element vector (2^3)
-    vec8 = collect(1.0:8.0)
-    t8 = tensor_unwrapping(vec8)
-    @test size(t8) == (2, 2, 2)
-    @test length(t8) == 8
-end
-
 @testset "slice_tensor basic" begin
     # Test 1D tensor (single boolean variable)
-    # one(Tropical{Float64}) = 0.0ₜ = satisfied
-    # zero(Tropical{Float64}) = -Infₜ = unsatisfied
     T1 = one(Tropical{Float64})
     T0 = zero(Tropical{Float64})
-    tensor1d = [T1, T0]  # Allows x=0, forbids x=1
-    axis_vars = [1]
-    
-    # Allow both values - shape unchanged
+    tensor1d_data = [T1, T0]  # Allows x=0, forbids x=1
+    tensor1d = BoolTensor([1], tensor1d_data)
+
+    # Allow both values - 2D output with 1 dimension
     doms_both = [DM_BOTH]
-    result = slicing(tensor1d, doms_both, axis_vars)
+    result = slicing(tensor1d, doms_both)
     @test length(result) == 2
-    @test result == [T1, T0]
-    
-    # Allow only 0 - slice to single element
+    @test vec(result) == [T1, T0]
+
+    # Allow only 0 - scalar output
     doms_0 = [DM_0]
-    result = slicing(tensor1d, doms_0, axis_vars)
-    @test length(result) == 1  # Only 1 free variable value
-    @test result[1] == T1  # x=0, keeps original value
-    
-    # Allow only 1 - slice to single element
+    result = slicing(tensor1d, doms_0)
+    @test length(result) == 1
+    @test result[1] == T1  # x=0
+
+    # Allow only 1 - scalar output
     doms_1 = [DM_1]
-    result = slicing(tensor1d, doms_1, axis_vars)
-    @test length(result) == 1  # Only 1 free variable value
-    @test result[1] == T0  # x=1, original was unsatisfied
+    result = slicing(tensor1d, doms_1)
+    @test length(result) == 1
+    @test result[1] == T0  # x=1
 end
 
 @testset "slice_tensor 2D" begin
-    # Test 2D tensor (two boolean variables)
-    # tensor[i,j] represents variable assignment (i-1, j-1)
-    # Using Tropical: one=satisfied, zero=unsatisfied
     T1 = one(Tropical{Float64})
     T0 = zero(Tropical{Float64})
-    tensor2d = [T1, T1, T1, T0]  # (0,0), (1,0), (0,1), (1,1)
-    axis_vars = [1, 2]
-    
-    # Allow both variables to take both values - shape unchanged
+    tensor2d_data = [T1, T1, T1, T0]  # (0,0), (1,0), (0,1), (1,1)
+    tensor2d = BoolTensor([1, 2], tensor2d_data)
+
+    # Allow both variables - 2×2 output
     doms = [DM_BOTH, DM_BOTH]
-    result = slicing(tensor2d, doms, axis_vars)
-    @test length(result) == 4
-    @test result == [T1, T1, T1, T0]
-    
-    # Fix first variable to 0, allow second to vary - becomes 1D
+    result = slicing(tensor2d, doms)
+    @test size(result) == (2, 2)
+    @test vec(result) == [T1, T1, T1, T0]
+
+    # Fix first variable to 0 - 1D output (second var free)
     doms = [DM_0, DM_BOTH]
-    result = slicing(tensor2d, doms, axis_vars)
-    @test length(result) == 2  # Only x2 free: x2=0, x2=1
+    result = slicing(tensor2d, doms)
+    @test size(result) == (2,)
     @test result[1] == T1  # x1=0, x2=0
     @test result[2] == T1  # x1=0, x2=1
-    
-    # Fix second variable to 1, allow first to vary - becomes 1D
+
+    # Fix second variable to 1 - 1D output (first var free)
     doms = [DM_BOTH, DM_1]
-    result = slicing(tensor2d, doms, axis_vars)
-    @test length(result) == 2  # Only x1 free: x1=0, x1=1
+    result = slicing(tensor2d, doms)
+    @test size(result) == (2,)
     @test result[1] == T1  # x1=0, x2=1
     @test result[2] == T0  # x1=1, x2=1
-    
-    # Fix both variables to (0,1) - becomes scalar
+
+    # Fix both variables - scalar output
     doms = [DM_0, DM_1]
-    result = slicing(tensor2d, doms, axis_vars)
-    @test length(result) == 1  # No free variables
+    result = slicing(tensor2d, doms)
+    @test length(result) == 1
     @test result[1] == T1  # x1=0, x2=1
 end
 
 @testset "slice_tensor 3D" begin
-    # Test 3D tensor (three boolean variables)
-    # Only use one and zero of Tropical
     T1 = one(Tropical{Float64})
     T0 = zero(Tropical{Float64})
-    # Pattern: allow most, forbid some specific combinations
-    # Index order: (x1,x2,x3) = (0,0,0), (1,0,0), (0,1,0), (1,1,0), (0,0,1), (1,0,1), (0,1,1), (1,1,1)
-    tensor3d = [T1, T1, T0, T1, T1, T0, T1, T0]
-    axis_vars = [1, 2, 3]
-    
-    # Allow all - shape unchanged
+    tensor3d_data = [T1, T1, T0, T1, T1, T0, T1, T0]
+    tensor3d = BoolTensor([1, 2, 3], tensor3d_data)
+
+    # Allow all - 2×2×2 output
     doms = [DM_BOTH, DM_BOTH, DM_BOTH]
-    result = slicing(tensor3d, doms, axis_vars)
-    @test length(result) == 8
-    @test result == tensor3d
-    
-    # Fix x1=1 and x3=0, allow x2 to vary - becomes 1D
+    result = slicing(tensor3d, doms)
+    @test size(result) == (2, 2, 2)
+    @test vec(result) == tensor3d_data
+
+    # Fix x1=1 and x3=0 - 1D output (x2 free)
     doms = [DM_1, DM_BOTH, DM_0]
-    result = slicing(tensor3d, doms, axis_vars)
-    @test length(result) == 2  # Only x2 free: x2=0, x2=1
-    # x1=1, x2=0, x3=0 -> index 010 binary (bit pattern) = index 2 (0-indexed) = tensor3d[2] = T1
-    # x1=1, x2=1, x3=0 -> index 110 binary = index 6 (0-indexed) = tensor3d[7] = T1
+    result = slicing(tensor3d, doms)
+    @test size(result) == (2,)
     @test result[1] == T1  # x1=1, x2=0, x3=0
     @test result[2] == T1  # x1=1, x2=1, x3=0
-    
-    # Fix all variables - becomes scalar
+
+    # Fix all variables - scalar
     doms = [DM_0, DM_1, DM_1]
-    result = slicing(tensor3d, doms, axis_vars)
-    @test length(result) == 1  # No free variables
-    # x1=0, x2=1, x3=1 -> index 011 reversed = 110 binary = index 6 (0-indexed) = tensor3d[7] = T1
+    result = slicing(tensor3d, doms)
+    @test length(result) == 1
     @test result[1] == T1
 end
 
@@ -184,17 +145,22 @@ function NOT_test()
 end
 
 @testset "contract_tensors" begin
+    # Create AND tensor: y = x1 & x2
     tensor1 = AND_test()
     vector1 = vec(tensor1)
-    DOMs = DomainMask[DM_BOTH, DM_BOTH, DM_0]
-    sliced_tensor1 = slicing(vector1, DOMs, [1, 2, 3])
-    reshaped_tensor1 = tensor_unwrapping(sliced_tensor1)
+    booltensor1 = BoolTensor([1, 2, 3], vector1)
 
+    DOMs1 = DomainMask[DM_BOTH, DM_BOTH, DM_0]
+    sliced_tensor1 = slicing(booltensor1, DOMs1)
+
+    # Create NOT tensor: y = !x
     tensor2 = NOT_test()
     vector2 = vec(tensor2)
-    DOMs = DomainMask[DM_BOTH, DM_BOTH]
-    sliced_tensor2 = slicing(vector2, DOMs, [1, 2])
-    @test size(sliced_tensor2) == size(vector2)
+    booltensor2 = BoolTensor([1, 2], vector2)
+
+    DOMs2 = DomainMask[DM_BOTH, DM_BOTH]
+    sliced_tensor2 = slicing(booltensor2, DOMs2)
+    @test size(sliced_tensor2) == (2, 2)
 
     result = contract_tensors([sliced_tensor1, sliced_tensor2], Vector{Int}[Int[1,2], Int[4,2]], Int[1,2,4])
     @test result[2,2,1] == zero(Tropical{Float64})

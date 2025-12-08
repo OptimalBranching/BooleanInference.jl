@@ -3,7 +3,7 @@ struct RegionCache
     var_to_configs::Vector{Vector{UInt64}}  # Cached full configs from initial contraction for each variable's region
 end
 
-function init_cache(problem::TNProblem{INT}, table_solver::AbstractTableSolver, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, selector::AbstractSelector) where {INT}
+function init_cache(problem::TNProblem, table_solver::AbstractTableSolver, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, selector::AbstractSelector)
     num_vars = length(problem.static.vars)
     unfixed_vars = get_unfixed_vars(problem)
 

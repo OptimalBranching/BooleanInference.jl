@@ -5,7 +5,7 @@
     DM_BOTH = 0x03
 end
 
-init_doms(static::BipartiteGraph) = fill(DM_BOTH, length(static.vars))
+init_doms(static::ConstraintNetwork) = fill(DM_BOTH, length(static.vars))
 # Get the underlying bits value
 @inline bits(dm::DomainMask)::UInt8 = UInt8(dm)
 
@@ -26,7 +26,7 @@ function get_var_value(dms::Vector{DomainMask}, var_ids::Vector{Int})
     return Bool[get_var_value(dms, var_id) for var_id in var_ids]
 end
 
-function active_degree(tn::BipartiteGraph, doms::Vector{DomainMask})
+function active_degree(tn::ConstraintNetwork, doms::Vector{DomainMask})
     degree = zeros(Int, length(tn.tensors))
     @inbounds for (tensor_id, tensor) in enumerate(tn.tensors)
         vars = tensor.var_axes
@@ -34,7 +34,7 @@ function active_degree(tn::BipartiteGraph, doms::Vector{DomainMask})
     end
     return degree
 end
-is_hard(tn::BipartiteGraph, doms::Vector{DomainMask}) = active_degree(tn, doms) .> 2
+is_hard(tn::ConstraintNetwork, doms::Vector{DomainMask}) = active_degree(tn, doms) .> 2
 
 @inline has_contradiction(doms::Vector{DomainMask}) = any(dm -> dm == DM_NONE, doms)
 

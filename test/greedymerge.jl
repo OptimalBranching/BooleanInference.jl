@@ -12,7 +12,7 @@ function create_test_problem()
         fill(Tropical(0.0), 4)
     ]
     static = BooleanInference.setup_problem(3, dummy_tensors_to_vars, dummy_tensor_data)
-    return TNProblem(static, UInt64)
+    return TNProblem(static)
 end
 
 @testset "basic problem creation" begin
