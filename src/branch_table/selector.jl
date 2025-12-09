@@ -7,7 +7,6 @@ struct MostOccurrenceSelector <: AbstractSelector
     max_tensors::Int
 end
 function compute_var_cover_scores_weighted(problem::TNProblem)
-    num_vars = length(problem.static.vars)
     scores = problem.buffer.activity_scores
     fill!(scores, 0.0)
 
@@ -44,19 +43,18 @@ function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasu
             max_score = var_scores[i]
             var_id = i
         end
-    end    
+    end
     # Check if all scores are zero - problem has reduced to 2-SAT
     if max_score == 0.0
         @info "2-SAT detected"
         solution = solve_2sat(problem)
-        return isnothing(solution) ? [] : [solution]
+        return isnothing(solution) ? nothing : [solution]
     end
 
     result = compute_branching_result(cache, problem, var_id, measure, set_cover_solver)
-    isnothing(result) && return []
-    clauses = OptimalBranchingCore.get_clauses(result)
-    # @assert haskey(problem.buffer.branching_cache, clauses[1])
-    return [problem.buffer.branching_cache[clauses[i]] for i in 1:length(clauses)]
+    isnothing(result) && return nothing
+    region, _ = get_region_data!(cache, problem, var_id)
+    return (OptimalBranchingCore.get_clauses(result), region.vars)
 end
 
 struct MinGammaSelector <: AbstractSelector
@@ -66,18 +64,15 @@ struct MinGammaSelector <: AbstractSelector
     set_cover_solver::AbstractSetCoverSolver
 end
 function findbest(cache::RegionCache, problem::TNProblem, m::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, ::MinGammaSelector)
-    best_subproblem = nothing
     best_γ = Inf
+    best_clauses = nothing
+    best_var_id = 0
 
     # Check all unfixed variables
     unfixed_vars = get_unfixed_vars(problem)
     if length(unfixed_vars) != 0 && measure(problem, NumHardTensors()) == 0
         solution = solve_2sat(problem)
-        if isnothing(solution)
-            return []
-        else
-            return [solution]
-        end
+        return isnothing(solution) ? nothing : [solution]
     end
     @inbounds for var_id in unfixed_vars
         reset_propagated_cache!(problem)
@@ -86,17 +81,12 @@ function findbest(cache::RegionCache, problem::TNProblem, m::AbstractMeasure, se
 
         if result.γ < best_γ
             best_γ = result.γ
-            clauses = OptimalBranchingCore.get_clauses(result)
-
-            @assert haskey(problem.buffer.branching_cache, clauses[1])
-            best_subproblem = [problem.buffer.branching_cache[clauses[i]] for i in 1:length(clauses)]
-
-            fixed_indices = findall(iszero, count_unfixed.(best_subproblem))
-            !isempty(fixed_indices) && (best_subproblem = [best_subproblem[fixed_indices[1]]])
-
+            best_clauses = OptimalBranchingCore.get_clauses(result)
+            best_var_id = var_id
             best_γ == 1.0 && break
         end
     end
-    best_γ === Inf && return []    
-    return best_subproblem
+    best_γ === Inf && return nothing
+    region, _ = get_region_data!(cache, problem, best_var_id)
+    return (best_clauses, region.vars)
 end

@@ -21,12 +21,9 @@ end
 
     @inbounds for (axis, var_id) in enumerate(var_axes)
         domain = doms[var_id]
-        if domain == DM_0
-            mask0 |= (UInt16(1) << (axis - 1))
-        elseif domain == DM_1
-            mask1 |= (UInt16(1) << (axis - 1))
-        end
-        @assert domain != DM_NONE
+        bit = UInt16(1) << (axis - 1)
+        mask0 |= ifelse(domain == DM_0, bit, UInt16(0))
+        mask1 |= ifelse(domain == DM_1, bit, UInt16(0))
     end
     return mask0, mask1
 end
@@ -87,7 +84,6 @@ function propagate_core!(cn::ConstraintNetwork, doms::Vector{DomainMask}, buffer
     queue = buffer.touched_tensors
     in_queue = buffer.in_queue
     queue_head = 1
-
     while queue_head <= length(queue)
         tensor_id = queue[queue_head]
         queue_head += 1

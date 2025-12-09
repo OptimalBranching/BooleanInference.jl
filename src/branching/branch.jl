@@ -2,13 +2,14 @@
 
 function OptimalBranchingCore.size_reduction(p::TNProblem, m::AbstractMeasure, cl::Clause{UInt64}, variables::Vector{Int})
     if haskey(p.buffer.branching_cache, cl)
-        newdoms = p.buffer.branching_cache[cl]
+        new_measure = p.buffer.branching_cache[cl]
     else
-        newdoms = probe_branch!(p.static, p.buffer, p.doms, cl, variables)
-        p.buffer.branching_cache[cl] = copy(newdoms)
+        new_doms = probe_branch!(p.static, p.buffer, p.doms, cl, variables)
+        @assert !has_contradiction(new_doms) "Contradiction found when probing branch $cl"
+        new_measure = measure_core(p.static, new_doms, m)
+        p.buffer.branching_cache[cl] = new_measure
     end
-    # @assert !has_contradiction(newdoms) "Contradiction found when probing branch $cl"
-    r = measure(p, m) - measure_core(p.static, newdoms, m)
+    r = measure(p, m) - new_measure
     return r
 end
 
@@ -34,19 +35,36 @@ function _bbsat!(ctx::SearchContext, doms::Vector{DomainMask})
     count_unfixed(doms) == 0 && return Result(true, doms, copy(ctx.stats))
 
     empty!(ctx.buffer.branching_cache)
-    
+
     temp_problem = TNProblem(ctx.static, doms, ctx.stats, ctx.buffer)
-    
-    subproblem_doms_list = findbest(ctx.region_cache, temp_problem, ctx.config.measure, ctx.config.set_cover_solver, ctx.config.selector)
-    # @show ctx.region_cache
-    isempty(subproblem_doms_list) && return Result(false, DomainMask[], copy(ctx.stats))
-    
-    record_branch!(ctx.stats, length(subproblem_doms_list))
-    @inbounds for subproblem_doms in subproblem_doms_list
-        record_visit!(ctx.stats)
-        result = _bbsat!(ctx, subproblem_doms)
-        result.found && return result
+
+    branch_result = findbest(ctx.region_cache, temp_problem, ctx.config.measure, ctx.config.set_cover_solver, ctx.config.selector)
+
+    # Handle failure case: no valid branching found
+    isnothing(branch_result) && return Result(false, DomainMask[], copy(ctx.stats))
+
+    # Handle 2-SAT case: findbest returns pre-propagated domains
+    if branch_result isa Vector{Vector{DomainMask}}
+        record_branch!(ctx.stats, length(branch_result))
+        @inbounds for subproblem_doms in branch_result
+            record_visit!(ctx.stats)
+            result = _bbsat!(ctx, subproblem_doms)
+            result.found && return result
+        end
+    else
+        # Handle normal case: findbest returns (clauses, variables)
+        # Propagate on-demand for each clause when needed
+        clauses, variables = branch_result
+        record_branch!(ctx.stats, length(clauses))
+        @inbounds for i in 1:length(clauses)
+            record_visit!(ctx.stats)
+            # Propagate this branch on-demand
+            subproblem_doms = probe_branch!(ctx.static, ctx.buffer, doms, clauses[i], variables)
+            # Copy to avoid aliasing with buffer.scratch_doms
+            result = _bbsat!(ctx, copy(subproblem_doms))
+            result.found && return result
+        end
     end
-    
+
     return Result(false, DomainMask[], copy(ctx.stats))
 end

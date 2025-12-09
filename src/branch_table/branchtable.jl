@@ -5,7 +5,7 @@ function compute_branching_result(cache::RegionCache, problem::TNProblem, var_id
     region, cached_configs = get_region_data!(cache, problem, var_id)
 
     # Filter configs that are compatible with current doms
-    feasible_configs = filter_feasible_configs(problem, region, cached_configs)
+    feasible_configs = filter_feasible_configs(problem, region, cached_configs, measure)
     isempty(feasible_configs) && return nothing
 
     # Build branching table from filtered configs
@@ -16,32 +16,33 @@ function compute_branching_result(cache::RegionCache, problem::TNProblem, var_id
 end
 
 
-@inline function probe_config!(buffer::SolverBuffer, problem::TNProblem, vars::Vector{Int}, config::UInt64)
+@inline function probe_config!(buffer::SolverBuffer, problem::TNProblem, vars::Vector{Int}, config::UInt64, measure::AbstractMeasure)
     # All variables in config are being set, so mask = all 1s
     mask = (UInt64(1) << length(vars)) - 1
+    @assert !(buffer.scratch_doms === problem.doms) "buffer.scratch_doms and problem.doms are the same object!"
     scratch = probe_assignment_core!(problem.static, buffer, problem.doms, vars, mask, config)
-    return scratch[1] != DM_NONE
+    @assert scratch === buffer.scratch_doms "scratch should be buffer.scratch_doms"
+    @assert !(scratch === problem.doms) "scratch should not be problem.doms"
+    if scratch[1] != DM_NONE
+        buffer.branching_cache[Clause(mask, config)] = measure_core(problem.static, scratch, measure)
+        return true
+    end
+    return false
 end
 
 @inline function get_region_masks(doms::Vector{DomainMask}, vars::Vector{Int})
     return mask_value(doms, vars, UInt64)
 end
 
-function filter_feasible_configs(problem::TNProblem, region::Region, configs::Vector{UInt64})
+function filter_feasible_configs(problem::TNProblem, region::Region, configs::Vector{UInt64}, measure::AbstractMeasure)
     feasible = UInt64[]
-    clause_mask = (UInt64(1) << length(region.vars)) - 1
-
     check_mask, check_value = get_region_masks(problem.doms, region.vars)
 
     buffer = problem.buffer
     @inbounds for config in configs
         (config & check_mask) == check_value || continue
-        is_feasible = probe_config!(buffer, problem, region.vars, config)
-
-        if is_feasible
-            push!(feasible, config)
-            buffer.branching_cache[Clause(clause_mask, config)] = copy(buffer.scratch_doms)
-        end
+        is_feasible = probe_config!(buffer, problem, region.vars, config, measure)
+        is_feasible && push!(feasible, config)
     end
     return feasible
 end
