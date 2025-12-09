@@ -24,20 +24,7 @@ end
 end
 
 @inline function get_region_masks(doms::Vector{DomainMask}, vars::Vector{Int})
-    mask = UInt64(0)
-    value = UInt64(0)
-    
-    @inbounds for (i, var_id) in enumerate(vars)
-        d = doms[var_id]
-        if d == DM_1
-            bit = UInt64(1) << (i - 1)
-            mask |= bit
-            value |= bit
-        elseif d == DM_0
-            mask |= (UInt64(1) << (i - 1))
-        end
-    end
-    return mask, value
+    return mask_value(doms, vars, UInt64)
 end
 
 function filter_feasible_configs(problem::TNProblem, region::Region, configs::Vector{UInt64})

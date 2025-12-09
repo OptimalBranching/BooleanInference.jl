@@ -59,6 +59,22 @@ function is_legal(checklist::Vector{DomainMask})
     return mask, value
 end
 
+@inline function mask_value(doms::Vector{DomainMask}, vars::Vector{Int}, ::Type{T}) where {T<:Unsigned}
+    mask = zero(T)
+    value = zero(T)
+    @inbounds for (i, var_id) in enumerate(vars)
+        dm = doms[var_id]
+        if dm == DM_1
+            bit = T(1) << (i - 1)
+            mask |= bit
+            value |= bit
+        elseif dm == DM_0
+            mask |= (T(1) << (i - 1))
+        end
+    end
+    return mask, value
+end
+
 packint(bits::NTuple{N, Int}) where {N} = reduce(|, (UInt64(b) << (i - 1) for (i, b) in enumerate(bits)); init = UInt64(0))
 packint(i::Int) = packint((i - 1,))
 packint(ci::CartesianIndex{N}) where {N} = packint(ntuple(j -> ci.I[j] - 1, N))

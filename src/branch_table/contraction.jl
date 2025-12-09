@@ -22,37 +22,34 @@ function contract_tensors(tensors::Vector{<:AbstractArray{T}}, ixs::Vector{Vecto
     return optcode(tensors...)
 end
 
+const ONE_TROP = one(Tropical{Float64})
+const ZERO_TROP = zero(Tropical{Float64})
+
 # Slice BoolTensor and directly construct multi-dimensional Tropical tensor
 function slicing(static::ConstraintNetwork, tensor::BoolTensor, doms::Vector{DomainMask})
-    k = length(tensor.var_axes)
-
-    fixed_idx = 0
     free_axes = Int[]
+    
+    @inbounds for (i, var_id) in enumerate(tensor.var_axes)
+        dm = doms[var_id]
+        is_fixed(dm) || push!(free_axes, i)
+    end
+    fixed_mask, fixed_val = mask_value(doms, tensor.var_axes, UInt16)
 
-    @inbounds for axis in 1:k
-        if is_fixed(doms[tensor.var_axes[axis]])
-            has1(doms[tensor.var_axes[axis]]) && (fixed_idx |= (1 << (axis-1)))
-        else
-            push!(free_axes, axis)
+    dims = ntuple(_ -> 2, length(free_axes))
+    out = fill(ZERO_TROP, dims) # Allocate dense array
+    
+    supports = get_support(static, tensor)
+
+    @inbounds for config in supports
+        if (config & fixed_mask) == fixed_val
+            dense_idx = 1
+            for (bit_pos, axis_idx) in enumerate(free_axes)
+                if (config >> (axis_idx - 1)) & 1 == 1
+                    dense_idx += (1 << (bit_pos - 1))
+                end
+            end
+            out[dense_idx] = ONE_TROP
         end
     end
-
-    # Directly construct multi-dimensional array
-    n_free = length(free_axes)
-    dims = ntuple(_ -> 2, n_free)
-    out = Array{Tropical{Float64}}(undef, dims...)
-
-    one_trop = one(Tropical{Float64})
-    zero_trop = zero(Tropical{Float64})
-
-    dense_tensor = get_dense_tensor(static, tensor)
-    @inbounds for ci in CartesianIndices(dims)
-        full_idx = fixed_idx
-        for (i, axis) in enumerate(free_axes)
-            (ci[i] == 2) && (full_idx |= (1 << (axis-1)))
-        end
-        out[ci] = dense_tensor[full_idx+1] ? one_trop : zero_trop
-    end
-
     return out
 end

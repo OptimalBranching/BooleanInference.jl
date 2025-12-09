@@ -38,6 +38,7 @@ function _bbsat!(ctx::SearchContext, doms::Vector{DomainMask})
     temp_problem = TNProblem(ctx.static, doms, ctx.stats, ctx.buffer)
     
     subproblem_doms_list = findbest(ctx.region_cache, temp_problem, ctx.config.measure, ctx.config.set_cover_solver, ctx.config.selector)
+    # @show ctx.region_cache
     isempty(subproblem_doms_list) && return Result(false, DomainMask[], copy(ctx.stats))
     
     record_branch!(ctx.stats, length(subproblem_doms_list))
