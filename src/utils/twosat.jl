@@ -29,9 +29,7 @@ function solve_2sat(problem::TNProblem)
                 push!(unfixed_vars, var)
             end
         end
-
-        # Skip if already handled by propagation
-        length(unfixed_vars) > 2 && continue
+        @assert length(unfixed_vars) <= 2 "Tensor $(tensor_id) has more than 2 unfixed variables"
 
         if length(unfixed_vars) == 1
             # Unit clause - should have been propagated already, skip
@@ -64,14 +62,17 @@ function solve_2sat(problem::TNProblem)
         end
     end
 
-    # Build solution: assign true to variables in later SCCs
+    # Build solution: assign true to the literal that appears later in the
+    # reverse-topological SCC order (Tarjan yields reverse topo order).
     solution = copy(problem.doms)
     for i in 1:n_vars
         if is_fixed(solution[i])
             continue
         end
-        # Assign true if ¬x_i appears in an earlier SCC than x_i
-        if scc_id[2i] > scc_id[2i-1]
+        # Standard 2-SAT assignment rule with Tarjan's reverse topological order:
+        # assign x = true if comp(x) appears earlier in the Tarjan list
+        # (i.e., lower index) than comp(¬x); otherwise x = false.
+        if scc_id[2i-1] < scc_id[2i]
             solution[i] = DM_1
         else
             solution[i] = DM_0
@@ -84,50 +85,52 @@ end
 """
     add_binary_implications!(static, graph, tensor, vars, doms, var1, var2)
 
-Add implications to the graph based on a binary constraint.
-For a clause (¬a ∨ ¬b), we add: a → ¬b and b → ¬a
-For a clause (a ∨ b), we add: ¬a → b and ¬b → a
+Add implications to the graph based on a binary constraint by checking forbidden assignments.
+Uses the standard 2-SAT reduction: a forbidden assignment (val1, val2) implies clauses
+(¬(var1=val1) ∨ ¬(var2=val2)).
 """
 function add_binary_implications!(static, graph, tensor, vars, doms, var1, var2)
     # Find positions of var1 and var2 in the tensor
     pos1 = findfirst(==(var1), vars)
     pos2 = findfirst(==(var2), vars)
     
-    # Check which assignments are valid
-    # We need to check all 4 combinations of (var1, var2)
+    # Check all 4 combinations
     valid_00 = is_valid_assignment(static, tensor, vars, doms, pos1, false, pos2, false)
     valid_01 = is_valid_assignment(static, tensor, vars, doms, pos1, false, pos2, true)
     valid_10 = is_valid_assignment(static, tensor, vars, doms, pos1, true, pos2, false)
     valid_11 = is_valid_assignment(static, tensor, vars, doms, pos1, true, pos2, true)
 
-    # Add implications based on invalid assignments
-    # If (0,0) is invalid: ¬var1 → var1, ¬var2 → var2 (contradiction, should be caught earlier)
-    # If (0,1) is invalid: ¬var1 → ¬var2
-    # If (1,0) is invalid: var1 → var2
-    # If (1,1) is invalid: var1 → ¬var2, var2 → ¬var1
+    # Vertex indices in the graph:
+    # 2k-1 represents x_k = true
+    # 2k   represents x_k = false
+    
+    u_true  = 2var1 - 1
+    u_false = 2var1
+    v_true  = 2var2 - 1
+    v_false = 2var2
 
-    if !valid_00 && !valid_11 && valid_01 && valid_10
-        # XOR constraint: either both true or both false is invalid
-        push!(graph[2var1-1], 2var2-1)  # var1 → var2
-        push!(graph[2var2-1], 2var1-1)  # var2 → var1
-        push!(graph[2var1], 2var2)      # ¬var1 → ¬var2
-        push!(graph[2var2], 2var1)      # ¬var2 → ¬var1
-    elseif !valid_11
-        # At least one must be false: ¬(var1 ∧ var2)
-        push!(graph[2var1-1], 2var2)    # var1 → ¬var2
-        push!(graph[2var2-1], 2var1)    # var2 → ¬var1
-    elseif !valid_00
-        # At least one must be true: var1 ∨ var2
-        push!(graph[2var1], 2var2-1)    # ¬var1 → var2
-        push!(graph[2var2], 2var1-1)    # ¬var2 → var1
-    elseif !valid_01
-        # If var2 then var1: var2 → var1
-        push!(graph[2var2-1], 2var1-1)  # var2 → var1
-        push!(graph[2var1], 2var2)      # ¬var1 → ¬var2
-    elseif !valid_10
-        # If var1 then var2: var1 → var2
-        push!(graph[2var1-1], 2var2-1)  # var1 → var2
-        push!(graph[2var2], 2var1)      # ¬var2 → ¬var1
+    # Case 1: (0, 0) is invalid => (A or B) => (!A -> B), (!B -> A)
+    if !valid_00
+        push!(graph[u_false], v_true)
+        push!(graph[v_false], u_true)
+    end
+
+    # Case 2: (0, 1) is invalid => (A or !B) => (!A -> !B), (B -> A)
+    if !valid_01
+        push!(graph[u_false], v_false)
+        push!(graph[v_true], u_true)
+    end
+
+    # Case 3: (1, 0) is invalid => (!A or B) => (A -> B), (!B -> !A)
+    if !valid_10
+        push!(graph[u_true], v_true)
+        push!(graph[v_false], u_false)
+    end
+
+    # Case 4: (1, 1) is invalid => (!A or !B) => (A -> !B), (B -> !A)
+    if !valid_11
+        push!(graph[u_true], v_false)
+        push!(graph[v_true], u_false)
     end
 end
 

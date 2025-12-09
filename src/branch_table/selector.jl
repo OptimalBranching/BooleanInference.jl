@@ -47,6 +47,7 @@ function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasu
     end    
     # Check if all scores are zero - problem has reduced to 2-SAT
     if max_score == 0.0
+        @info "2-SAT detected"
         solution = solve_2sat(problem)
         return isnothing(solution) ? [] : [solution]
     end

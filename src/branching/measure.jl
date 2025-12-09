@@ -1,11 +1,17 @@
 struct NumUnfixedVars <: AbstractMeasure end
+function measure_core(cn::ConstraintNetwork, doms::Vector{DomainMask}, ::NumUnfixedVars)
+    return count_unfixed(doms)
+end
 function OptimalBranchingCore.measure(problem::TNProblem, ::NumUnfixedVars)
-    return count_unfixed(problem.doms)
+    return measure_core(problem.static, problem.doms, NumUnfixedVars())
 end
 
 struct NumUnfixedTensors <: AbstractMeasure end
+function measure_core(cn::ConstraintNetwork, doms::Vector{DomainMask}, ::NumUnfixedTensors)
+    return length(get_active_tensors(cn, doms))
+end
 function OptimalBranchingCore.measure(problem::TNProblem, ::NumUnfixedTensors)
-    return length(get_active_tensors(problem.static, problem.doms))
+    return measure_core(problem.static, problem.doms, NumUnfixedTensors())
 end
 
 struct NumHardTensors <: AbstractMeasure end
