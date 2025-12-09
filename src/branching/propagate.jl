@@ -15,7 +15,7 @@
     return valid_or_agg, valid_and_agg, found_any
 end
 
-# return (query_mask0, query_mask1, has_confict)
+# return (query_mask0, query_mask1)
 @inline function compute_query_masks(doms::Vector{DomainMask}, var_axes::Vector{Int})
     mask0 = UInt16(0); mask1 = UInt16(0);
 
@@ -25,11 +25,10 @@ end
             mask0 |= (UInt16(1) << (axis - 1))
         elseif domain == DM_1
             mask1 |= (UInt16(1) << (axis - 1))
-        elseif domain == DM_NONE
-            return mask0, mask1, true
         end
+        @assert domain != DM_NONE
     end
-    return mask0, mask1, false
+    return mask0, mask1
 end
 
 @inline function apply_updates!(doms::Vector{DomainMask}, var_axes::Vector{Int}, valid_or::UInt16, valid_and::UInt16, cn::ConstraintNetwork, queue::Vector{Int}, inqueue::BitVector)
@@ -95,8 +94,8 @@ function propagate_core!(cn::ConstraintNetwork, doms::Vector{DomainMask}, buffer
         in_queue[tensor_id] = false
 
         tensor = cn.tensors[tensor_id]
-        q_mask0, q_mask1, has_conflict = compute_query_masks(doms, tensor.var_axes)
-        has_conflict && (doms[1] = DM_NONE; return doms)
+        q_mask0, q_mask1 = compute_query_masks(doms, tensor.var_axes)
+        # has_conflict && (println("tensor $(tensor_id) has conflict"); doms[1] = DM_NONE; return doms)
 
         support = get_support(cn, tensor)
         valid_or, valid_and, found = scan_supports(support, q_mask0, q_mask1)

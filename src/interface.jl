@@ -72,7 +72,7 @@ function solve_factoring(
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
         # selector=MinGammaSelector(2,4,TNContractionSolver(), GreedyMerge()),
-        selector=MostOccurrenceSelector(3,4),
+        selector=MostOccurrenceSelector(2,4),
         measure=NumHardTensors(),
         set_cover_solver=GreedyMerge()
     ),

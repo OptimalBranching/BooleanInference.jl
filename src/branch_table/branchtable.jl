@@ -2,8 +2,7 @@ struct TNContractionSolver <: AbstractTableSolver end
 
 # Filter cached configs based on current doms and compute branching result for a specific variable
 function compute_branching_result(cache::RegionCache, problem::TNProblem, var_id::Int, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver)
-    region = cache.var_to_region[var_id]
-    cached_configs = cache.var_to_configs[var_id]
+    region, cached_configs = get_region_data!(cache, problem, var_id)
 
     # Filter configs that are compatible with current doms
     feasible_configs = filter_feasible_configs(problem, region, cached_configs)
