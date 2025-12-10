@@ -21,6 +21,9 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 TropicalNumbers = "b3a74e9c-7526-4576-a4eb-79c0d4c32334"
 
+[sources]
+OptimalBranchingCore = {path = "/Users/liujinguo/.julia/dev/OptimalBranching/lib/OptimalBranchingCore"}
+
 [compat]
 BitBasis = "0.9.10"
 CairoMakie = "0.15.6"

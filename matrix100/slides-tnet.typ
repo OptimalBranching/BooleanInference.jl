@@ -88,6 +88,9 @@
   content((0, -2.5), [$G$])
 }
 
+#let hd(name) = table.cell(text(10pt)[#name], fill: green.lighten(50%))
+#let s(name) = table.cell(text(10pt)[#name])
+
 #let decision(a, token, size: 1) = {
   import draw: *
   let color = if token < 0 {red} else {white}
@@ -153,7 +156,36 @@
 #outline-slide()
 
 = Tensor network for constraint satisfaction
-== Two Examples (used in later sections)
+
+== LLM needs a reasoner
+#timecounter(1)
+
+#v(10pt)
+*Large language models (LLMs) suffers from complex reasoning*#footnote([This statement is from year 2023, by @Pan2023.])
+- Struggle with multi-step logical reasoning ("Hallucinations")
+- Cannot strictly enforce hard constraints (e.g. rules of a game)
+
+#align(center, [? Machines cannot deep reason])
+#pause
+#align(center, [No! We have reasoners.])
+
+#figure(canvas({
+  import draw: *
+  content((-5, 0), [*LLM*])
+  content((0, 0), [*Human*])
+  content((5, 0), [*Reasoner*])
+  content((-3, -1), text(12pt)[Reasoning])
+  line((-2, -1), (-1, -1), mark: (end: "straight"))
+  content((4.2, -1), text(12pt)[Knowledge & Intuition])
+  line((2, -1), (1, -1), mark: (end: "straight"))
+}))
+*Reasoner*: Logic programming, Satisfiability Modulo Theories (SMT), constraint satisfaction problems (CSP), etc.
+(Searching prohibitively large solution space!)
+
+We can combine LLM + Reasoner! @Pan2023
+
+
+== Constraint satisfaction problems: MIS and SAT
 #timecounter(1)
 #myslide(align(top)[
   *Maximum Independent Set (MIS)*
@@ -173,46 +205,313 @@
   - *Constraint*: No two neighbors both selected
   - *Goal*: Maximize $sum x_i$
 ], align(top)[
-  *Boolean Satisfiability (SAT)*
+  *Circuit Satisfiability*
   
   #figure(canvas({
     import draw: *
-    content((0, 0.8), text(14pt)[$(x_1 or x_2) and (not x_1 or x_3)$])
-    content((0, 0), text(14pt)[$ and (not x_2 or not x_3)$])
+    content((0, 0.8), text(14pt)[$(x_1 or x_2 = x_3) and\ (x_1 xor x_3 = x_4) and\ (x_5 = not x_4)$])
   }))
   #v(10pt)
   
   - *Variables*: $x_i in \{0, 1\}$ (true or false)
-  - *Constraint*: Clauses (OR of literals), generalized to gates later
-  - *Goal*: Satisfy all clauses
+  - *Constraint*: Logic gates
+  - *Goal*: Satisfy all logical constraints
 ])
 
 #align(center, box(stroke: black, inset: 10pt)[
-  Brute-force: $2^n$ configurations. Wait! Constraints prune the search space.
+  Both are NP-complete @Karp1972 — brute-force: $2^n$ configurations.
 ])
 
-== Encoding problems in an energy model
-1. Optimal solution: the configuration with the lowest energy
-2. Hard constraint: infinite energy punishment
-3. Objective: energy
+_Remark_: So far, none of the LLMs can beat state-of-the-art CSP solvers.
 
-#myslide([$H_"MIS" = $],[$H_"SAT" = $])
+== Encoding CSP as Energy Minimization
+#timecounter(2)
+Map constraint satisfaction to finding the *ground state* of an energy function:
 
-== Partition function and its zero temperature limit
+#myslide([
+  *MIS Hamiltonian*:
+  $ H_"MIS" = -sum_i x_i + lambda sum_((i,j) in E) x_i x_j $
+  - First term: reward for selecting vertices
+  - Second term: penalty for violated edges ($lambda arrow infinity$)
+], [
+  *SAT Hamiltonian*:
+  $ H_"SAT" = lambda sum_"clause" (1 - "sat"("clause")) $
+  - Each unsatisfied clause contributes energy $lambda$ ($arrow.r infinity$)
+  - Solution: $H = 0$
+])
 
-== Tropical algebra, the gain and loss
-- Gain: enhanced sparsity
-- Loss: additive inverse, polynomial time (optimal) matrix factorization
+#align(center, box(stroke: black, inset: 10pt, fill: yellow.lighten(80%))[
+  *Hard constraints* $arrow.r$ *infinite energy penalty*\
+  *Objective* $arrow.r$ *additive energy terms* to be minimized
+])
 
-== Path integral view
-When the tensors are sparse
-- The success of Pauli propagation
+== Mapping CSP to Tensor Networks @Liu2023
+#timecounter(2)
 
-When the problem has low tree-width
-- Effient tensor network algorithm
+#myslide([
+  *Tensor network representation*:
+  - Each *variable* $x_i$ $arrow.r$ a *bond* (index)
+  - Each *constraint* $arrow.r$ a *tensor*
+  
+  #figure(canvas({
+    import draw: *
+    // Simple tensor network for MIS
+    circle((0, 0), radius: 0.6, name: "v")
+    content((0, 0), [$V_i$])
+    
+    let dx = 3.0
+    content((dx, 0), [$E_(i j)$])
+    circle((dx, 0), radius: 0.6, name: "e")
+    line("v", (rel: (0, 1.5), to: "v"))
+    line("e", (rel: (-1, 1.5), to: "e"))
+    line("e", (rel: (1, 1.5), to: "e"))
+    content((0, 1.8), [$x_i$])
+    content((dx  -1, 1.8), [$x_i$])
+    content((dx + 1, 1.8), [$x_j$])
+  }))
+], [
+  *MIS problem*:
+  $ Z(beta) &= sum_(x_1, dots, x_n) e^(-beta H_"MIS"(x_1, dots, x_n)) \
+  &= sum_(x_1, dots, x_n) product_i V_i (x_i) product_((i,j) in E) E_(i j)(x_i, x_j) $
 
-== Large scale problem?
-- Slicing
+  - Vertex: $V_i (x_i) = e^(beta x_i)$ (weight for selection)
+  - Edge: $E_(i j)(x_i, x_j) = cases(0 "if" x_i = x_j = 1, 1 "otherwise")$
+  
+])
+
+== From Partition Function to Optimization
+#timecounter(1)
+In the limit $beta arrow infinity$ (zero temperature):
+$ F = - 1/beta ln Z(beta) arrow min_sigma H(sigma) $
+
+Emergence of max-plus algebra @Liu2021:
+#align(center, table(
+  columns: (auto, auto, auto), inset: 7pt,
+  table.header(table.cell(fill: green.lighten(50%))[], table.cell(fill: green.lighten(50%))[Partition function ($beta arrow.r infinity$)], table.cell(fill: green.lighten(50%))[Tropical ($max, +$)]),
+  [Sum], [$e^(beta a) + e^(beta b) approx max(e^(beta a), e^(beta b))$], [$max(a, b)$],
+  [Product], [$e^(beta a) e^(beta b) = e^(beta (a + b))$], [$a + b$],
+  [Zero], [$0$], [$-infinity$],
+  [One], [$1$], [$0$],
+))
+
+_Remark_: Commutative semiring, tensor network contraction order optimization is still valid. However, no fast matrix factorization.
+
+// Tensor network visualization functions (DRY principle)
+#let tn-node-style = (radius: 0.3, fill: blue.lighten(70%), stroke: (thickness: 1.5pt))
+#let tn-edge-style = (thickness: 1.5pt)
+
+#let draw-chain-tn(n: 5, spacing: 1.5, label: [Chain $(O(D^2))$]) = {
+  import draw: *
+  let start_x = -(n - 1) * spacing / 2
+  let radius = 0.35
+  
+  // Create named nodes
+  for i in range(n) {
+    let x = start_x + i * spacing
+    circle((x, 0), radius: radius, name: "n" + str(i), ..tn-node-style)
+  }
+  
+  // Connect nodes
+  for i in range(n - 1) {
+    line("n" + str(i), "n" + str(i + 1), stroke: tn-edge-style)
+  }
+  
+  content((0, -1.5), text(12pt, weight: "bold")[#label])
+}
+
+#let draw-tree-tn(label: [Tree $(O(D^3))$]) = {
+  import draw: *
+  let node-data = (
+    ("root", (0, 1.5), 0.35),
+    ("l1-0", (-1.2, 0.6), 0.35),
+    ("l1-1", (1.2, 0.6), 0.35),
+    ("l2-0", (-1.8, -0.3), 0.3),
+    ("l2-1", (-0.6, -0.3), 0.3),
+    ("l2-2", (0.6, -0.3), 0.3),
+    ("l2-3", (1.8, -0.3), 0.3),
+  )
+  let edges = (
+    ("root", "l1-0"), ("root", "l1-1"),
+    ("l1-0", "l2-0"), ("l1-0", "l2-1"),
+    ("l1-1", "l2-2"), ("l1-1", "l2-3"),
+  )
+  
+  // Create named nodes
+  for (node-name, pos, radius) in node-data {
+    circle(pos, radius: radius, name: node-name, ..tn-node-style)
+  }
+  
+  // Connect nodes
+  for (from, to) in edges {
+    line(from, to, stroke: tn-edge-style)
+  }
+  
+  content((0, -1.5), text(12pt, weight: "bold")[#label])
+}
+
+#let draw-grid-tn(size: 4, spacing: 0.9, label: [Grid $(O(D^(sqrt(n))))$]) = {
+  import draw: *
+  let offset = -(size - 1) * spacing / 2
+  let radius = 0.28
+  
+  // Create named nodes
+  for i in range(size) {
+    for j in range(size) {
+      let x = offset + i * spacing
+      let y = offset + j * spacing
+      circle((x, y), radius: radius, name: "g" + str(i) + "-" + str(j), ..tn-node-style)
+    }
+  }
+  
+  // Connect horizontal edges
+  for i in range(size) {
+    for j in range(size - 1) {
+      line("g" + str(i) + "-" + str(j), "g" + str(i) + "-" + str(j + 1), stroke: tn-edge-style)
+    }
+  }
+  
+  // Connect vertical edges
+  for i in range(size - 1) {
+    for j in range(size) {
+      line("g" + str(i) + "-" + str(j), "g" + str(i + 1) + "-" + str(j), stroke: tn-edge-style)
+    }
+  }
+  
+  content((0, offset - 1.2), text(12pt, weight: "bold")[#label])
+}
+
+#let draw-mera-tn(label: [MERA $(O(D^(log n)))$]) = {
+  import draw: *
+  let radius = 0.25
+  let h-space = 0.7
+  
+  // MERA: Alternating layers of disentanglers (squares) and isometries (circles)
+  // Physical layer (bottom): 8 sites
+  let y0 = 0
+  for i in range(8) {
+    let x = (i - 3.5) * h-space
+    circle((x, y0), radius: radius, name: "p" + str(i), ..tn-node-style)
+  }
+  
+  // Layer 1: Disentanglers (act on pairs 0-1, 2-3, 4-5, 6-7)
+  let y1 = 0.8
+  for i in range(4) {
+    let x = (i * 2 - 3) * h-space
+    rect((x - 0.2, y1 - 0.2), (x + 0.2, y1 + 0.2), name: "d1-" + str(i), fill: green.lighten(70%), stroke: (thickness: 1.5pt))
+  }
+  
+  // Connect physical to disentanglers
+  for i in range(4) {
+    line("p" + str(i * 2), "d1-" + str(i), stroke: tn-edge-style)
+    line("p" + str(i * 2 + 1), "d1-" + str(i), stroke: tn-edge-style)
+  }
+  
+  // Layer 2: Isometries (coarse-grain, but with OVERLAP - key difference from tree!)
+  let y2 = 1.6
+  for i in range(3) {
+    let x = (i - 1) * h-space * 2
+    circle((x, y2), radius: radius, name: "iso1-" + str(i), fill: orange.lighten(70%), stroke: (thickness: 1.5pt))
+  }
+  
+  // Connect disentanglers to isometries (overlapping pattern!)
+  line("d1-0", "iso1-0", stroke: tn-edge-style)
+  line("d1-1", "iso1-0", stroke: tn-edge-style)  // Shared!
+  line("d1-1", "iso1-1", stroke: tn-edge-style)  // Shared!
+  line("d1-2", "iso1-1", stroke: tn-edge-style)  // Shared!
+  line("d1-2", "iso1-2", stroke: tn-edge-style)  // Shared!
+  line("d1-3", "iso1-2", stroke: tn-edge-style)
+  
+  // Layer 3: Another disentangler layer
+  let y3 = 2.4
+  rect((-0.2, y3 - 0.2), (0.2, y3 + 0.2), name: "d2-0", fill: green.lighten(70%), stroke: (thickness: 1.5pt))
+  
+  // Connect isometries to top disentangler
+  line("iso1-0", "d2-0", stroke: tn-edge-style)
+  line("iso1-1", "d2-0", stroke: tn-edge-style)
+  line("iso1-2", "d2-0", stroke: tn-edge-style)
+  
+  content((0, y0 - 1.2), text(12pt, weight: "bold")[#label])
+}
+
+#let draw-regular-tn(n: 6, graph-radius: 1.3, label: [3-Regular $O(D^(n\/6))$]) = {
+  import draw: *
+  let radius = 0.3
+  
+  // Create named nodes in circular layout
+  for i in range(n) {
+    let angle = i * 360deg / n - 90deg
+    let x = graph-radius * calc.cos(angle)
+    let y = graph-radius * calc.sin(angle)
+    circle((x, y), radius: radius, name: "r" + str(i), ..tn-node-style)
+  }
+  
+  // Connect nodes to form 3-regular graph
+  let edges = ((0, 1), (0, 2), (0, 5), (1, 2), (1, 3), (2, 4), (3, 4), (3, 5), (4, 5))
+  for (i, j) in edges {
+    line("r" + str(i), "r" + str(j), stroke: tn-edge-style)
+  }
+  
+  content((0, -graph-radius - 1.2), text(12pt, weight: "bold")[#label])
+}
+
+== The difficulty of tensor network contraction
+
+#align(center, [
+  #grid(align: bottom, columns: 3, column-gutter: 30pt, row-gutter: 25pt,
+    canvas(length: 0.6cm, { draw-chain-tn() }),
+    canvas(length: 0.6cm, { draw-tree-tn() }),
+    canvas(length: 0.6cm, { draw-mera-tn() }),
+  )
+  
+  #v(15pt)
+  
+  #grid(columns: 2, column-gutter: 60pt,
+    canvas(length: 0.6cm, { draw-grid-tn() }),
+    canvas(length: 0.6cm, { draw-regular-tn() }),
+  )
+])
+
+== Tensor Network Contraction Complexity
+#timecounter(2)
+
+=== Intuition
+The tree tensor network is easier to contract. Why not map a tensor network to a tree by "gluing" the variables together?
+
+*Time complexity*: $O(2^"tw")$ where $"tw"$ = *tree-width* of the network @Markov2008
+
+#myslide([
+  *Low tree-width* (geometric graphs):
+  - Grid: $"tw" = O(sqrt(n))$
+  - Tree: $"tw" = 1$
+  
+  $arrow.r$ Sub-exponential algorithms exist!
+], [
+  *High tree-width* (random/dense graphs):
+  - 3-regular: $"tw" approx n\/6$
+  - Complete graph: $"tw" = n - 1$
+  
+  $arrow.r$ Exponential, but sparse tensors help!
+])
+
+#align(center, box(stroke: black, inset: 10pt, fill: yellow.lighten(80%))[
+  *Challenge*: What if $2^"tw"$ is too large for memory?
+])
+
+== Summary (1)
+
+- Constraint satisfaction problem (CSP) is a reasoner that LLM can not beat yet.
+- CSP problems can be represented as tensor networks (optionally with max-plus algebra).
+- Tensor network is efficient for low-dimensional problems, remains exponential for high-dimensional problems.
+- The *memory cost* of tensor contraction is the bottleneck.
+
+
+= Reduce the memory: From slicing to branching
+
+== The Slicing Technique @Gray2021
+#timecounter(2)
+*Idea*: Fix some variables to reduce tree-width, then sum over all values.
+
+$ Z = sum_(x_1, dots, x_n) T(x_1, dots, x_n) = sum_(bold(x)_"slice") underbrace(sum_(bold(x)_"rest") T(x_1, dots, x_n), "smaller tree-width") $
 
 #let show-graph-remove-edge(vertices, edges, removed, ready, color: blue, radius:0.2, st: 0.5pt) = {
   import draw: *
@@ -230,7 +529,7 @@ When the problem has low tree-width
   }
 }
 
-#align(center, canvas({
+#align(center, canvas(length: 0.8cm, {
   import draw: *
   let lw = 2pt
   let ksg_loc = ((1.2, 2.3), (3.4, -0.4), (0.3, 2.3), (2.8, 2.0), (4.5, 1.1), (1.7, 0.5), (0.6, 0.1), (4.1, 2.6), (3.0, 0.8), (0.0, 1.1), (4.8, -0.3))
@@ -245,29 +544,131 @@ When the problem has low tree-width
   let gridsize = 1.5
   let r = 0.3
   show-graph-remove-edge(ksg_loc.map(v=>(v.at(0)*gridsize, v.at(1)*gridsize)), edges, (), (2,10,12,14,16,18), radius:r, st: lw)
-  content((3.5, -2), [Fix the value of red variables (tree-width $arrow.b$)])
+  content((3.5, -2), [Fix #text(red)[red] variables $arrow.r$ tree-width $arrow.b$])
 
-  content((9.5, 2), text(30pt)[$= 2^6 times$])
+  content((9.5, 2), text(24pt)[$= quad 2^6 times$])
 
   set-origin((12, 0))
   show-graph-remove-edge(ksg_loc.map(v=>(v.at(0)*gridsize, v.at(1)*gridsize)), edges, (2,10,12,14,16,18),(), radius:r, st: lw)
   }))
 
-== Can we do better?
+== Slicing Trade-off
+#timecounter(1)
+
+#myslide([
+  *With $k$ sliced variables*:
+  - Time: $O(2^k dot 2^("tw" - Delta"tw"))$
+  - Space: $O(2^("tw" - Delta"tw"))$
+], [
+  #figure(canvas(length: 1.5cm, {
+    import draw: *
+    // Trade-off curve
+    line((0, 0), (5, 0), mark: (end: "straight"))
+    line((0, 0), (0, 3), mark: (end: "straight"))
+    content((6, 0), [Time])
+    content((0, 3.5), [Space])
+    bezier((0.5, 2.5), (4.5, 0.3), (2, 1.5))
+    circle((0.5, 2.5), radius: 0.1, fill: blue)
+    circle((4.5, 0.3), radius: 0.1, fill: red)
+    content((0.8, 2.8), text(14pt)[no slice])
+    content((5.0, 0.6), text(14pt)[max slice])
+  }))
+*Problem*: The time complexity grows.
+
+])
+
+
+== Sparse Tensors in CSP
+#timecounter(2)
+
+Hard constraints create *sparse tensors* — most entries are $0$ (or $-infinity$ in tropical).
+
+*Example*: Edge tensor for MIS
+$ E(x_i, x_j) = mat(1, 1; 1, 0) quad arrow.r quad "only 3 of 4 entries are non-zero" $
+
+If we have $n$-such tensors, the ratio of non-zero entries is $~(3\/4)^n$! With bounding, it can be much smaller.
+
+*For Circuit SAT*: Each gate tensor has few satisfying assignments out of $2^k$ (where $k$ is the number of input/output wires).
+
+#align(center, box(stroke: black, inset: 10pt)[
+  *Sparsity* = ratio of zero entries, can be very close to 1!
+])
+
+== Path Integral Perspective
+#timecounter(2)
+
+Tensor contraction $approx$ summing over all "paths" (configurations):
+$ Z = sum_"paths s.t. constraints" "weight"("path") $
+
+*Sparse tensors*:
+- *invalid* paths are those with zero weight, they either:
+ - violate constraints, or
+ - *bounded* by maximum criteria (local or global)
+
+_Remark_: In *quantum circuit simulation*, a similar sparsity arises @Shao2024@Begusic2024, enabling efficient simulation of *Kicked Ising model (127 qubits)*, orders of magnitude faster than tensor network contraction.
+
+
+== The Key Idea
+#timecounter(2)
+
+#align(center, canvas(length: 0.8cm, {
+  import draw: *
+  let lw = 2pt
+  let ksg_loc = ((1.2, 2.3), (3.4, -0.4), (0.3, 2.3), (2.8, 2.0), (4.5, 1.1), (1.7, 0.5), (0.6, 0.1), (4.1, 2.6), (3.0, 0.8), (0.0, 1.1), (4.8, -0.3))
+  let edges = ()
+  for i in range(ksg_loc.len()) {
+    for j in range(i + 1, ksg_loc.len()) {
+      if distance(ksg_loc.at(i), ksg_loc.at(j)) <= 2.0 {
+        edges.push((i, j))
+      }
+    }
+  }
+  let gridsize = 1.5
+  let r = 0.3
+
+  show-graph-remove-edge(ksg_loc.map(v=>(v.at(0)*gridsize, v.at(1)*gridsize)), edges, (), (19, 16,18), radius:r, st: lw)
+  content((0.0, 1), [$x_1$])
+  content((1.5, 1.6), [$x_2$])
+  content((2, 0), [$x_3$])
+}))
+
+- Observe: only configs ${010, 101, 110}$ are feasible (correspond to *non-zero entries*)
+- "Learn" a *true statement in disjunctive normal form (DNF)*:
+ - $(not x_1 and x_2 and not x_3) or (x_1 and not x_2 and x_3) or (x_1 and x_2 and not x_3)$
+ - $x_1 or not x_1$
+ - $(x_2 and not x_3) or (x_1 and not x_2 and x_3)$ (best)
+- Branching ($approx$ non-uniform slicing) rule to "cut" problems:
+ - (assign $x_2$ to $1$ and $x_3$ to $0$) OR (assign $x_1$ to $1$ and $x_2$ to $0$ and $x_3$ to $1$)
+
+== Time-Space Trade-off Improvement
+#timecounter(1)
+
+#myslide[
+  #image("images/ksg_60x60_tc_s1.svg", width: 100%)
+][
+  *Slicing*:
+  - Time grows as you slice more variables
+  
+  *BBTN (our method)*
+  - Both time and space complexity *decrease* (in this case)!
+
+#let namebox(src, name) = box(align(center, [#image(src, width:60pt, height:80pt)#v(-10pt)#name]))
+#align(center,[
+#namebox("images/yijiawang.png", text(16pt)[Yi-Jia Wang (ITP)])#h(20pt)
+#namebox("images/xuanzhao.png", text(16pt)[Xuan-Zhao Gao (CCM)])
+])
+]
+
+== Scaling to Large Problems
 #timecounter(2)
 #figure(image("images/time_complexity.svg", width: 70%))
 
-1. BBTN scales to much larger instances than pure tensor network methods.
-2. BBTN outperform SOTA open source integer programming solvers.
+1. *BBTN* scales to much larger instances than pure tensor network methods.
+2. *BBTN* outperforms SOTA open source integer programming solvers (SCIP, HiGHS).
 
-
-= The Branching Principle
-
-== 40 Years of Progress on MIS
+== 40 Years of Progress on MIS Branching
 #timecounter(1)
 
-#let hd(name) = table.cell(text(10pt)[#name], fill: green.lighten(50%))
-#let s(name) = table.cell(text(10pt)[#name])
 #myslide(table(
   columns: (auto, auto, auto, auto),
   table.header(hd[Year], hd[Running times], hd[References], hd[Notes]),
@@ -312,407 +713,6 @@ When the problem has low tree-width
 }
 ])
 
-
-// == Branching in Action: MIS Example @Fomin2006
-// #slide[
-// #canvas(length: 0.71cm, {
-//   import draw: *
-//   let scircle(loc, radius, name) = {
-//     circle((loc.at(0)-0.1, loc.at(1)-0.1), radius: radius, fill:black)
-//     circle(loc, radius: radius, stroke:black, name: name, fill:white)
-//   }
-//   let s = 1.5
-//   let dy = 3.0
-//   let la = (-s, 0)
-//   let lb = (0, s)
-//   let lc = (0, 0)
-//   let ld = (s, 0)
-//   let le = (s, s)
-//   scircle((0, 0), (3, 2), "branch")
-//   for (l, n) in ((la, "a"), (lb, "b"), (lc, "c"), (ld, "d"), (le, "e")){
-//     circle((l.at(0), l.at(1)-s/2), radius:0.4, name: n, stroke: if n == "a" {red} else {black})
-//     content((l.at(0), l.at(1)-s/2), text(14pt)[$#n$])
-//   }
-//   for (a, b) in (("a", "b"), ("b", "c"), ("c", "d"), ("d", "e"), ("b", "d")){
-//     line(a, b)
-//   }
-//   scircle((-4, -dy), (2, 1.5), "brancha")
-//   for (l, n) in ((lc, "c"), (ld, "d"), (le, "e")){
-//     let loc = (l.at(0)-5, l.at(1)-s/2-dy)
-//     circle(loc, radius:0.4, name: n, stroke: if n == "c" {red} else {black})
-//     content(loc, text(14pt)[$#n$])
-//   }
-//   for (a, b) in (("c", "d"), ("d", "e"), ("c", "d")){
-//     line(a, b)
-//   }
-//   scircle((4, -dy), (1, 1), "branchb")
-//   circle((4, -dy), radius:0.4, name: "e", stroke: red)
-//   content((4, -dy), text(14pt)[$e$])
-//   scircle((-6, -2*dy), (1, 1), "branchaa")
-//   circle((-6, -2*dy), radius:0.4, name: "e", stroke: red)
-//   content((-6, -2*dy), text(14pt)[$e$])
-//   scircle((-2, -2*dy), (0.5, 0.5), "branchab")
-//   scircle((4, -2*dy), (0.5, 0.5), "branchba")
-//   scircle((-6, -3*dy), (0.5, 0.5), "branchaaa")
-//   line("branch", "brancha")
-//   line("branch", "branchb")
-//   line("brancha", "branchaa")
-//   line("brancha", "branchab")
-//   line("branchb", "branchba")
-//   line("branchaa", "branchaaa")
-//   content((-5, -dy/2+0.5), text(12pt)[$G \\ N[a]$])
-//   content((3.5, -dy/2), text(12pt)[$G \\ N[b]$])
-//   content((-6.8, -3*dy/2), text(12pt)[$G \\ N[c]$])
-//   content((-1.5, -3*dy/2-0.4), text(12pt)[$G \\ N[d]$])
-//   content((-4.8, -5*dy/2-0.4), text(12pt)[$G \\ N[e]$])
-//   content((5.2, -3*dy/2-0.4), text(12pt)[$G \\ N[e]$])
-// })
-// - Time complexity: $gamma^(|V|)$
-// - MIS size: $alpha(G) = 3$
-// ][
-// #timecounter(3)
-// *Step 1.* Pick a vertex (e.g., $a$) and consider two cases:
-//   - *Case 1*: $a$ is in the MIS $arrow.r$ remove $a$ and its neighbors
-//   - *Case 2*: $a$ is not in the MIS $arrow.r$ some neighbor (e.g., $b$) must be
-
-// #pause
-// #box(stroke: black, inset: 10pt, [*Branching factor*: $gamma approx 1.27$, from $gamma^n = gamma^(n-2) + gamma^(n-4)$])
-
-// #pause
-// *Step 2.* Solve subproblems recursively:
-// $
-//   alpha(G) = max(alpha(G \\ N[a]) + 1, alpha(G \\ N[b]) + 1)
-// $
-// Each branch reduces the problem size — that's the power of branching!
-// ]
-
-// ==
-// #grid(columns: 2, gutter: 20pt,
-// align(top)[
-//   *Example: Simple branching*
-  
-//   Pick variable $x$, branch on $x=0$ and $x=1$:
-//   - Removes 1 variable per branch
-//   - $gamma^n = 2 gamma^(n-1)$
-//   - Solving: $gamma = 2$
-  
-// ], align(top)[
-//   *Better branching*:
-  
-//   Branch cleverly to remove more variables:
-//   - Branch 1: remove 3 variables
-//   - Branch 2: remove 5 variables
-//   - $gamma^n = gamma^(n-3) + gamma^(n-5)$
-//   - Solving: $gamma approx 1.32$
-// ])
-  
-//   *Goal*: Find branching rules that minimize $gamma$!
-// #align(center, box(stroke: black, inset: 10pt)[
-//   *Key*: A good *branching rule* utilizes problem structure to achieve a small branching factor $gamma$.
-// ])
-
-== Traditional Approach: Hand-Crafted Rules
-#timecounter(1)
-
-#align(center, grid(columns: 3, gutter: 20pt,
-align(top, [1. Design rules by hand]), align(top, [2. Match graph patterns]), align(top, [3. Apply corresponding rule]),
-align(left + top, box(stroke: black, inset: 10pt, width: 200pt, [
-- Dominance rule
-- Mirror rule
-- Satellite rule
-- ...
-])),
-align(center+top, text(11pt)[#canvas(length: 0.5cm, demograph((white, white, white, white, white), fontsize: 12pt))]),
-align(left+top, box(stroke: black, inset: 10pt, width: 320pt, [
-  - If `degree(v) == 1`, add `v` to the set
-  - If `has_mirror`, use mirror rule
-  - If `has_satellite`, use satellite rule
-  - ...
-]))
-))
-
-*Limitations:*
-- Rules are *problem-specific* — years of expert effort to design
-- Rules do not know *subgraph structure*, and are not optimal (all precooked)
-
-== General principle that applicable to all boolean CSP?
-#timecounter(1)
-
-*Chain of thought*
-
-Check a subset of variables $->$ Local constraints $->$ Limited local feasible solutions $->$ Optimal branching rule
-
-- Q: Does a *local subset of variables* include all information required for branching?
-- A: Yes. So far, every branching rule on MIS only check $N_2(v)$ - the second nearest neighbor.
-
-== Our approach: online branching rule generation
-#timecounter(1)
-#align(center, grid(columns: 2, gutter: 40pt, box(width: 300pt, canvas({
-  import draw: *
-  scale(x:60%, y:60%)
-  let DY = 3
-  let size = 1
-  for k in range(5){
-    content((k * size, 0.2 + size), text(12pt, box([$#numbering("a", k+1)$], fill: none, inset: 2pt)))
-  }
-  content((2, 2.5), align(center, text(12pt)[feasible set: $(b, c, d) in {101, 100, 011}$]))
-  content((-5.5, -1.5), align(center, text(12pt)[branch: $b = 1, c = 0$]))
-  decision_sequence((0, 0), (0, -3, -3, -3, 0))
-  decision_sequence((-4, -DY), (-3, 1, 2, -3, -3))
-  decision_sequence((4, -DY), (-3, 2, 1, 1, -3))
-  decision_sequence((-8, -2*DY), (1, 1, 2, 2, -3))
-  decision_sequence((0, -2*DY), (1, 1, 2, 1, 2))
-  decision_sequence((8, -2*DY), (1, 2, 1, 1, 1))
-  decision_sequence((-8, -3*DY), (1, 1, 2, 2, 2))
-  line((1.2, -0.8), (-1.2, -DY + 0.8), mark: (end: "straight"))
-  line((2.8, -0.8), (5.2, -DY + 0.8), mark: (end: "straight"))
-  line((6.8, -DY - 0.8), (9.2, -2 * DY + 0.8), mark: (end: "straight"))
-  line((-2.8, -DY - 0.8), (-5.2, -2 * DY + 0.8), mark: (end: "straight"))
-  line((-1.2, -DY - 0.8), (1.2, -2 * DY + 0.8), mark: (end: "straight"))
-  line((-6, -2 * DY - 0.8), (-6, -3 * DY + 0.8), mark: (end: "straight"))
-})),
-[
-#canvas(length: 25pt, {
-  import draw: *
-  main-diagram()
-})
-]
-))
-
-*Key idea*: Generate optimal branching rules *on-the-fly* from the problem structure.
-
-== The Math Behind Branching
-#timecounter(2)
-
-#myslide[
-*Branching* = Divide-and-conquer with a twist
-
-#figure(canvas(length: 1cm, {
-  import draw: *
-  mixmode_tree()
-}))
-Runtime: $T(rho) = O(gamma^rho)$, where $rho$ = *problem size* (e.g., number of unfixed variables)
-][
-1. Split into $k$ subproblems, each reducing size by $Delta rho_1, dots, Delta rho_k$. Total time satisfies the recurrence:
-  $
-  T(rho) = sum_(i=1)^k T(rho - Delta rho_i)
-  $
-3. Decide *branching factor* $gamma$:
-  $
-  1 = sum_(i=1)^k gamma^(-Delta rho_i)
-  $
-
-*Goal*: Minimize $gamma$ — fewer branches, larger size reductions!
-]
-
-
-
-// == It is difficult
-// #timecounter(1)
-
-// #align(center, box(stroke:black, inset:10pt, align(left, [
-// We are generating "theories"!
-// ])))
-// In the following,
-// - A formal definition of a branching "theory", the size of theories space is double exponential.
-// - An algorithm to generate provably optimal branching rules.
-// - For efficient contraction of sparse tensor networks.
-
-// == Branching - an art of deviding and conquering
-// #timecounter(2)
-// Let $rho$ be a measure of problem size (e.g. number of variables)
-// #figure(canvas(length: 0.8cm, {
-//   mixmode_tree()
-// }))
-
-// #align(left, box(stroke: black, inset: 10pt)[Let $Delta rho_i$ be the size reduction in the $i$-th branch.
-// Then the _branching factor_ is given by
-// $
-// gamma^rho = sum_i gamma^(rho - Delta rho_i) arrow.double.r 1 = sum_i gamma^(- Delta rho_i)
-// $])
-
-// == Measure
-
-// Characterizes the hardness of the instance
-
-// - The number of vertices in the sub-problem
-// - Degree 3 measure: $sum_(v in V) max(0, d(v) - 2)$, because degree 2 graphs are easy!
-// - More sofisticated measures, e.g. assigning different measurs for vertices with different degree.
-// - The tree-width of a graph topology.
-
-// It must be *positive*, *non-increasing* during branching, measure 0 problem is directly solvable.
-
-
-// == Key: Valid and good branching rule
-// #timecounter(2)
-
-// - Valid: all elements in *feasible set* are true assignments of $cal(D)$ (exploring all possibilities).
-// - Good: create less branches, eliminate more variables.
-
-// #grid(columns:2, gutter: 20pt, canvas({
-//     import draw: *
-//     circle((0, 0), radius: (4, 2))
-//     circle((1, 0), radius: 1, fill: silver, stroke: none)
-//     circle((1.4, 0), radius: (1.8, 1.2), fill: aqua.transparentize(80%))
-//     content((1, 0), text(14pt)[oracle])
-//     content((-1.5, 0), text(14pt)[Total])
-//     content((2.5, 0), text(14pt)[$cal(D)$])
-// }),
-// [
-// $ cal(D) = underbrace((b and not c) or overbrace(( not b and c and d), "size reduction (longer is better)"), "number of branches (less is better)") $
-
-// ]
-// )
-
-// #align(left, box(stroke: black, inset: 10pt)[Objective $gamma$: Let $Delta rho(c_i)$ be the size reduction after applying the clause $c_i$.
-// Then the branching factor is given by $gamma^rho = sum_i gamma^(rho - Delta rho(c_i))$, i.e.
-// $
-//   1 = sum_i gamma^(- Delta rho(c_i))
-// $])
-
-== Intuition: Finding Patterns in Feasible Solutions
-#timecounter(2)
-
-#let colred(x) = text(fill: red, $#x$)
-*Example 1*: $"feasible"(a, b, c, d) = {101colred(0), 100colred(0), 010colred(0)}$
-
-Notice: $d = 0$ in all solutions! $arrow.r$ No branching needed, just set $d = 0$.
-$ gamma = 1 quad ("free reduction!")$
-
-*Example 2*: $"feasible"(a, b, c, d, e) = {colred(1111)1, colred(0000)0, colred(1111)0, colred(0000)1}$
-
-Pattern: first 4 bits are either all 1 or all 0. Branch on this!
-$ gamma^n = 2 gamma^(n-4) arrow.r gamma approx 1.19$
-
-*Example 3*: $"feasible"(a, b, c, d) = {1000, 0100, 0010, 0001}$
-
-Exactly one variable is 1. Optimal: branch on whether $a = 1$ or not.
-
-*Key insight*: The structure of feasible solutions reveals efficient branching strategies.
-
-
-// == Visualizing the Search Space
-// #figure(image("images/ob_new.svg", width: 400pt))
-
-== The Challenge: Exponentially Many Strategies
-#timecounter(1)
-#align(center, box(stroke: black, inset: 10pt)[*Q*: How do we find the optimal branching rule?])
-
-*The search space is astronomically large!*
-The number of branching rule on $n$ variables is equal to the number of Disjunctive Normal Form (DNF):
-$
-"# of possible clauses" &= 3^n \
-"# of DNF formulas" &= 2^(3^n)
-$
-
-#align(center, box(text(14pt)[
-$n=3$: $2^(27) approx 10^8$ formulas\
-$n=4$: $2^(81) approx 10^(24)$ formulas\
-$n=5$: $2^(243) approx 10^(73)$ formulas\
-...
-], stroke: black, inset: 10pt))
-
-*Our solution*: arXiv:2412.07685
-
-// == Not as easy as it seems
-// #timecounter(1)
-
-// $ "oracle"(a, b, e, f) = {1010, 1001, 0100} $
-// #align(center, [#canvas({
-//   import draw: *
-//   let size = 1
-//   for k in range(8){
-//     content((k * size, size), text(14pt, box([$#numbering("a", k+1)$], fill: none, inset: 2pt)))
-//   }
-//   decision_sequence((0, 0), (-3, -3, 0, 0, -3, -3, 0, 0))
-// })
-
-// Task: find the best branching strategy $cal(D)$.
-
-// ]
-// )
-
-// ==
-// #timecounter(2)
-// $ "oracle"(a, b, c, d) = {1010, 1001, 0100} $
-
-// - A searching strategy can be represented as a boolean expression in disjunctive normal (DNF), i.e. a disjunction of conjunctive clauses.
-// - #highlight([A searching strategy is *valid* if the none of the possible choices lead to good ending is missed.])
-
-// === Examples of valid searching strategies
-// #christina(size: 34pt) Christina (case by case): $((a and not b and c and not d) or (a and not b and not c and d) or (not a and b and not c and not d))$.\
-// #murphy(size: 34pt) Murphy (minimalist): $a or not a$.\
-// #ina(size: 34pt) Ina: $(a and not b) or (b and not a and not c and not d)$ is the optimal one.
-
-// ==
-// #timecounter(2)
-
-// #definition("Valid branching rule")[
-//     A branching rule $cal(D)$ is valid on $cal(S)_R$ if and only if for any set $S_(bold(s)_(partial R)) in cal(S)_R$, there exists a configuration $bold(s)_(V(R)) in S_(bold(s)_(partial R))$ that satisfies $cal(D)$, denoted as $S_(bold(s)_(partial R)) tack.r cal(D)$.
-// ]
-
-// #example([oracle: {1010, 1001, 0100}])[
-// - Valid: $((a and not b and c and not d) or (a and not b and not c and d) or (not a and b and not c and not d))$.
-// - Valid: $a or not a$.
-// - Not valid: $((a and not b and c and not d) or (a and not b and not c and d))$.
-// ]
-
-// - Christina: $((a and not b and c and not d) or (a and not b and not c and d) or (not a and b and not c and not d))$.
-//   $ gamma^n = 3 gamma^(n - 4) arrow.r gamma = 3^(1/4) approx 1.32 $
-// - Murphy: $a or not a$.
-//   $ gamma^n = 2 gamma^(n - 1) arrow.r gamma = 2 $
-// - Ina: $(a and not b) or (b and not a and not c and not d)$ is the optimal one ($gamma approx 1.27$).
-
-// == More examples
-// #timecounter(2)
-
-// #let colred(x) = text(fill: red, $#x$)
-// - $"oracle"(a, b, c, d) = {101colred(0), 100colred(0), 010colred(0)}$
-
-//   The optimal branching rule is $not d$, removing one variable for free!
-//   $ gamma^n = gamma^(n-1) arrow.r gamma = 1$
-
-// - $"oracle"(a, b, c, d, e) = {colred(1111)1, colred(0000)0, colred(1111)0, colred(0000)1}$
-
-//   Optimal branching: $(a and b and c and d) or (not a and not b and not c and not d)$.
-//   $ gamma^n = 2 gamma^(n-4) arrow.r gamma approx 1.19$
-
-// - $"oracle"(a, b, c, d) = {1000, 0100, 0010, 0001}$
-
-//   Optimal branching: $(a and not b and not c and not d) or (not a)$.
-//   $ gamma^n = gamma^(n-1) + gamma^(n-4) arrow.r gamma approx 1.38$
-
-// #box(stroke: black, inset: 10pt)[
-//   *Less is more*\
-//   - #highlight([Capture bit correlations rather than maximally reducing the search space.])\
-// ]
-
-
-// == The optimal branching algorithm
-// #timecounter(1)
-
-// 1. Denote the oracle $cal(S) = {bold(s)_1, bold(s)_2, dots, bold(s)_l}$
-// 2. Generate candidate clauses $cal(C) = {c_1, c_2, dots, c_m}$ (Can be exponentially large)
-// 3. Find the optimal branching rule $cal(D) = c_(k_1) or c_(k_2) or dots$ by bisecting over $gamma$, find the smallest one that make the cost to the following weighted minimum set covering problem $<=1$:
-// $
-// min_(x) sum_(i=1)^(|cal(C)|) gamma^(-Delta rho(c_i)) x_i,  "s.t." union.big_(i = 1, dots, |cal(D)|,\ x_i = 1) J_i = {1, 2, dots, |cal(S)|}
-// $
-// where $J_i$ is the indices of bitstrings that covered by the $i$-th clause.
-// - _Remark_: Although this problem is NP-hard, it is efficiently solvable with integer programming in practise. It allows us to handle number of vertices $>20$.
-
-// == Showcase: King's subgraph at 0.8 filling
-// #timecounter(1)
-
-// #grid(columns: 2, gutter: 20pt,
-// [#canvas({
-//   import draw: *
-//   show-grid-graph(8, 8, filling: 0.8, unitdisk: 1.6)
-// })
-// ],
-// [
-//   - Independent set problem on King's subgraph is NP-hard @Pichler2018, also known as hard-core lattice gas @Nath2014, and is implementable on Rydberg atoms arrays @Ebadi2022.
-//   - Previous (classical) record: $40 times 40$ for tensor network @Liu2023 and branching methods, estimated to be $70 times 70$ for integer programming (CPLEX) @Andrist2023
-// ])
 == Can We Beat Expert-Designed Rules?
 #timecounter(1)
 
@@ -734,208 +734,8 @@ $n=5$: $2^(243) approx 10^(73)$ formulas\
 
 *Our automatic method beats 40 years of expert-designed rules!*
 
-
-// == Methods for solving MIS
-// #timecounter(1)
-
-// *Tensor network (or dynamic programming)* has time complexity $O(2^"tw"(G))$. Suited for:
-// - Graphs with small tree width, e.g.
-//   - Tree graph, $"tw"(G) = 1$ 
-//   - Geometric graphs such as the grid graph, $"tw"(G) = O(sqrt(n))$
-
-// *Branching* has time complexity $gamma^n$, where $gamma$ is the branching factor. Suited for:
-// - Graphs with high degree, e.g.
-//   - Fully connected graph, complexity is $O(n)$.
-
-// *Hard for both:*
-// - 3-regular graph, high dimensional, but sparse enough.
-//   - Tree width is $approx n/6$, rendering a tensor network algorithm with complexity $O(1.1225^n)$.
-//   - The best branching algorithm is $O(1.0836^n)$ @Xiao2013.
-
-// == Difference with traditional branching? @Fomin2006
-// #slide[
-// #canvas(length: 0.71cm, {
-//   import draw: *
-//   let scircle(loc, radius, name) = {
-//     circle((loc.at(0)-0.1, loc.at(1)-0.1), radius: radius, fill:black)
-//     circle(loc, radius: radius, stroke:black, name: name, fill:white)
-//   }
-//   let s = 1.5
-//   let dy = 3.0
-//   let la = (-s, 0)
-//   let lb = (0, s)
-//   let lc = (0, 0)
-//   let ld = (s, 0)
-//   let le = (s, s)
-//   scircle((0, 0), (3, 2), "branch")
-//   for (l, n) in ((la, "a"), (lb, "b"), (lc, "c"), (ld, "d"), (le, "e")){
-//     circle((l.at(0), l.at(1)-s/2), radius:0.4, name: n, stroke: if n == "a" {red} else {black})
-//     content((l.at(0), l.at(1)-s/2), text(14pt)[$#n$])
-//   }
-//   for (a, b) in (("a", "b"), ("b", "c"), ("c", "d"), ("d", "e"), ("b", "d")){
-//     line(a, b)
-//   }
-//   scircle((-4, -dy), (2, 1.5), "brancha")
-//   for (l, n) in ((lc, "c"), (ld, "d"), (le, "e")){
-//     let loc = (l.at(0)-5, l.at(1)-s/2-dy)
-//     circle(loc, radius:0.4, name: n, stroke: if n == "c" {red} else {black})
-//     content(loc, text(14pt)[$#n$])
-//   }
-//   for (a, b) in (("c", "d"), ("d", "e"), ("c", "d")){
-//     line(a, b)
-//   }
-//   scircle((4, -dy), (1, 1), "branchb")
-//   circle((4, -dy), radius:0.4, name: "e", stroke: red)
-//   content((4, -dy), text(14pt)[$e$])
-//   scircle((-6, -2*dy), (1, 1), "branchaa")
-//   circle((-6, -2*dy), radius:0.4, name: "e", stroke: red)
-//   content((-6, -2*dy), text(14pt)[$e$])
-//   scircle((-2, -2*dy), (0.5, 0.5), "branchab")
-//   scircle((4, -2*dy), (0.5, 0.5), "branchba")
-//   scircle((-6, -3*dy), (0.5, 0.5), "branchaaa")
-//   line("branch", "brancha")
-//   line("branch", "branchb")
-//   line("brancha", "branchaa")
-//   line("brancha", "branchab")
-//   line("branchb", "branchba")
-//   line("branchaa", "branchaaa")
-//   content((-5, -dy/2+0.5), text(12pt)[$G \\ N[a]$])
-//   content((3.5, -dy/2), text(12pt)[$G \\ N[b]$])
-//   content((-6.8, -3*dy/2), text(12pt)[$G \\ N[c]$])
-//   content((-1.5, -3*dy/2-0.4), text(12pt)[$G \\ N[d]$])
-//   content((-4.8, -5*dy/2-0.4), text(12pt)[$G \\ N[e]$])
-//   content((5.2, -3*dy/2-0.4), text(12pt)[$G \\ N[e]$])
-// })
-// - Time complexity: $gamma^(|V|)$
-// - MIS size: $alpha(G) = 3$
-// ][
-// #timecounter(1)
-// Step 1. Select a vertex, e.g. $a$
-//   - Case 1: $a$ is in the independent set, then create a branch $G \\ N[a]$
-//   - Case 2: $a$ is not in the independent set, then create a branch with $b$ selected, $G \\ N[b]$
-
-// #pause
-// #box(stroke: black, inset: 10pt, [Branching factor: $gamma approx 1.27$, from $gamma^(|V|) = gamma^(|V|-2) + gamma^(|V|-4)$])
-
-// #pause
-// Step 2. Solve two subproblems recursively
-// $
-//   alpha(G) = max(alpha(G \\ N[a]) + 1, alpha(G \\ N[b]) + 1)
-// $
-// ]
-
-== On-the-Fly Rule Generation
-#timecounter(1)
-#align(center, grid(columns: 3, gutter: 25pt,
-align(center, [1. Select a local region]),
-align(center, [2. Enumerate feasible configs]),
-align(center, [3. Compute optimal rule]),
-align(center+top, text(11pt)[#canvas(length: 0.5cm, demograph((white, white, white, white, white), fontsize: 12pt))]),
-align(left+top, text(16pt)[
-- 00001 (or 00010)
-- 00101
-- 01010
-- 11100
-]),
-align(center + top, text(80pt)[\u{1F4CF}])
-))
-
-*Why is this better?*
-- No manual rule design — fully automatic
-- Exploits local structure — adapts to each subproblem
-- Provably optimal — minimizes $gamma$ for the given region
-
-// == Branching on the fly algorithm
-// #timecounter(1)
-// #align(center, grid(columns: 2, gutter: 40pt, box(width: 300pt, align(left)[
-// #canvas({
-//   import draw: *
-//   scale(x:60%, y:60%)
-//   let DY = 3
-//   let size = 1
-//   for k in range(5){
-//     content((k * size, 0.2 + size), text(12pt, box([$#numbering("a", k+1)$], fill: none, inset: 2pt)))
-//   }
-//   content((2, 2.5), align(center, text(12pt)[oracle: $(b, c, d) in {101, 100, 011}$]))
-//   decision_sequence((0, 0), (0, -3, -3, -3, 0))
-// })
-// - _Oracle_ is a set of bit strings representing feasible solutions over some variables.
-// ]),
-// canvas(length: 25pt, {
-//   import draw: *
-//   main-diagram()
-//   content((0, -2), box(text(15pt)[Check some variables, get oracle: $cal(S)$], stroke: (thickness: 2pt, paint: yellow), inset: 10pt), name: "orange", fill: white)
-// })
-// ))
-
-// == Branching rule: a Disjunctive Normal Form (DNF) formula
-// #timecounter(1)
-// #align(center, grid(columns: 2, gutter: 40pt, box(width: 300pt, align(left)[
-// #canvas({
-//   import draw: *
-//   scale(x:60%, y:60%)
-//   let DY = 3
-//   let size = 1
-//   for k in range(5){
-//     content((k * size, 0.2 + size), text(12pt, box([$#numbering("a", k+1)$], fill: none, inset: 2pt)))
-//   }
-//   content((2, 2.5), align(center, text(12pt)[oracle: $(b, c, d) in {101, 100, 011}$]))
-//   content((-5.5, -1.5), align(center, text(12pt)[branch: $b = 1, c = 0$]))
-//   decision_sequence((0, 0), (0, -3, -3, -3, 0))
-//   decision_sequence((-4, -DY), (-3, 1, 2, -3, -3))
-//   decision_sequence((4, -DY), (-3, 2, 1, 1, -3))
-//   line((1.2, -0.8), (-1.2, -DY + 0.8), mark: (end: "straight"))
-//   line((2.8, -0.8), (5.2, -DY + 0.8), mark: (end: "straight"))
-// })
-
-// - DNF: a disjunction of clauses.
-// - clause (branch): a conjunction of literals.
-// $ cal(D) = (#pin(1)b#pin(2) and not c) or ( #pin(3)not b#pin(4) and c and d) $
-//   #pinit-highlight(1, 2)
-//   #pinit-point-from(1, pin-dy: 65pt, offset-dy: 80pt, body-dy: -50pt, body-dx: -75pt, offset-dx: -10pt)[positive literal $arrow.r$ 1]
-//   #pinit-highlight(3, 4)
-//   #pinit-point-from(3, pin-dy: 65pt, offset-dy: 80pt, body-dy: -50pt, body-dx: -15pt, offset-dx: 10pt)[negative literal $arrow.r$ 0]
-// ]),
-// canvas(length: 25pt, {
-//   import draw: *
-//   main-diagram()
-//   content((0, -4), box(text(15pt)[Generate branching rules: $cal(D)$], stroke: (thickness: 2pt, paint: yellow), inset: 10pt), name: "orange", fill: white)
-// })
-// ))
-
-// = The time traveler problem
-
-// == Branchmark on random graphs
-// The resulting methods are denoted as *ob* and *ob+xiao* and the average branching factor is shown in the table.
-// #align(center, table(
-//     columns: (auto, auto, auto, auto, auto, auto),
-//     table.header(hd[], hd[*ob*], hd[*ob+\ xiao*], hd[xiao2013], hd[akiba2015], hd[akiba2015+\ xiao&packing]),
-//     s[3RR], s[1.0457], s[*1.0441*], s[*1.0487*], s[-], s[-],
-//     s[ER], s[1.0011], s[1.0002], s[-], s[1.0044], s[1.0001],
-//     s[KSG], s[1.0116], s[1.0022], s[-], s[1.0313], s[1.0019],
-//     s[Grid], s[1.0012], s[1.0009], s[-], s[1.0294], s[1.0007],
-// ))
-
-// #align(center, grid(columns: 2, gutter: 20pt,
-//   grid(rows: 5,
-//   align(center,
-//   ),
-//   v(10pt),
-//   text(15pt)[The resulting methods are denoted as *ob* and *ob+xiao* and the average branching factor is shown in the table.],
-//   v(10pt),
-//   align(center, table(
-//     columns: (auto, auto, auto, auto, auto, auto),
-//     table.header(hd[], hd[*ob*], hd[*ob+\ xiao*], hd[xiao2013], hd[akiba2015], hd[akiba2015+\ xiao&packing]),
-//     s[3RR], s[1.0457], s[*1.0441*], s[*1.0487*], s[-], s[-],
-//     s[ER], s[1.0011], s[1.0002], s[-], s[1.0044], s[1.0001],
-//     s[KSG], s[1.0116], s[1.0022], s[-], s[1.0313], s[1.0019],
-//     s[Grid], s[1.0012], s[1.0009], s[-], s[1.0294], s[1.0007],
-//   ))),
-//   figure(image("images/fig5.svg", width: 380pt), caption : [#text(15pt)[Average number of branches generated by different branching algorithms on 1000 random graphs.]])
-// ))
-
-== Benchmark: Fewer Branches $approx$ Faster Solving
-#timecounter(3)
+== Beating SOTA on MIS
+#timecounter(2)
 
 #grid(columns: 2, gutter: 0pt,
 image("images/fig5.svg", width: 350pt), [
@@ -948,170 +748,13 @@ image("images/fig5.svg", width: 350pt), [
   
   #v(10pt)
   *Key findings*:
-  - #text(red)[`ob`] generates the fewest branches across all graph types, given the same reduction rule
+  - #text(red)[`ob`] generates the fewest branches across all graph types
   - On 3-regular graphs: $gamma = 1.0441$ (vs. 1.0487 for hand-crafted)
 ])
 
-// == The branching overhead matters? Branching hierachy
-// #timecounter(1)
-// The overhead of branching on-the-fly is $8times$ the case with a pre-defined branching rule.
-// #grid(gutter: 30pt, columns: 2, [#image("images/mix_runtime.svg", width: 300pt)], [
-//   #figure(canvas(length: 1cm,
-//     {
-//       import draw: *
-//       mixmode-bb()
-//     }
-//   ))
-// ])
-// #figure(box(stroke: black, inset: 10pt)[
-//   Branching overhead can be mitigated by increasing the sub-problem size!
-// ])
 
 
-= Application 1: Maximal Independent Set (MIS)
-
-== Tensor Networks for Combinatorial Optimization
-#timecounter(2)
-*Background for TN experts*:
-- Tensor networks with *tropical algebra* can solve CSP @Liu2021@Liu2023
-- Hard constraints create *sparsity* — many tensor elements are zero
-- #v(-7pt)Sparse tensor network contraction helps, but *still slower than branching* 😞
-
-*New insight*: Don't just exploit sparsity — use branching to *decompose* the network!
-
-#let namebox(src, name) = box(align(center, [#image(src, width:60pt, height:80pt)#v(-10pt)#name]))
-#align(center,[
-#namebox("images/yijiawang.png", text(16pt)[Yijia Wang (IOTP)])#h(20pt)
-#namebox("images/xuanzhao.png", text(16pt)[Xuanzhao Gao (HKUST)])
-])
-
-
-
-== Branch-and-Bound Tensor Network (BBTN)
-#timecounter(2)
-
-#myslide[
-#figure(image("images/bbtn.svg", width: 360pt))
-][
-  *Key idea*: Use branching to decompose a large network into smaller, tractable pieces.
-
-  *The right measure*: "Tree-width" of the tensor network (contraction complexity).
-
-  *Left*: Traditional *slicing* — branch on one variable at a time.
-
-  *Right*: BBTN — *non-uniform slicing* that more effectively reduces tree-width.
-  
-  *Result*: Much less number of sub-networks.
-]
-
-== Time vs. Space Complexity
-#timecounter(1)
-
-#myslide[
-  #image("images/ksg_60x60_tc_s1.svg", width: 100%)
-][
-  *Dynamic slicing*: Time grows as you slice more variables.
-  
-  *BBTN (our method)*: Both time and space complexity *decrease* with more branching!
-  
-  *Why?* Optimal branching finds the most effective decomposition.
-]
-
-
-== Scaling to Large Problems
-#timecounter(2)
-#figure(image("images/time_complexity.svg", width: 70%))
-
-1. BBTN scales to much larger instances than pure tensor network methods.
-2. BBTN outperform SOTA open source integer programming solvers.
-
-// ==
-// #figure(image("images/tc_different_target.svg", width: 50%))
-
-// ==
-// #figure(image("images/compare_nu_u.svg", width: 50%))
-
-= Application 2: Circuit SAT
-
-// == DPLL Algorithm
-
-// *Davis-Putnam-Logemann-Loveland (DPLL)* algorithm is a complete, backtracking-based search algorithm for deciding the satisfiability of propositional logic formulae in CNF.
-
-// *Key ideas*:
-// - *Unit propagation*: If a clause is a unit clause (only one literal), assign the variable to satisfy that clause.
-// - *Pure literal elimination*: If a variable appears with only one polarity, assign it to satisfy all clauses containing it.
-// - *Branching*: Choose a variable and recursively try both assignments (true and false).
-// - *Backtracking*: If a branch leads to a conflict, backtrack and try the other assignment.
-
-// *Time complexity*: $O(2^n)$ in the worst case, but often much better in practice due to pruning.
-
-// ==
-// *Example with branching*: Consider $F = (x_1 or x_2) and (not x_1 or x_3) and (not x_2 or not x_3) and (not x_3 or x_1)$
-
-// #text(size: 16pt)[
-// 1. *Initial*: $F = (x_1 or x_2) and (not x_1 or x_3) and (not x_2 or not x_3) and (not x_3 or x_1)$ (no unit clauses)
-// 2. *Branch*: Choose $x_1$, try $x_1 = 1$ first
-// 3. $F arrow.r cancel((x_1 or x_2)) and (cancel(not x_1) or x_3) and (not x_2 or not x_3) and (cancel(not x_3) or cancel(x_1))$\
-//    $F arrow.r (x_3) and (not x_2 or not x_3)$
-// 4. *Unit propagation*: $x_3 = 1$\
-//    $F arrow.r cancel((x_3)) and (not x_2 or cancel(not x_3)) arrow.r (not x_2)$
-// 5. *Unit propagation*: $x_2 = 0$\
-//    $F arrow.r cancel((not x_2)) arrow.r emptyset$ #text(fill: green)[✓ *SAT*]
-// 6. *Result*: Assignment found: $x_1 = 1, x_2 = 0, x_3 = 1$
-// ]
-
-// *Branching tree* shows search space reduction: Without branching, need to check $2^3 = 8$ assignments. DPLL finds solution by exploring only one branch with unit propagation.
-
-// ==
-// *Example with backtracking*: Consider $F = (x_1 or x_2) and (not x_1 or not x_2) and (not x_1 or x_2)$
-
-// #text(size: 16pt)[
-// *Left branch* ($x_1 = 1$):
-// - $F arrow.r cancel((x_1 or x_2)) and (cancel(not x_1) or not x_2) and (cancel(not x_1) or x_2) arrow.r (not x_2) and (x_2)$
-// - Get empty clause #text(fill: red)[✗ *UNSAT*] → *Backtrack!*
-
-// *Right branch* ($x_1 = 0$):
-// - $F arrow.r (cancel(x_1) or x_2) and cancel((not x_1 or not x_2)) and cancel((not x_1 or x_2)) arrow.r (x_2)$
-// - Unit propagation: $x_2 = 1$ → $emptyset$ #text(fill: green)[✓ *SAT*]
-// - *Result*: $x_1 = 0, x_2 = 1$
-// ]
-
-// This demonstrates how DPLL *branches* on variables and *backtracks* when conflicts arise, achieving $gamma^n$ complexity with $gamma < 2$ through pruning.
-
-// == Combining Online Branching with Unit Propagation
-// #timecounter(2)
-
-// #slide[
-// *Key Insight*: Unit propagation is extremely efficient, but traditional branching (choosing single variables) may not exploit the constraint structure optimally.
-
-// *Our Approach*:
-// 1. Select a subset of variables to form a region
-// 2. Compute the oracle (tensor network contraction over the region)
-// 3. Generate optimal branching rules from the oracle
-// 4. Apply unit propagation after each branch
-// ][
-//   #align(center, canvas({
-//     import draw: *
-//     rect((-3, -0.5), (3, 0.5), fill: blue.lighten(80%), stroke: black)
-//     content((0, 0), [1. Select region])
-    
-//     rect((-3, -2), (3, -1), fill: green.lighten(80%), stroke: black)
-//     content((0, -1.5), [2. Compute oracle (TN)])
-    
-//     rect((-3, -3.5), (3, -2.5), fill: yellow.lighten(80%), stroke: black)
-//     content((0, -3), [3. Optimal branching])
-    
-//     rect((-3, -5), (3, -4), fill: red.lighten(80%), stroke: black)
-//     content((0, -4.5), [4. Unit propagation])
-    
-//     line((0, 0.5), (0, -1), mark: (end: "straight"))
-//     line((0, -2), (0, -2.5), mark: (end: "straight"))
-//     line((0, -3.5), (0, -4), mark: (end: "straight"))
-//     line((0, -5), (5, -5), (5, 0.5), mark: (end: "straight"))
-//   }))
-// ]
-
-== Example of Circuit SAT: Integer factoring
+== Circuit SAT: Integer factoring as an example
 #timecounter(1)
 
 *Problem*: Given $m = p times q$, find the factors $p$ and $q$.
@@ -1237,126 +880,11 @@ image("images/fig5.svg", width: 350pt), [
   line("co", (rel:(-0.5, 0), to:"co"), mark: (end: "straight"))
   content((rel:(-0.75, 0), to:"co"), text(14pt)[$c_o$])
   content((5, 0), text(14pt)[Logical constraints:\ $2c_o + s_o = p_i q_i + c_i + s_i$])
-
-//   let gate(loc, label, size: 1, name:none) = {
-//     rect((loc.at(0) - size/2, loc.at(1) - size/2), (loc.at(0) + size/2, loc.at(1) + size/2), stroke: black, fill: white, name: name)
-//     content(loc, text(14pt)[$label$])
-//   }
-//   set-origin((-1.5, -3))
-//   line((4.5, 0), (-1, 0))  // q
-//   line((3, 1), (3, -4.5))  // p
-//   let si = (-1, 1)
-//   let ci = (4.5, -2.5)
-//   gate((0.5, -0.5), [$and$], size: 0.5, name: "a1")
-//   gate((2.5, -0.5), [$and$], size: 0.5, name: "a2")
-//   gate((2.0, -2.5), [$and$], size: 0.5, name: "a3")
-//   gate((0.5, -2.5), [$or$], size: 0.5, name: "o1")
-//   gate((1.5, -1.5), [$xor$], size: 0.5, name: "x1")
-//   gate((3.5, -3.5), [$xor$], size: 0.5, name: "x2")
-//   line("a2", (2.5, 0))
-//   line("x1", (1.5, -0.5))
-//   line("a2", (3, -0.5))
-//   line("a2", "a1")
-//   line("a1", "o1")
-//   line("a3", "o1")
-//   line("o1", (rel: (-1.5, 0), to: "o1"))
-//   line(si, "a1")
-//   line(ci, "a3")
-//   line((3.5, -2.5), "x2")
-//   let turn = (1.5, -3.5)
-//   line("x1",(rel: (0.5, -2.5), to: si), (rel: (0.5, -0.5), to: si))
-//   line("x1", turn, "x2")
-//   line("x2", (rel: (1, -1), to: "x2"))
-//   line("a3", (2.0, -0.5))
-//   rect((-0.75, -4), (4, 0.75), stroke: (dash: "dashed"))
-
-//   let gate_with_leg(loc, label, size: 1, name:none) = {
-//     gate(loc, label, size: size, name: name)
-//     line(name, (rel: (0.5, 0), to: name))
-//     line(name, (rel: (-0.5, 0), to: name))
-//     line(name, (rel: (0, 0.5), to: name))
-//   }
-//   gate_with_leg((6, 0), [$xor$], size: 0.5, name: "x3")
-//   content((8, 0), text(14pt)[$= mat(mat(0, 1; 1, 0); mat(1, 0; 0, 1))$])
-
-//   gate_with_leg((6, -2), [$or$], size: 0.5, name: "o3")
-//   content((8, -2), text(14pt)[$= mat(mat(1, 0; 0, 0); mat(0, 1; 1, 1))$])
-
-//   gate_with_leg((6, -4), [$and$], size: 0.5, name: "a4")
-//   content((8, -4), text(14pt)[$= mat(mat(1, 1; 1, 0); mat(0, 0; 0, 1))$])
 })
 ]
 )
 
-// == Smart Measure: Reducing to 2-SAT
-// #timecounter(2)
-
-// *Key observation*: After branching, many clauses simplify:
-// - *Unit clauses* — directly propagate
-// - *Binary clauses* — 2-SAT, solvable in linear time!
-// - *Larger clauses* — still need branching
-
-// #definition("Measure: Number of Hard Clauses")[
-//   $ rho(F) = |{c in F : |c| >= 3}| $
-  
-//   When $rho = 0$, the problem reduces to 2-SAT — solvable in $O(n)$ time!
-// ]
-
-// *Goal*: Branch to maximize reduction of $rho$, not just the number of variables.
-
-// This exploits the *cascading effect* of constraint propagation.
-
-// == Why This Measure?
-// #timecounter(1)
-
-// #grid(columns: 2, gutter: 30pt,
-// [
-// *Traditional measure*: Number of unfixed variables
-// - Assigns one variable $arrow.r$ reduces measure by 1
-// - May not exploit constraint structure
-
-// *Our measure*: Number of non-2-SAT clauses
-// - Good branching can reduce many clauses simultaneously
-// - Better captures problem hardness
-// - Exploits clause structure through unit propagation
-// ],
-// canvas({
-//   import draw: *
-//   // Example showing clause reduction
-//   content((0, 0), align(left)[
-//     *Before*: $F = (a or b or c) and (not a or d or e)$\
-//     $rho = 2$
-//   ])
-  
-//   content((0, -1.5), align(left)[
-//     *Branch*: $a = 1$
-//   ])
-  
-//   content((0, -3), align(left)[
-//     *After propagation*: $F = (d or e)$\
-//     $rho = 0$ (2-SAT!) \ 
-//     Reduction: $Delta rho = 2$
-//   ])
-// }))
-
-== Optimal Branching for Circuit SAT
-#timecounter(2)
-
-#myslide[
-*Algorithm*:
-1. Select a local region (nearby gates)
-2. Enumerate feasible configurations (via tensor contraction), and apply unit propagation
-3. Find optimal branching rule
-4. Apply branch, propagate, and recurse
-][
-  #box(stroke: black, inset: 10pt, fill: yellow.lighten(80%))[
-    *Key difference from MIS*: 
-    - Measure = number of hard clauses (involving $>2$ varaibles), since 2-SAT is easy.
-    - Exploits unit propagation to reduce the number of hard clauses.
-  ]
-]
-
-== Benchmark: Number of branches
+== Circuit SAT: Reduced number of branches
 #timecounter(1)
 - Much less branching steps to 2-SAT subproblems!
 - Directly applicable to all boolean satisfiability problems, i.e. Circuit SAT and $K$-SAT.
@@ -1367,19 +895,322 @@ image("images/fig5.svg", width: 350pt), [
 ]
 
 
-// == Example: Circuit SAT Instance
+
+
+= General principle of branching
+== Which DNF is the best?
+#timecounter(1)
+- $(not x_1 and x_2 and not x_3) or (x_1 and not x_2 and x_3) or (x_1 and x_2 and not x_3)$
+- $x_1 or not x_1$
+- $(x_2 and not x_3) or (x_1 and not x_2 and x_3)$
+
+== The branching hierachy
+#timecounter(1)
+#align(center, grid(columns: 2, gutter: 40pt, box(width: 300pt, canvas({
+  import draw: *
+  scale(x:60%, y:60%)
+  let DY = 3
+  let size = 1
+  for k in range(5){
+    content((k * size, 0.2 + size), text(12pt, box([$#numbering("a", k+1)$], fill: none, inset: 2pt)))
+  }
+  content((2, 2.5), align(center, text(12pt)[feasible set: $(b, c, d) in {101, 100, 011}$]))
+  content((-5.5, -1.5), align(center, text(12pt)[branch: $b = 1, c = 0$]))
+  decision_sequence((0, 0), (0, -3, -3, -3, 0))
+  decision_sequence((-4, -DY), (-3, 1, 2, -3, -3))
+  decision_sequence((4, -DY), (-3, 2, 1, 1, -3))
+  decision_sequence((-8, -2*DY), (1, 1, 2, 2, -3))
+  decision_sequence((0, -2*DY), (1, 1, 2, 1, 2))
+  decision_sequence((8, -2*DY), (1, 2, 1, 1, 1))
+  decision_sequence((-8, -3*DY), (1, 1, 2, 2, 2))
+  line((1.2, -0.8), (-1.2, -DY + 0.8), mark: (end: "straight"))
+  line((2.8, -0.8), (5.2, -DY + 0.8), mark: (end: "straight"))
+  line((6.8, -DY - 0.8), (9.2, -2 * DY + 0.8), mark: (end: "straight"))
+  line((-2.8, -DY - 0.8), (-5.2, -2 * DY + 0.8), mark: (end: "straight"))
+  line((-1.2, -DY - 0.8), (1.2, -2 * DY + 0.8), mark: (end: "straight"))
+  line((-6, -2 * DY - 0.8), (-6, -3 * DY + 0.8), mark: (end: "straight"))
+})),
+[
+#canvas(length: 25pt, {
+  import draw: *
+  main-diagram()
+})
+]
+))
+
+*Key idea*: Generate optimal branching rules *on-the-fly* from the problem structure.
+
+== The Math Behind Branching
+#timecounter(2)
+
+#myslide[
+*Branching* = Divide-and-conquer with a twist
+
+#figure(canvas(length: 1cm, {
+  import draw: *
+  mixmode_tree()
+}))
+Runtime: $T(rho) = O(gamma^rho)$, where $rho$ = *problem size* (e.g., number of unfixed variables)
+][
+1. Split into $k$ subproblems, each reducing size by $Delta rho_1, dots, Delta rho_k$. Total time satisfies the recurrence:
+  $
+  T(rho) = sum_(i=1)^k T(rho - Delta rho_i)
+  $
+3. Decide *branching factor* $gamma$:
+  $
+  1 = sum_(i=1)^k gamma^(-Delta rho_i)
+  $
+
+*Goal*: Minimize $gamma$ — fewer branches, larger size reductions!
+]
+
+// == It is difficult
+// #timecounter(1)
+
+// #align(center, box(stroke:black, inset:10pt, align(left, [
+// We are generating "theories"!
+// ])))
+// In the following,
+// - A formal definition of a branching "theory", the size of theories space is double exponential.
+// - An algorithm to generate provably optimal branching rules.
+// - For efficient contraction of sparse tensor networks.
+
+// == Branching - an art of deviding and conquering
+// #timecounter(2)
+// Let $rho$ be a measure of problem size (e.g. number of variables)
+// #figure(canvas(length: 0.8cm, {
+//   mixmode_tree()
+// }))
+
+// #align(left, box(stroke: black, inset: 10pt)[Let $Delta rho_i$ be the size reduction in the $i$-th branch.
+// Then the _branching factor_ is given by
+// $
+// gamma^rho = sum_i gamma^(rho - Delta rho_i) arrow.double.r 1 = sum_i gamma^(- Delta rho_i)
+// $])
+
+// == Measure
+
+// Characterizes the hardness of the instance
+
+// - The number of vertices in the sub-problem
+// - Degree 3 measure: $sum_(v in V) max(0, d(v) - 2)$, because degree 2 graphs are easy!
+// - More sofisticated measures, e.g. assigning different measurs for vertices with different degree.
+// - The tree-width of a graph topology.
+
+// It must be *positive*, *non-increasing* during branching, measure 0 problem is directly solvable.
+
+
+== Key: Valid and good branching rule
+#timecounter(2)
+
+- Valid: all elements in *feasible set* are true assignments of $cal(D)$ (exploring all possibilities).
+- Good: create less branches, eliminate more variables.
+
+#grid(columns:2, gutter: 20pt, canvas({
+    import draw: *
+    circle((0, 0), radius: (4, 2))
+    circle((1, 0), radius: 1, fill: silver, stroke: none)
+    circle((1.4, 0), radius: (1.8, 1.2), fill: aqua.transparentize(80%))
+    content((1, 0), text(14pt)[oracle])
+    content((-1.5, 0), text(14pt)[Total])
+    content((2.5, 0), text(14pt)[$cal(D)$])
+}),
+[
+$ cal(D) = underbrace((b and not c) or overbrace(( not b and c and d), "size reduction (longer is better)"), "number of branches (less is better)") $
+
+]
+)
+
+#align(left, box(stroke: black, inset: 10pt)[Objective $gamma$: Let $Delta rho(c_i)$ be the size reduction after applying the clause $c_i$.
+Then the branching factor is given by $gamma^rho = sum_i gamma^(rho - Delta rho(c_i))$, i.e.
+$
+  1 = sum_i gamma^(- Delta rho(c_i))
+$])
+
+== Remark on the measure
+#timecounter(2)
+*Measure $rho$*: a measure of problem size that monotonically decreases during branching. $rho = 0$ means the problem is *directly solvable*.
+
+#myslide(align(top)[
+
+=== MIS Problem
+- Number of variables with degree $> 2$ (*intuition*: MIS on graph with maximum degree 2 is easy.) in optimal branching paper.
+- The tree-width of the graph in BBTN #footnote([Tree-width was found with `OMEinsumContractionOrders.jl`, orders faster than CoTengra.])
+], align(top)[
+=== Circuit SAT Problem
+Number of "Hard" Clauses (those with $> 2$ variables). *Intuition*: 2-SAT (clauses with $<= 2$ variables) is easy (polynomial time).
+])
+
+_Remark_: Constraint propagation triggers a cascade of simplifications.
+
+== Intuition: Finding Patterns in Feasible Solutions
+#timecounter(2)
+
+#let colred(x) = text(fill: red, $#x$)
+*Example 1*: $"feasible"(a, b, c, d) = {101colred(0), 100colred(0), 010colred(0)}$
+
+Notice: $d = 0$ in all solutions! $arrow.r$ No branching needed, just set $d = 0$.
+$ gamma = 1 quad ("free reduction!")$
+
+*Example 2*: $"feasible"(a, b, c, d, e) = {colred(1111)1, colred(0000)0, colred(1111)0, colred(0000)1}$
+
+Pattern: first 4 bits are either all 1 or all 0. Branch on this!
+$ gamma^n = 2 gamma^(n-4) arrow.r gamma approx 1.19$
+
+*Example 3*: $"feasible"(a, b, c, d) = {1000, 0100, 0010, 0001}$
+
+Exactly one variable is 1. Optimal: branch on whether $a = 1$ or not.
+
+*Key insight*: The structure of feasible solutions reveals efficient branching strategies.
+
+
+// == Visualizing the Search Space
+// #figure(image("images/ob_new.svg", width: 400pt))
+
+== The Challenge: Exponentially Many Strategies
+#timecounter(1)
+#align(center, box(stroke: black, inset: 10pt)[*Q*: How do we find the optimal branching rule?])
+
+*The search space is astronomically large!*
+The number of branching rule on $n$ variables is equal to the number of Disjunctive Normal Form (DNF):
+$
+"# of possible clauses" &= 3^n \
+"# of DNF formulas" &= 2^(3^n)
+$
+
+#align(center, box(text(14pt)[
+$n=3$: $2^(27) approx 10^8$ formulas\
+$n=4$: $2^(81) approx 10^(24)$ formulas\
+$n=5$: $2^(243) approx 10^(73)$ formulas\
+...
+], stroke: black, inset: 10pt))
+
+*Our solution*: arXiv:2412.07685
+
+== Which DNF is the best?
+#timecounter(1)
+- $(not x_1 and x_2 and not x_3) or (x_1 and not x_2 and x_3) or (x_1 and x_2 and not x_3)$
+  $ 1 = 3 gamma^(-3) arrow.r gamma = 3^(1\/3) approx 1.44 $
+- $x_1 or not x_1$
+  $ 1 = 2 gamma^(-1) arrow.r gamma = 2 $
+- $(x_2 and not x_3) or (x_1 and not x_2 and x_3)$
+  $ 1 = gamma^(-2) + gamma^(-3) arrow.r gamma approx 1.38 $
+
+// == Not as easy as it seems
+// #timecounter(1)
+
+// $ "oracle"(a, b, e, f) = {1010, 1001, 0100} $
+// #align(center, [#canvas({
+//   import draw: *
+//   let size = 1
+//   for k in range(8){
+//     content((k * size, size), text(14pt, box([$#numbering("a", k+1)$], fill: none, inset: 2pt)))
+//   }
+//   decision_sequence((0, 0), (-3, -3, 0, 0, -3, -3, 0, 0))
+// })
+
+// Task: find the best branching strategy $cal(D)$.
+
+// ]
+// )
+
+// ==
+// #timecounter(2)
+// $ "oracle"(a, b, c, d) = {1010, 1001, 0100} $
+
+// - A searching strategy can be represented as a boolean expression in disjunctive normal (DNF), i.e. a disjunction of conjunctive clauses.
+// - #highlight([A searching strategy is *valid* if the none of the possible choices lead to good ending is missed.])
+
+// === Examples of valid searching strategies
+// #christina(size: 34pt) Christina (case by case): $((a and not b and c and not d) or (a and not b and not c and d) or (not a and b and not c and not d))$.\
+// #murphy(size: 34pt) Murphy (minimalist): $a or not a$.\
+// #ina(size: 34pt) Ina: $(a and not b) or (b and not a and not c and not d)$ is the optimal one.
+
+// ==
 // #timecounter(2)
 
-// Consider a small circuit with variables $x_1, x_2, x_3, x_4$ and clauses:
-// $ F = &(x_1 or x_2 or x_3) and (not x_1 or x_3 or x_4) \ 
-//     &and (not x_2 or not x_3 or x_4) and (not x_3 or not x_4) $
+// #definition("Valid branching rule")[
+//     A branching rule $cal(D)$ is valid on $cal(S)_R$ if and only if for any set $S_(bold(s)_(partial R)) in cal(S)_R$, there exists a configuration $bold(s)_(V(R)) in S_(bold(s)_(partial R))$ that satisfies $cal(D)$, denoted as $S_(bold(s)_(partial R)) tack.r cal(D)$.
+// ]
 
-// - Initial: $rho = 4$ (all clauses have 3+ literals)
-// - Traditional: branch on single variable, $Delta rho <= 2$
-// - Our approach: compute oracle on ${x_1, x_2, x_3}$, find branching rule that reduces $rho$ maximally
+// #example([oracle: {1010, 1001, 0100}])[
+// - Valid: $((a and not b and c and not d) or (a and not b and not c and d) or (not a and b and not c and not d))$.
+// - Valid: $a or not a$.
+// - Not valid: $((a and not b and c and not d) or (a and not b and not c and d))$.
+// ]
+
+// - Christina: $((a and not b and c and not d) or (a and not b and not c and d) or (not a and b and not c and not d))$.
+//   $ gamma^n = 3 gamma^(n - 4) arrow.r gamma = 3^(1/4) approx 1.32 $
+// - Murphy: $a or not a$.
+//   $ gamma^n = 2 gamma^(n - 1) arrow.r gamma = 2 $
+// - Ina: $(a and not b) or (b and not a and not c and not d)$ is the optimal one ($gamma approx 1.27$).
+
+// == More examples
+// #timecounter(2)
+
+// #let colred(x) = text(fill: red, $#x$)
+// - $"oracle"(a, b, c, d) = {101colred(0), 100colred(0), 010colred(0)}$
+
+//   The optimal branching rule is $not d$, removing one variable for free!
+//   $ gamma^n = gamma^(n-1) arrow.r gamma = 1$
+
+// - $"oracle"(a, b, c, d, e) = {colred(1111)1, colred(0000)0, colred(1111)0, colred(0000)1}$
+
+//   Optimal branching: $(a and b and c and d) or (not a and not b and not c and not d)$.
+//   $ gamma^n = 2 gamma^(n-4) arrow.r gamma approx 1.19$
+
+// - $"oracle"(a, b, c, d) = {1000, 0100, 0010, 0001}$
+
+//   Optimal branching: $(a and not b and not c and not d) or (not a)$.
+//   $ gamma^n = gamma^(n-1) + gamma^(n-4) arrow.r gamma approx 1.38$
 
 // #box(stroke: black, inset: 10pt)[
-// *Result*: Optimal branching may assign multiple variables simultaneously, achieving $Delta rho = 4$ in one branch!
+//   *Less is more*\
+//   - #highlight([Capture bit correlations rather than maximally reducing the search space.])\
+// ]
+
+
+// == The optimal branching algorithm
+// #timecounter(1)
+
+// 1. Denote the oracle $cal(S) = {bold(s)_1, bold(s)_2, dots, bold(s)_l}$
+// 2. Generate candidate clauses $cal(C) = {c_1, c_2, dots, c_m}$ (Can be exponentially large)
+// 3. Find the optimal branching rule $cal(D) = c_(k_1) or c_(k_2) or dots$ by bisecting over $gamma$, find the smallest one that make the cost to the following weighted minimum set covering problem $<=1$:
+// $
+// min_(x) sum_(i=1)^(|cal(C)|) gamma^(-Delta rho(c_i)) x_i,  "s.t." union.big_(i = 1, dots, |cal(D)|,\ x_i = 1) J_i = {1, 2, dots, |cal(S)|}
+// $
+// where $J_i$ is the indices of bitstrings that covered by the $i$-th clause.
+// - _Remark_: Although this problem is NP-hard, it is efficiently solvable with integer programming in practise. It allows us to handle number of vertices $>20$.
+
+// == Showcase: King's subgraph at 0.8 filling
+// #timecounter(1)
+
+// #grid(columns: 2, gutter: 20pt,
+// [#canvas({
+//   import draw: *
+//   show-grid-graph(8, 8, filling: 0.8, unitdisk: 1.6)
+// })
+// ],
+// [
+//   - Independent set problem on King's subgraph is NP-hard @Pichler2018, also known as hard-core lattice gas @Nath2014, and is implementable on Rydberg atoms arrays @Ebadi2022.
+//   - Previous (classical) record: $40 times 40$ for tensor network @Liu2023 and branching methods, estimated to be $70 times 70$ for integer programming (CPLEX) @Andrist2023
+// ])
+// = Application 1: BBTN for MIS
+// == Branch-and-Bound Tensor Network (BBTN)
+// #timecounter(2)
+
+// #myslide[
+// #figure(image("images/bbtn.svg", width: 360pt))
+// ][
+//   *Key idea*: Use branching to decompose a large network into smaller, tractable pieces.
+
+//   *The right measure*: "Tree-width" of the tensor network (contraction complexity).
+
+//   *Left*: Traditional *slicing* — branch on one variable at a time.
+
+//   *Right*: BBTN — *non-uniform slicing* that more effectively reduces tree-width.
+  
+//   *Result*: Much less number of sub-networks.
 // ]
 
 == Open Source Implementation
@@ -1392,86 +1223,112 @@ image("images/fig5.svg", width: 350pt), [
 
 #align(center, image("images/barcode.png", width: 150pt))
 
-// == Example: Circuit SAT Instance
+// == Optimal Branching for Circuit SAT
 // #timecounter(2)
 
-// Consider a small circuit with variables $x_1, x_2, x_3, x_4$ and clauses:
-// $ F = &(x_1 or x_2 or x_3) and (not x_1 or x_3 or x_4) \ 
-//     &and (not x_2 or not x_3 or x_4) and (not x_3 or not x_4) $
-
-// - Initial: $rho = 4$ (all clauses have 3+ literals)
-// - Traditional: branch on single variable, $Delta rho <= 2$
-// - Our approach: compute oracle on ${x_1, x_2, x_3}$, find branching rule that reduces $rho$ maximally
-
-// #box(stroke: black, inset: 10pt)[
-// *Result*: Optimal branching may assign multiple variables simultaneously, achieving $Delta rho = 4$ in one branch!
+// #myslide[
+// *Algorithm*:
+// 1. Select a local region (nearby gates)
+// 2. Enumerate feasible configurations (via tensor contraction), and apply unit propagation
+// 3. Find optimal branching rule
+// 4. Apply branch, propagate, and recurse
+// ][
+//   #box(stroke: black, inset: 10pt, fill: yellow.lighten(80%))[
+//     *Key difference from MIS*: 
+//     - Measure = number of hard clauses (involving $>2$ varaibles), since 2-SAT is easy.
+//     - Exploits unit propagation to reduce the number of hard clauses.
+//   ]
 // ]
 
-// == Take home message
+// == LLM + Solver: The Neuro-Symbolic Future
 // #timecounter(2)
-// #align(left, text(16pt)[
-// - Developed a classical algorithm (*Optimal Branching*) to solve *finite domain constraint satisfaction problem*, e.g. maximum independent set problem.
-// - The key contribution: a provable optimal way to devide a problem into subproblems (optimal branching rule).
-// - To quantum scientists, it is a better way to slice a *sparse* tensor networks (tensors having a lot of zeros).
+
+// *New Scheme*: LLM + SAT Solvers
+
+// 1. *First-Order Logic* (FOL): Undecidable
+   
+// 2. *SMT* (Z3, CVC5): Decidable, software verification @deMoura2008
+   
+// #box(stroke: (paint: black, dash: "dashed"), outset: 10pt, [
+// 3. *CSP* (Kissat, X-SAT): Simplest, foundation of SMT
 // ])
 
-// #align(center, canvas({
-//   import draw: *
-//   let points = ((0, 0), (0, 1), (1, 0), (1, 1), (0, -1), (-2, 1), (-1, 0), (-1, 1))
-//   let edges = (("0", "1"), ("0", "2"), ("0", "4"), ("1", "2"), ("1", "3"), ("2", "3"), ("1", "7"), ("1", "6"), ("7", "5"), ("2", "4"), ("4", "6"), ("5", "6"), ("6", "7"))
-//   for (k, loc) in points.enumerate() {
-//     circle(loc, radius: 0.2, name: str(k), fill: black)
-//   }
-//   for (k, (a, b)) in edges.enumerate() {
-//     line(a, b, name: "e"+str(k), stroke: (if k == 4 {(paint: red, thickness: 2pt)} else {black}))
-//   }
-//   content((rel: (0, 0.5), to: "e4.mid"), text(14pt)[$i$])
-  
-//   set-origin((7.5, 0))
-//   line((-5.5, 0), (-4.5, 0), mark: (end: "straight"))
-//   content((-5, 0.4), text(14pt)[slicing])
-//   content((-3, 0), [$ sum_i $])
-//   for (k, loc) in points.enumerate() {
-//     circle(loc, radius: 0.2, name: str(k), fill: black)
-//   }
-//   for (k, (a, b)) in edges.enumerate() {
-//     line(a, b, name: "e"+str(k), stroke: (if k == 4 {(dash: "dashed")} else {black}))
-//   }
-//   content((rel: (0, 0.5), to: "e4.mid"), text(14pt)[$i$])
+// #place(dx: 70%, dy: -20%, [*$checkmark$ Our Focus*
+// - Simple, but powerful
+// - Connects to Tensor Networks
+// ])
 
-//   set-origin((0, -3))
-//   line((-5.5, 0), (-4.5, 0), mark: (end: "straight"))
-//   content((-5, 0.4), text(14pt)[Optimal Branching])
-//   content((-5, -0.4), text(14pt)[By utilizing sparsity in tensors])
-//   content((3, -1.6), text(14pt)[Sub-tensor-networks with different topologies])
-//   for (k, loc) in points.enumerate() {
-//     circle(loc, radius: 0.2, name: str(k), fill: black)
-//   }
-//   for (k, (a, b)) in edges.enumerate() {
-//     line(a, b, name: "e"+str(k), stroke: (if (k == 4 or k == 3) {(dash: "dashed")} else {black}))
-//   }
-//   set-origin((5, 0))
-//   content((-2.5, 0), [$+$])
-//   for (k, loc) in points.enumerate() {
-//     circle(loc, radius: 0.2, name: str(k), fill: black)
-//   }
-//   for (k, (a, b)) in edges.enumerate() {
-//     line(a, b, name: "e"+str(k), stroke: (if (k == 4 or k == 0 or k == 1 or k == 2) {(dash: "dashed")} else {black}))
-//   }
-//   content((2.5, 0), [$+ quad dots$])
-// }))
+// == Why CSP Matters for AI + Science
+// #timecounter(1)
+
+// *Neuro-symbolic AI*:
+// - SATNet @Wang2019: Differentiable SAT solver layer
+// - NeuroSAT @Selsam2018: Learning to solve SAT with GNNs
+// - AlphaGeometry @Trinh2024: LLMs + symbolic solvers
+
+// *Scientific Applications*:
+// - Protein structure prediction, molecular design
+// - Circuit verification, control systems
+// - Combinatorial optimization (spin systems, scheduling)
+
+// == Reasoners
+// #timecounter(2)
+
+// *Problem*: "Fill a 9×9 Sudoku grid so each row, column, and 3×3 box contains 1-9."
+
+// #align(center, grid(columns: 3, gutter: 30pt, align: left, align(top)[
+//   *First order logic*
+  
+//   #text(13pt)[```
+//   ∀i,j,k (Cell(i,j)=Cell(i,k) 
+//     → j=k)
+//   ∀i,j,k (Cell(i,j)=Cell(k,j) 
+//     → i=k)
+//   ...
+//   ```]
+  
+//   ✓ Most expressive\ 
+//   ✗ Undecidable
+// ], align(top)[
+//   *SMT (Z3, CVC5)*
+  
+//   #text(13pt)[```smt
+//   (declare-const c11 Int)
+//   ...
+//   (assert (distinct row1))
+//   (assert (distinct col1))
+//   (check-sat)
+//   ```]
+  
+//   ✓ Boolean + theories\
+//   ✓ Decidable
+// ], align(top)[
+//   *CSP (Our Focus)*
+  
+//   #text(13pt)[```
+//   Each cell ∈ {1..9}
+  
+//   AllDifferent(each row)
+//   AllDifferent(each col)
+//   AllDifferent(each box)
+//   ```]
+  
+//   ✓ Highly efficient\
+//   ✓ Combinatorial opt.
+// ]))
+
+// #align(center, box(stroke: black, inset: 8pt)[
+//   *Constraint Satisfaction Problem (CSP)*:\ finite domains + constraints — foundation of SMT solvers
+// ])
 
 == Summary
 #timecounter(1)
 
 *Key Takeaways*:
-1. LLMs need a reasoner to take care of hard constraints.
-2. *Branching*, reflect human wisdom of case by case analysis, has an (locally) optimal strategy, in terms of \# of branches.
-4. *Applications*: Maximum independent set, Circuit SAT and more.
-
-#align(center, box(stroke: black, inset: 15pt, fill: yellow.lighten(80%))[
-  *Case by case* - there is a better way. 
-])
+1. CSP $arrow.r$ Tensor networks with *tropical algebra* for ground state search
+2. *Slicing* trades time for space, but *ignores sparsity structure*
+3. *Optimal branching* = smart slicing that exploits *constraint correlations*
+4. Can be generalized to other CSPs, to cut the solution space efficiently, reflecting human wisdom of *case by case analysis*.
 
 == Advanced Materials Thrust \u{2665} AI
 #timecounter(1)
