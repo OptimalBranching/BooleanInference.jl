@@ -1096,6 +1096,11 @@ $n=5$: $2^(243) approx 10^(73)$ formulas\
 - $(x_2 and not x_3) or (x_1 and not x_2 and x_3)$
   $ 1 = gamma^(-2) + gamma^(-3) arrow.r gamma approx 1.38 $
 
+== Compare sparse TN and our branching method
+#timecounter(1)
+
+#figure(image("images/compare_nu_u.pdf"))
+
 // == Not as easy as it seems
 // #timecounter(1)
 
