@@ -37,7 +37,7 @@
 #show: hkustgz-theme.with(
   config-info(
     title: [B&B Tensor Network for Combinatorial Optimization],
-    subtitle: [arXiv:2412.07685 — 20 min version],
+    subtitle: [arXiv:2412.07685],
     author: [Jin-Guo Liu],
     date: datetime.today(),
     institution: [HKUST(GZ) - FUNH - Advanced Materials Thrust],
@@ -48,12 +48,12 @@
 
 = The Challenge: AI Needs Better Reasoners
 
-== Why LLMs Need Reasoners
+== Machine Reasoning
 #timecounter(2)
 
 #v(10pt)
 
-*Current paradigm*: LLM formulates problem + Reasoner solves it @Pan2023
+*New paradigm*: LLM formulates problem + Reasoner solves it @Pan2023
 
 #figure(image("images/logiclm.png"))
 
@@ -99,8 +99,6 @@
   Both are NP-complete @Karp1972 — brute-force requires checking $2^n$ configurations
 ])
 
-_Current state_: LLMs cannot beat state-of-the-art CSP solvers
-
 == Our Approach: Tensor Networks Meet Branching
 #timecounter(3)
 
@@ -130,10 +128,9 @@ _Current state_: LLMs cannot beat state-of-the-art CSP solvers
   
   For complex problems, memory cost is $2^"tree-width"$ — can be exponential
   
-  *Our Innovation*: Smart "branching" strategy that:
-  1. Exploits constraint correlations
-  2. Reduces both time AND space
-  3. Automated discovery of optimal rules
+  *Our Innovation*: Smart "branching" strategy that cuts a large tensor network into multiple smaller ones
+
+  Applicable to any contraction of *sparse tensor networks*.
 ])
 
 #align(center, box(stroke: black, inset: 10pt, fill: yellow.lighten(80%))[
@@ -183,11 +180,12 @@ _Current state_: LLMs cannot beat state-of-the-art CSP solvers
 
 *Example*: Only 3 feasible configurations for highlighted variables: ${010, 101, 110}$
 
-Instead of trying variables one-by-one, we learn a smarter rule:
-- Branch 1: Set $x_2 = 1, x_3 = 0$ (covers case ${010}$)
-- Branch 2: Set $x_1 = 1, x_2 = 0, x_3 = 1$ (covers cases ${101, 110}$)
-
-*Result*: Only 2 branches needed (instead of potentially 8), each fixing multiple variables!
+- "Learn" a *true statement in disjunctive normal form (DNF)*:
+ - $(not x_1 and x_2 and not x_3) or (x_1 and not x_2 and x_3) or (x_1 and x_2 and not x_3)$
+ - $x_1 or not x_1$
+ - $(x_2 and not x_3) or (x_1 and not x_2 and x_3)$ (best)
+- Branching ($approx$ non-uniform slicing) rule to "cut" problems:
+ - (assign $x_2$ to $1$ and $x_3$ to $0$) OR (assign $x_1$ to $1$ and $x_2$ to $0$ and $x_3$ to $1$)
 
 == Time-Space Trade-off: A Major Improvement
 #timecounter(2)
@@ -222,10 +220,6 @@ Instead of trying variables one-by-one, we learn a smarter rule:
 == Circuit SAT & Integer Factoring
 #timecounter(2)
 
-*Problem*: Given product $m = p times q$, find prime factors $p$ and $q$
-
-*Approach*: Model multiplier circuit as constraint satisfaction problem
-
 #place(bottom + right, align(center, [
   #image("images/xiweipan.png", width: 50pt, height: 70pt) #text(14pt, [#v(-15pt)Xi-Wei Pan])
   #image("images/zhongyi.jpg", width: 50pt, height: 70pt) #text(14pt, [#v(-15pt)Zhong-Yi Ni])
@@ -237,9 +231,9 @@ Instead of trying variables one-by-one, we learn a smarter rule:
   #image("images/branch_comparison_3sat.png", width: 80%)
 ]
 
-*Result*: Dramatically fewer branching steps to reach solvable subproblems!
+*Result*: Dramatically fewer branches to reach solvable subproblems!
 
-== Beating 40 Years of Expert Rules
+== Beating 40 Years of Expert-Designed Rules
 #timecounter(2)
 
 *The bottleneck case* from state-of-the-art algorithm @Xiao2013:
@@ -277,14 +271,16 @@ Julia language based ecosystem
 - OMEinsumContractionOrders (faster than CoTengra by several orders) & OMEinsum
 - TropicalGEMM & CuTropicalGEMM (world's fastest tropical matrix multplication)
 - ProblemReductions, GenericTensorNetworks & TensorInference
+
+My Github handle: *GiggleLiu*
 ])
 
 == Summary: Key Takeaways
 #timecounter(2)
 
-- *Problem*: Constraint satisfaction is fundamental for AI reasoning, but scales exponentially
+- *Problem*: Constraint satisfaction $->$ tensor network $->$ Memory explodes!
 
-- *Innovation*: Automated discovery of optimal branching rules by exploiting constraint correlations (or sparsity in tensor networks)
+- *Innovation*: Cut a large tensor network to multiple smaller ones by exploiting constraint correlations (or sparsity in tensor networks)
 
 - *Results*: 
     - Compared with integer programming, it has advantage in both MIS problem and Circuit SAT problem
