@@ -161,14 +161,15 @@
 #timecounter(1)
 
 #v(10pt)
-*Large language models (LLMs) suffers from complex reasoning*#footnote([This statement is from year 2023, by @Pan2023.])
-- Struggle with multi-step logical reasoning ("Hallucinations")
-- Cannot strictly enforce hard constraints (e.g. rules of a game)
 
-#align(center, [? Machines cannot deep reason])
-#pause
-#align(center, [No! We have reasoners.])
+LLM fomulate problem + Reasoner solve it: @Pan2023
 
+#figure(image("images/logiclm.png"))
+
+*Reasoner*: Logic programming, Satisfiability Modulo Theories (SMT), constraint satisfaction problems (#highlight([CSP])), etc.
+(Searching prohibitively large solution space!)
+
+==
 #figure(canvas({
   import draw: *
   content((-5, 0), [*LLM*])
@@ -179,11 +180,51 @@
   content((4.2, -1), text(12pt)[Knowledge & Intuition])
   line((2, -1), (1, -1), mark: (end: "straight"))
 }))
-*Reasoner*: Logic programming, Satisfiability Modulo Theories (SMT), constraint satisfaction problems (CSP), etc.
-(Searching prohibitively large solution space!)
 
-We can combine LLM + Reasoner! @Pan2023
+*Examples*: "Fill a 9×9 Sudoku grid so each row, column, and 3×3 box contains 1-9."
 
+#align(center, grid(columns: 3, gutter: 30pt, align: left, align(top)[
+  *First order logic*
+  
+  #text(13pt)[```
+  ∀i,j,k (Cell(i,j)=Cell(i,k) 
+    → j=k)
+  ∀i,j,k (Cell(i,j)=Cell(k,j) 
+    → i=k)
+  ...
+  ```]
+  
+  ✓ Most expressive\ 
+  ✗ Undecidable
+], align(top)[
+  *SMT (Z3, CVC5)*
+  
+  #text(13pt)[```smt
+  (declare-const c11 Int)
+  ...
+  (assert (distinct row1))
+  (assert (distinct col1))
+  (check-sat)
+  ```]
+  
+  ✓ Boolean + theories\
+  ✓ Decidable
+], align(top)[
+  *CSP (Our Focus)*
+  
+  #text(13pt)[```
+  Each cell ∈ {1..9}
+  
+  AllDifferent(each row)
+  AllDifferent(each col)
+  AllDifferent(each box)
+  ```]
+  
+  ✓ Highly efficient\
+  ✓ Combinatorial opt.
+]))
+
+#place(dx: 57%, dy: -47%, text(14pt, fill: red, align(center)[$arrow.l$\ foundation]))
 
 == Constraint satisfaction problems: MIS and SAT
 #timecounter(1)
@@ -249,7 +290,7 @@ Map constraint satisfaction to finding the *ground state* of an energy function:
 #timecounter(2)
 
 #myslide([
-  *Tensor network representation*:
+  *Tensor network representation*: Diagrammatic representation of sum-product network, where
   - Each *variable* $x_i$ $arrow.r$ a *bond* (index)
   - Each *constraint* $arrow.r$ a *tensor*
   
@@ -286,9 +327,9 @@ $ F = - 1/beta ln Z(beta) arrow min_sigma H(sigma) $
 
 Emergence of max-plus algebra @Liu2021:
 #align(center, table(
-  columns: (auto, auto, auto), inset: 7pt,
+  columns: (auto, auto, auto), inset: 5pt,
   table.header(table.cell(fill: green.lighten(50%))[], table.cell(fill: green.lighten(50%))[Partition function ($beta arrow.r infinity$)], table.cell(fill: green.lighten(50%))[Tropical ($max, +$)]),
-  [Sum], [$e^(beta a) + e^(beta b) approx max(e^(beta a), e^(beta b))$], [$max(a, b)$],
+  [Sum], [$e^(beta a) + e^(beta b) approx e^(beta max(a, b))$], [$max(a, b)$],
   [Product], [$e^(beta a) e^(beta b) = e^(beta (a + b))$], [$a + b$],
   [Zero], [$0$], [$-infinity$],
   [One], [$1$], [$0$],
@@ -456,18 +497,21 @@ _Remark_: Commutative semiring, tensor network contraction order optimization is
 
 == The difficulty of tensor network contraction
 
+- *Time complexity*: the number of elementary operations
+- *Space complexity*: the number of elements in the largest tensor
+
 #align(center, [
   #grid(align: bottom, columns: 3, column-gutter: 30pt, row-gutter: 25pt,
-    canvas(length: 0.6cm, { draw-chain-tn() }),
-    canvas(length: 0.6cm, { draw-tree-tn() }),
-    canvas(length: 0.6cm, { draw-mera-tn() }),
+    canvas(length: 0.8cm, { draw-chain-tn() }),
+    canvas(length: 0.8cm, { draw-tree-tn() }),
+    canvas(length: 0.8cm, { draw-mera-tn() }),
   )
   
   #v(15pt)
   
   #grid(columns: 2, column-gutter: 60pt,
-    canvas(length: 0.6cm, { draw-grid-tn() }),
-    canvas(length: 0.6cm, { draw-regular-tn() }),
+    canvas(length: 0.8cm, { draw-grid-tn() }),
+    canvas(length: 0.8cm, { draw-regular-tn() }),
   )
 ])
 
@@ -497,12 +541,11 @@ The tree tensor network is easier to contract. Why not map a tensor network to a
   *Challenge*: What if $2^"tw"$ is too large for memory?
 ])
 
-== Summary (1)
+== Summary of part 1
 
 - Constraint satisfaction problem (CSP) is a reasoner that LLM can not beat yet.
 - CSP problems can be represented as tensor networks (optionally with max-plus algebra).
-- Tensor network is efficient for low-dimensional problems, remains exponential for high-dimensional problems.
-- The *memory cost* of tensor contraction is the bottleneck.
+- In tensor network simulation, the *memory cost* is usually the bottleneck.
 
 
 = Reduce the memory: From slicing to branching
@@ -664,95 +707,25 @@ _Remark_: In *quantum circuit simulation*, a similar sparsity arises @Shao2024@B
 #figure(image("images/time_complexity.svg", width: 70%))
 
 1. *BBTN* scales to much larger instances than pure tensor network methods.
-2. *BBTN* outperforms SOTA open source integer programming solvers (SCIP, HiGHS).
+2. *BBTN* outperforms SOTA open source integer programming solvers (SCIP).
 
-== 40 Years of Progress on MIS Branching
-#timecounter(1)
+// == Beating SOTA on MIS
+// #timecounter(2)
 
-#myslide(table(
-  columns: (auto, auto, auto, auto),
-  table.header(hd[Year], hd[Running times], hd[References], hd[Notes]),
-  s[1977], s[$O^*(1.2600^n)$], s[@Tarjan1977], s[],
-  s[1986], s[$O^*(1.2346^n)$], s[@Jian1986], s[],
-  s[1986], s[$O^*(1.2109^n)$], s[@Robson1986], s[],
-  s[1999], s[$O^*(1.0823^m)$], s[@Beigel1999], s[],
-  s[2001], s[$O^*(1.1893^n)$], s[@Robson2001], s[],
-  s[2003], s[$O^*(1.1254^n)$ for 3-MIS], s[@Chen2003], s[],
-  s[2005], s[$O^*(1.1034^n)$ for 3-MIS], s[@Xiao2005], s[],
-  s[2006], s[$O^*(1.2210^n)$], s[@Fomin2006], s[Measure and conquer,\ mirror rule],
-  s[2006], s[$O^*(1.1225^n)$ for 3-MIS], s[@Fomin2006b], s[Same as TN],
-  s[2006], s[$O^*(1.1120^n)$ for 3-MIS], s[@Furer2006], s[],
-  s[2006], s[$O^*(1.1034^n)$ for 3-MIS], s[@Razgon2006], s[],
-  s[2008], s[$O^*(1.0977^n)$ for 3-MIS], s[@Bourgeois2008], s[],
-  s[2009], s[$O^*(1.0919^n)$ for 3-MIS], s[@Xiao2009], s[],
-  s[2009], s[$O^*(1.2132^n)$], s[@Kneis2009], s[Satellite rule],
-  s[2013], s[$O^*(1.0836^n)$ for 3-MIS], s[@Xiao2013], s[SOTA],
-  s[2016], s[$O^*(1.2210^n)$], s[@Akiba2016], s[PACE winner],
-  s[2017], s[$O^*(1.1996^n)$], s[@Xiao2017], s[SOTA],
-),
-[
-#align(center, box([MIS is NP-complete — no polynomial-time algorithm exists (unless P=NP) @Karp1972.], stroke: black, inset: 10pt))
-
-#let formin() = {
-  import draw: *
-  let s = 2
-  let dy = 3.0
-  let la = (-s, 0)
-  let lb = (0, s)
-  let lc = (0, 0)
-  let ld = (s, 0)
-  let le = (s, s)
- 
-  for (l, n, color) in ((la, "a", red), (lb, "b", black), (lc, "c", red), (ld, "d", black), (le, "e", red)){
-    circle((l.at(0), l.at(1)-s/2), radius:0.4, name: n, stroke: color)
-    content((l.at(0), l.at(1)-s/2), text(14pt)[$#n$])
-  }
-  for (a, b) in (("a", "b"), ("b", "c"), ("c", "d"), ("d", "e"), ("b", "d")){
-    line(a, b)
-  }
-}
-])
-
-== Can We Beat Expert-Designed Rules?
-#timecounter(1)
-
-*The bottleneck case* from @Xiao2013 (state-of-the-art 3-MIS algorithm):
-
-#grid(columns: 3,
-  image("images/bottleneck.svg", width: 300pt),
-  h(30pt),
-  align(horizon, text(20pt, black)[
-    - 21 variables in the local region
-    - 71 feasible configurations
-    - 15,782 candidate clauses
-    
-    *Our result*: 4 branches with size reductions $[10, 16, 26, 26]$
-    *$ gamma = 1.0817 < 1.0836 $*
-    (Solved in 1 second!)
-  ]),
-)
-
-*Our automatic method beats 40 years of expert-designed rules!*
-
-== Beating SOTA on MIS
-#timecounter(2)
-
-#grid(columns: 2, gutter: 0pt,
-image("images/fig5.svg", width: 350pt), [
-  *Metric*: Number of branches (lower is better)
+// #grid(columns: 2, gutter: 0pt,
+// image("images/fig5.svg", width: 350pt), [
+//   *Metric*: Number of branches (lower is better)
   
-  *Methods compared*:
-  - #text(red)[`ob`]: Our optimal branching
-  - #text(green)[`xiao2013`]: Best hand-crafted 3-MIS rules
-  - #text(blue)[`akiba2015`]: PACE competition winner
+//   *Methods compared*:
+//   - #text(red)[`ob`]: Our optimal branching
+//   - #text(green)[`xiao2013`]: Best hand-crafted 3-MIS rules
+//   - #text(blue)[`akiba2015`]: PACE competition winner
   
-  #v(10pt)
-  *Key findings*:
-  - #text(red)[`ob`] generates the fewest branches across all graph types
-  - On 3-regular graphs: $gamma = 1.0441$ (vs. 1.0487 for hand-crafted)
-])
-
-
+//   #v(10pt)
+//   *Key findings*:
+//   - #text(red)[`ob`] generates the fewest branches across all graph types
+//   - On 3-regular graphs: $gamma = 1.0441$ (vs. 1.0487 for hand-crafted)
+// ])
 
 == Circuit SAT: Integer factoring as an example
 #timecounter(1)
@@ -938,14 +911,12 @@ image("images/fig5.svg", width: 350pt), [
 ]
 ))
 
-*Key idea*: Generate optimal branching rules *on-the-fly* from the problem structure.
+*Key idea*: Recursively generate more branches, until $rho = 0$.
 
-== The Math Behind Branching
+== The branching factor $gamma$
 #timecounter(2)
 
 #myslide[
-*Branching* = Divide-and-conquer with a twist
-
 #figure(canvas(length: 1cm, {
   import draw: *
   mixmode_tree()
@@ -958,6 +929,7 @@ Runtime: $T(rho) = O(gamma^rho)$, where $rho$ = *problem size* (e.g., number of 
   $
 3. Decide *branching factor* $gamma$:
   $
+  gamma^rho = sum_(i=1)^k gamma^(rho -Delta rho_i) arrow.double.r
   1 = sum_(i=1)^k gamma^(-Delta rho_i)
   $
 
@@ -1000,10 +972,10 @@ Runtime: $T(rho) = O(gamma^rho)$, where $rho$ = *problem size* (e.g., number of 
 // It must be *positive*, *non-increasing* during branching, measure 0 problem is directly solvable.
 
 
-== Key: Valid and good branching rule
+== Key: Valid and good branching rule as DNF $cal(D)$
 #timecounter(2)
 
-- Valid: all elements in *feasible set* are true assignments of $cal(D)$ (exploring all possibilities).
+- Valid: all elements in *feasible set* are true assignments of $cal(D)$, i.e. $cal(D)$ is true.
 - Good: create less branches, eliminate more variables.
 
 #grid(columns:2, gutter: 20pt, canvas({
@@ -1011,7 +983,7 @@ Runtime: $T(rho) = O(gamma^rho)$, where $rho$ = *problem size* (e.g., number of 
     circle((0, 0), radius: (4, 2))
     circle((1, 0), radius: 1, fill: silver, stroke: none)
     circle((1.4, 0), radius: (1.8, 1.2), fill: aqua.transparentize(80%))
-    content((1, 0), text(14pt)[oracle])
+    content((1, 0), text(14pt)[feasible])
     content((-1.5, 0), text(14pt)[Total])
     content((2.5, 0), text(14pt)[$cal(D)$])
 }),
@@ -1030,18 +1002,18 @@ $])
 == Remark on the measure
 #timecounter(2)
 *Measure $rho$*: a measure of problem size that monotonically decreases during branching. $rho = 0$ means the problem is *directly solvable*.
-
+#box(stroke: black, inset: 10pt)[
 #myslide(align(top)[
-
 === MIS Problem
 - Number of variables with degree $> 2$ (*intuition*: MIS on graph with maximum degree 2 is easy.) in optimal branching paper.
 - The tree-width of the graph in BBTN #footnote([Tree-width was found with `OMEinsumContractionOrders.jl`, orders faster than CoTengra.])
 ], align(top)[
 === Circuit SAT Problem
-Number of "Hard" Clauses (those with $> 2$ variables). *Intuition*: 2-SAT (clauses with $<= 2$ variables) is easy (polynomial time).
+Number of "hard" clauses/gates (those with $> 2$ variables). *Intuition*: 2-SAT (clauses with $<= 2$ variables) is easy (polynomial time).
 ])
+]
 
-_Remark_: Constraint propagation triggers a cascade of simplifications.
+_Remark_: When fixing a variable, constraint propagation triggers a cascade of simplifications, i.e. it enlarges $Delta rho$.
 
 == Intuition: Finding Patterns in Feasible Solutions
 #timecounter(2)
@@ -1085,7 +1057,76 @@ $n=5$: $2^(243) approx 10^(73)$ formulas\
 ...
 ], stroke: black, inset: 10pt))
 
-*Our solution*: arXiv:2412.07685
+*Our algorithm*: arXiv:2412.07685, enables optimal branching on $~20$ variables.
+
+== 40 Years of Progress on MIS Branching
+#timecounter(1)
+
+#myslide(table(
+  columns: (auto, auto, auto, auto),
+  table.header(hd[Year], hd[Running times], hd[References], hd[Notes]),
+  s[1977], s[$O^*(1.2600^n)$], s[@Tarjan1977], s[],
+  s[1986], s[$O^*(1.2346^n)$], s[@Jian1986], s[],
+  s[1986], s[$O^*(1.2109^n)$], s[@Robson1986], s[],
+  s[1999], s[$O^*(1.0823^m)$], s[@Beigel1999], s[],
+  s[2001], s[$O^*(1.1893^n)$], s[@Robson2001], s[],
+  s[2003], s[$O^*(1.1254^n)$ for 3-MIS], s[@Chen2003], s[],
+  s[2005], s[$O^*(1.1034^n)$ for 3-MIS], s[@Xiao2005], s[],
+  s[2006], s[$O^*(1.2210^n)$], s[@Fomin2006], s[Measure and conquer,\ mirror rule],
+  s[2006], s[$O^*(1.1225^n)$ for 3-MIS], s[@Fomin2006b], s[Same as TN],
+  s[2006], s[$O^*(1.1120^n)$ for 3-MIS], s[@Furer2006], s[],
+  s[2006], s[$O^*(1.1034^n)$ for 3-MIS], s[@Razgon2006], s[],
+  s[2008], s[$O^*(1.0977^n)$ for 3-MIS], s[@Bourgeois2008], s[],
+  s[2009], s[$O^*(1.0919^n)$ for 3-MIS], s[@Xiao2009], s[],
+  s[2009], s[$O^*(1.2132^n)$], s[@Kneis2009], s[Satellite rule],
+  s[2013], s[$O^*(1.0836^n)$ for 3-MIS], s[@Xiao2013], s[SOTA],
+  s[2016], s[$O^*(1.2210^n)$], s[@Akiba2016], s[PACE winner],
+  s[2017], s[$O^*(1.1996^n)$], s[@Xiao2017], s[SOTA],
+),
+[
+#align(center, box([MIS is NP-complete — no polynomial-time algorithm exists (unless P=NP) @Karp1972.], stroke: black, inset: 10pt))
+
+#let formin() = {
+  import draw: *
+  let s = 2
+  let dy = 3.0
+  let la = (-s, 0)
+  let lb = (0, s)
+  let lc = (0, 0)
+  let ld = (s, 0)
+  let le = (s, s)
+ 
+  for (l, n, color) in ((la, "a", red), (lb, "b", black), (lc, "c", red), (ld, "d", black), (le, "e", red)){
+    circle((l.at(0), l.at(1)-s/2), radius:0.4, name: n, stroke: color)
+    content((l.at(0), l.at(1)-s/2), text(14pt)[$#n$])
+  }
+  for (a, b) in (("a", "b"), ("b", "c"), ("c", "d"), ("d", "e"), ("b", "d")){
+    line(a, b)
+  }
+}
+])
+
+== Can We Beat Expert-Designed Rules?
+#timecounter(1)
+
+*The bottleneck case* from @Xiao2013 (state-of-the-art 3-MIS algorithm):
+
+#grid(columns: 3,
+  image("images/bottleneck.svg", width: 300pt),
+  h(30pt),
+  align(horizon, text(20pt, black)[
+    - 21 variables in the local region
+    - 71 feasible configurations
+    - 15,782 candidate clauses
+    
+    *Our result*: 4 branches with size reductions $[10, 16, 26, 26]$
+    *$ gamma = 1.0817 < 1.0836 $*
+    (Solved in 1 second!)
+  ]),
+)
+
+*Our automatic method beats 40 years of expert-designed rules!*
+
 
 == Which DNF is the best?
 #timecounter(1)
@@ -1094,7 +1135,7 @@ $n=5$: $2^(243) approx 10^(73)$ formulas\
 - $x_1 or not x_1$
   $ 1 = 2 gamma^(-1) arrow.r gamma = 2 $
 - $(x_2 and not x_3) or (x_1 and not x_2 and x_3)$
-  $ 1 = gamma^(-2) + gamma^(-3) arrow.r gamma approx 1.38 $
+  $ 1 = gamma^(-2) + gamma^(-3) arrow.r gamma approx 1.32 $
 
 == Compare sparse TN and our branching method
 #timecounter(1)
@@ -1333,7 +1374,7 @@ $n=5$: $2^(243) approx 10^(73)$ formulas\
 1. CSP $arrow.r$ Tensor networks with *tropical algebra* for ground state search
 2. *Slicing* trades time for space, but *ignores sparsity structure*
 3. *Optimal branching* = smart slicing that exploits *constraint correlations*
-4. Can be generalized to other CSPs, to cut the solution space efficiently, reflecting human wisdom of *case by case analysis*.
+4. _Remark_: Can be generalized to other CSPs, to cut the solution space efficiently, reflecting human wisdom of *case by case analysis*.
 
 == Advanced Materials Thrust \u{2665} AI
 #timecounter(1)
