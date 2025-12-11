@@ -12,6 +12,10 @@
 // Theorems configuration
 #show: thmrules.with(qed-symbol: $square$)
 
+#let clip(image, top: 0pt, bottom: 0pt, left: 0pt, right: 0pt) = {
+  box(clip: true, image, inset: (top: -top, right: -right, left: -left, bottom: -bottom))
+}
+
 #let theorem = thmbox("theorem", "Theorem", stroke: black).with(numbering: none)
 #let definition = thmbox("definition", "Definition", inset: (x: 1.2em, top: 1em)).with(numbering: none)
 
@@ -214,9 +218,8 @@ Instead of trying variables one-by-one, we learn a smarter rule:
 *Key achievements*:
 1. BBTN scales to instances 100x larger than pure tensor network methods
 2. Outperforms state-of-the-art open source solvers (SCIP)
-3. First automated method to beat 40 years of expert-designed rules!
 
-== Application 1: Circuit SAT and Integer Factoring
+== Circuit SAT & Integer Factoring
 #timecounter(2)
 
 *Problem*: Given product $m = p times q$, find prime factors $p$ and $q$
@@ -228,10 +231,10 @@ Instead of trying variables one-by-one, we learn a smarter rule:
   #image("images/zhongyi.jpg", width: 50pt, height: 70pt) #text(14pt, [#v(-15pt)Zhong-Yi Ni])
 ]))
 
-#myslide[
-  #image("images/branch_comparison.png", width: 100%)
+#myslide(gutter: -50pt)[
+  #image("images/branch_comparison.png", width: 80%)
 ][
-  #image("images/branch_comparison_3sat.png", width: 100%)
+  #image("images/branch_comparison_3sat.png", width: 80%)
 ]
 
 *Result*: Dramatically fewer branching steps to reach solvable subproblems!
@@ -258,57 +261,37 @@ Instead of trying variables one-by-one, we learn a smarter rule:
   ]),
 )
 
-= Impact and Future
-
-== Why This Matters: Broad Impact
-#timecounter(2)
-
-*Immediate applications*:
-
-1. *Neuro-symbolic AI*: Better reasoning layers for LLMs
-   - SATNet, NeuroSAT, AlphaGeometry-style systems
-
-2. *Scientific computing*:
-   - Quantum circuit simulation
-   - Protein structure prediction
-   - Molecular design
-
-3. *Industrial problems*:
-   - Circuit verification
-   - Scheduling and logistics
-   - Resource allocation
-
-*Key advantage*: Fully automated — no human expertise needed to design branching rules
-
-== Open Source Implementation
+== Talk is cheap, show me the code!
 #timecounter(1)
 
+#myslide([
 #align(center, grid(columns: 1, gutter: 10pt, image("images/ob-logo.svg", width: 300pt), 
 [
 #link("https://github.com/OptimalBranching/OptimalBranching.jl")[OptimalBranching/OptimalBranching.jl]
 ]))
 
 #align(center, image("images/barcode.png", width: 150pt))
+], [
+Julia language based ecosystem
 
-*Available now* for the community to build upon!
+- OMEinsumContractionOrders (faster than CoTengra by several orders) & OMEinsum
+- TropicalGEMM & CuTropicalGEMM (world's fastest tropical matrix multplication)
+- ProblemReductions, GenericTensorNetworks & TensorInference
+])
 
 == Summary: Key Takeaways
 #timecounter(2)
 
-#box(stroke: black, inset: 15pt, width: 100%, fill: blue.lighten(90%))[
-  1. *Problem*: Constraint satisfaction is fundamental for AI reasoning, but scales exponentially
-  
-  2. *Innovation*: Automated discovery of optimal branching rules by exploiting constraint correlations
-  
-  3. *Results*: 
-     - First automated method to beat expert-designed rules
-     - Scales 100x larger than previous methods
-     - Both time AND space improvements
-  
-  4. *Impact*: Enables better reasoners for LLMs, scientific applications, and industrial optimization
-]
+- *Problem*: Constraint satisfaction is fundamental for AI reasoning, but scales exponentially
 
-*Key insight*: The structure of constraints reveals efficient divide-and-conquer strategies
+- *Innovation*: Automated discovery of optimal branching rules by exploiting constraint correlations (or sparsity in tensor networks)
+
+- *Results*: 
+    - Compared with integer programming, it has advantage in both MIS problem and Circuit SAT problem
+    - Compared with expert-designed branching rules, it is optimal
+    - Compared with slicing, it has advantage in time-space trade-off
+
+- *Impact*: Enables better reasoners for LLMs, scientific applications, and industrial optimization
 
 == Advanced Materials Thrust \u{2665} AI
 #timecounter(1)
@@ -341,3 +324,6 @@ columns: 6, column-gutter: 20pt, row-gutter: 10pt))
 
 == References
 #bibliography("refs.bib", title: none)
+
+
+#image("images/sycamore.pdf", width: 60%)
