@@ -34,8 +34,14 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem},
         return nothing
     end
     
+    # Extract yosys_path from solver if it's XSATSolver
+    yosys_path = nothing
+    if actual_solver isa XSATSolver
+        yosys_path = actual_solver.yosys_path
+    end
+    
     @info "  Loading instances from: $dataset_path"
-    instances = read_instances(problem_type, dataset_path)
+    instances = read_instances(problem_type, dataset_path; yosys_path=yosys_path)
     @info "  Testing $(length(instances)) instances"
     
     if isempty(instances)
@@ -66,7 +72,14 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem},
 
         # For CircuitSAT, print SAT/UNSAT result
         if problem_type == CircuitSATProblem && result !== nothing
-            satisfiable, _ = result
+            # Handle different result types
+            if result isa XSatResult
+                satisfiable = result.status == :sat
+            elseif result isa Tuple
+                satisfiable, _ = result
+            else
+                satisfiable = false  # Unknown result type
+            end
             instance_name = hasfield(typeof(instance), :name) ? instance.name : "Instance $i"
             println("  $instance_name: ", satisfiable ? "SAT" : "UNSAT", " ($(round(elapsed_time, digits=4))s)")
         end
@@ -94,7 +107,15 @@ function benchmark_dataset(problem_type::Type{<:AbstractBenchmarkProblem},
                 if problem_type == CNFSATProblem
                     push!(branches, res.stats.total_visited_nodes)
                 elseif problem_type == CircuitSATProblem
-                    push!(branches, res[2].total_visited_nodes)
+                    # Handle different result types for CircuitSAT
+                    if res isa XSatResult
+                        # XSATSolver doesn't track branches
+                        push!(branches, 0)
+                    elseif res isa Tuple && length(res) >= 2
+                        push!(branches, res[2].total_visited_nodes)
+                    else
+                        push!(branches, 0)
+                    end
                 elseif problem_type == FactoringProblem
                     push!(branches, res[3].total_visited_nodes)
                 else

@@ -24,7 +24,8 @@ using BooleanInference
 # println()
 
 c3540_path = joinpath(@__DIR__, "..", "data", "aig", "non-arithmetic", "c3540.aag")
-result = benchmark_dataset(CircuitSATProblem, c3540_path)
+# result = benchmark_dataset(CircuitSATProblem, c3540_path; solver=BooleanInferenceBenchmarks.XSATSolver(csat_path=joinpath(dirname(@__DIR__), "artifacts", "bin", "csat"),yosys_path="/opt/homebrew/bin/yosys", timeout=300.0))
+result = benchmark_dataset(CircuitSATProblem, c3540_path; solver=BooleanInferenceBenchmarks.BooleanInferenceSolver())
 
 if result !== nothing
     println("\nResults:")

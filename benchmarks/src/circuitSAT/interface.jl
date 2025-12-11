@@ -15,14 +15,14 @@ function problem_id(config::CircuitSATConfig)
 end
 
 # Load a single circuit instance from file
-function load_circuit_instance(config::CircuitSATConfig)
+function load_circuit_instance(config::CircuitSATConfig; yosys_path::Union{String, Nothing}=nothing)
     name = problem_id(config)
     
     circuit = if config.format == :verilog
         CircuitIO.verilog_to_circuit(config.path)
     elseif config.format == :aag
         # Convert AAG to Verilog using Yosys for better performance
-        circuit = aag_to_circuit_via_yosys(config.path)
+        circuit = aag_to_circuit_via_yosys(config.path; yosys_path=yosys_path)
     else
         error("Unsupported format: $(config.format)")
     end
@@ -31,22 +31,65 @@ function load_circuit_instance(config::CircuitSATConfig)
 end
 
 # Convert AAG to Circuit via Yosys (AAG -> Verilog -> Circuit)
-function aag_to_circuit_via_yosys(aag_path::String)
+function aag_to_circuit_via_yosys(aag_path::String; yosys_path::Union{String, Nothing}=nothing)
+    # Find yosys executable
+    yosys_exe = if !isnothing(yosys_path)
+        yosys_path
+    else
+        # Try common paths
+        common_paths = ["/opt/homebrew/bin/yosys", "/usr/local/bin/yosys", "/usr/bin/yosys"]
+        found_path = nothing
+        for path in common_paths
+            if isfile(path)
+                found_path = path
+                break
+            end
+        end
+        if !isnothing(found_path)
+            found_path
+        else
+            # Try which command
+            try
+                strip(read(`which yosys`, String))
+            catch
+                "yosys"  # Fallback to PATH
+            end
+        end
+    end
+    
     # Create temporary Verilog file
     mktempdir() do tmpdir
         verilog_tmp = joinpath(tmpdir, "circuit_tmp.v")
         
+        # Ensure the temporary directory exists and get absolute paths
+        aag_abs = abspath(aag_path)
+        verilog_abs = abspath(verilog_tmp)
+        
+        # Ensure the temporary directory exists
+        mkpath(dirname(verilog_abs))
+        
         # Use Yosys to convert AAG to Verilog with clean module name
         # The 'rename' command ensures we get a simple module name
-        yosys_script = "read_aiger $aag_path; rename -top circuit_top; write_verilog $verilog_tmp"
-        yosys_cmd = `yosys -p $yosys_script`
+        # Build command using array form to avoid quote issues
+        yosys_script = "read_aiger $aag_abs; rename -top circuit_top; write_verilog $verilog_abs"
+        yosys_cmd = Cmd([yosys_exe, "-p", yosys_script])
         
         try
-            # Run Yosys conversion
-            run(pipeline(yosys_cmd, stdout=devnull, stderr=devnull))
+            # Run Yosys conversion, capture stderr to see errors
+            result = run(pipeline(yosys_cmd, stdout=stdout, stderr=stderr), wait=false)
+            wait(result)
+            
+            if !success(result)
+                error("Yosys command failed with exit code $(result.exitcode)")
+            end
+            
+            # Verify the file was created
+            if !isfile(verilog_abs)
+                error("Yosys did not create output file: $verilog_abs")
+            end
             
             # Parse the generated Verilog
-            circuit = CircuitIO.verilog_to_circuit(verilog_tmp)
+            circuit = CircuitIO.verilog_to_circuit(verilog_abs)
             
             # Add constraints for outputs (po* variables must be true)
             # This is the standard CircuitSAT problem formulation
@@ -85,12 +128,12 @@ function add_output_constraints(circuit::Circuit)
 end
 
 # Read instances from a config (for compatibility with benchmark API)
-function read_instances(::Type{CircuitSATProblem}, config::CircuitSATConfig)
-    return [load_circuit_instance(config)]
+function read_instances(::Type{CircuitSATProblem}, config::CircuitSATConfig; yosys_path::Union{String, Nothing}=nothing)
+    return [load_circuit_instance(config; yosys_path=yosys_path)]
 end
 
 # Read instances from a directory path (for benchmark_dataset)
-function read_instances(::Type{CircuitSATProblem}, path::AbstractString)
+function read_instances(::Type{CircuitSATProblem}, path::AbstractString; yosys_path::Union{String, Nothing}=nothing)
     if isfile(path)
         # Single file: determine format from extension
         format = if endswith(path, ".v")
@@ -101,7 +144,7 @@ function read_instances(::Type{CircuitSATProblem}, path::AbstractString)
             error("Unknown file format for: $path. Expected .v or .aag")
         end
         config = CircuitSATConfig(format, path)
-        return [load_circuit_instance(config)]
+        return [load_circuit_instance(config; yosys_path=yosys_path)]
     elseif isdir(path)
         # Directory: load all circuit files
         verilog_files = discover_circuit_files(path; format=:verilog)
@@ -112,7 +155,7 @@ function read_instances(::Type{CircuitSATProblem}, path::AbstractString)
         for vfile in verilog_files
             try
                 config = CircuitSATConfig(:verilog, vfile)
-                push!(instances, load_circuit_instance(config))
+                push!(instances, load_circuit_instance(config; yosys_path=yosys_path))
             catch e
                 @warn "Failed to load $vfile" exception=e
             end
@@ -121,7 +164,7 @@ function read_instances(::Type{CircuitSATProblem}, path::AbstractString)
         for afile in aag_files
             try
                 config = CircuitSATConfig(:aag, afile)
-                push!(instances, load_circuit_instance(config))
+                push!(instances, load_circuit_instance(config; yosys_path=yosys_path))
             catch e
                 @warn "Failed to load $afile" exception=e
             end
@@ -155,7 +198,15 @@ function is_satisfiable(result)
     if result === nothing
         return nothing  # Solver failed
     end
-    satisfiable, stats = result
-    return satisfiable  # true = SAT, false = UNSAT
+    
+    # Handle different result types
+    if result isa XSatResult
+        return result.status == :sat ? true : (result.status == :unsat ? false : nothing)
+    elseif result isa Tuple && length(result) >= 1
+        satisfiable, _ = result
+        return satisfiable  # true = SAT, false = UNSAT
+    else
+        return nothing  # Unknown result type
+    end
 end
 

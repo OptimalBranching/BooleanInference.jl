@@ -135,7 +135,6 @@ function verilog_module_to_circuit(mod::VerilogModule)
         bool_expr = parse_boolean_expression(expr_str, all_symbols)
         push!(exprs, Assignment([output], bool_expr))
     end
-    
     return Circuit(exprs)
 end
 

@@ -10,6 +10,11 @@ function solve_instance(::Type{CircuitSATProblem}, instance::CircuitSATInstance,
     end
 end
 
+function solve_instance(::Type{CircuitSATProblem}, instance::CircuitSATInstance, solver::XSATSolver)
+    result = run_xsat_and_parse(solver.csat_path, instance.source_path, solver.timeout)
+    return result
+end
+
 # Note: CNFSolver implementation would require additional dependencies
 # Keeping it here for future extension
 # function solve_instance(::Type{CircuitSATProblem}, instance::CircuitSATInstance, solver::CNFSolver)
