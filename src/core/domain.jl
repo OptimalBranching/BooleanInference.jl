@@ -26,6 +26,12 @@ function get_var_value(dms::Vector{DomainMask}, var_ids::Vector{Int})
     return Bool[get_var_value(dms, var_id) for var_id in var_ids]
 end
 
+@inline function negate_domain(dm::DomainMask)
+    b = bits(dm)
+    # Swap the two lowest bits: 0x01 <-> 0x02, 0x00 and 0x03 remain unchanged
+    DomainMask(((b & 0x01) << 1) | ((b & 0x02) >> 1))
+end
+
 function active_degree(tn::ConstraintNetwork, doms::Vector{DomainMask})
     degree = zeros(Int, length(tn.tensors))
     @inbounds for (tensor_id, tensor) in enumerate(tn.tensors)
