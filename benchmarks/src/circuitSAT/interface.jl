@@ -128,8 +128,8 @@ function add_output_constraints(circuit::Circuit)
 end
 
 # Read instances from a config (for compatibility with benchmark API)
-function read_instances(::Type{CircuitSATProblem}, config::CircuitSATConfig; yosys_path::Union{String, Nothing}=nothing)
-    return [load_circuit_instance(config; yosys_path=yosys_path)]
+function read_instances(::Type{CircuitSATProblem}, config::CircuitSATConfig)
+    return [load_circuit_instance(config)]
 end
 
 # Read instances from a directory path (for benchmark_dataset)

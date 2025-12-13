@@ -101,7 +101,8 @@ function setup_problem(var_num::Int, tensors_to_vars::Vector{Vector{Int}}, tenso
     return ConstraintNetwork(vars, unique_data, tensors, vars_to_tensors)
 end
 
-function setup_from_csp(csp::ConstraintSatisfactionProblem)
+
+function setup_from_csp(csp::ConstraintSatisfactionProblem; simplify::Bool=false, support_limit::Int=128)
     # Extract constraints directly
     cons = constraints(csp)
     var_num = num_variables(csp)
@@ -109,6 +110,15 @@ function setup_from_csp(csp::ConstraintSatisfactionProblem)
     # Build tensors directly from LocalConstraints
     tensors_to_vars = [c.variables for c in cons]
     tensor_data = [BitVector(c.specification) for c in cons]
+
+    # Simplify tensor network before creating ConstraintNetwork
+    if simplify
+        tensors_to_vars, tensor_data = simplify_tensor_network(
+            var_num, tensors_to_vars, tensor_data; 
+            support_limit=support_limit
+        )
+        @show length(tensors_to_vars)
+    end
 
     return setup_problem(var_num, tensors_to_vars, tensor_data)
 end

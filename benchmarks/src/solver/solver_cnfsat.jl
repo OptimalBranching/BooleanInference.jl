@@ -136,10 +136,43 @@ function run_minisat_and_parse(minisat_path::String, cnf_path::String, solver::M
     return parse_dimacs_output(solver, raw_stdout)
 end
 
+function run_cnc_and_parse(cnc_path::String, cnf_path::String, solver::CnCSolver)::CNFSolverResult
+    # MiniSAT with -verb=0 for quiet mode (only outputs status)
+    # MiniSAT exit codes: 10=SAT, 20=UNSAT, 0=unknown/timeout
+    if solver.quiet
+        cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $cnc_path -q $cnf_path`
+    else
+        cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $cnc_path $cnf_path`
+    end
+    
+    # Capture stdout and stderr separately, allow non-zero exit codes
+    stdout_pipe = Pipe()
+    stderr_pipe = Pipe()
+    proc = run(pipeline(cmd, stdout=stdout_pipe, stderr=stderr_pipe), wait=false)
+    close(stdout_pipe.in)
+    close(stderr_pipe.in)
+    
+    raw_stdout = read(stdout_pipe, String)
+    raw_stderr = read(stderr_pipe, String)
+    wait(proc)
+    exitcode = proc.exitcode
+    
+    # Check for actual errors (not SAT/UNSAT exit codes)
+    if exitcode != 0 && exitcode != 10 && exitcode != 20
+        error("CnC exited with error code $(exitcode). Stderr: $raw_stderr\nStdout: $raw_stdout")
+    end
+    @show raw_stdout
+    # return parse_dimacs_output(solver, raw_stdout)
+end
+
 function run_cnf_solver(solver::KissatSolver, cnf_path::String)::CNFSolverResult
     return run_kissat_and_parse(solver.kissat_path, cnf_path, solver)
 end
 
 function run_cnf_solver(solver::MinisatSolver, cnf_path::String)::CNFSolverResult
     return run_minisat_and_parse(solver.minisat_path, cnf_path, solver)
+end
+
+function run_cnf_solver(solver::CnCSolver, cnf_path::String)::CNFSolverResult
+    return run_cnc_and_parse(solver.cnc_path, cnf_path, solver)
 end

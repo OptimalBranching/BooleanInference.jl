@@ -25,7 +25,7 @@ for nn in n
     least_avg_branch_value = Inf
     least_avg_branch_index = 0
     for (i, result) in enumerate(bi_results)
-        if result.solver_config["selector_type"] == "MostOccurrenceSelector" && result.solver_config["measure"] == "NumHardTensors" && result.solver_config["set_cover_solver"] == "GreedyMerge"
+        if result.solver_config["selector_type"] == "MostOccurrenceSelector" && result.solver_config["measure"] == "NumUnfixedVars" && result.solver_config["set_cover_solver"] == "GreedyMerge"
             if mean(result.branches) < least_avg_branch_value
                 least_avg_branch_value = mean(result.branches)
                 least_avg_branch_index = i

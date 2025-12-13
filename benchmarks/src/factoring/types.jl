@@ -51,7 +51,7 @@ function write_instance(io::IO, instance::FactoringInstance)
 end
 
 # Read instances from file (text format)
-function read_instances(::Type{FactoringProblem}, path::AbstractString)
+function read_instances(::Type{FactoringProblem}, path::AbstractString; kwargs...)
     instances = FactoringInstance[]
     open(path, "r") do io
         for line in eachline(io)

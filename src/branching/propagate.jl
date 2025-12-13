@@ -1,18 +1,20 @@
 @inline function scan_supports(support::Vector{UInt16}, query_mask0::UInt16, query_mask1::UInt16)
-    # the OR of all feasible configs
     valid_or_agg = UInt16(0)
-    # the AND of all feasible configs
     valid_and_agg = UInt16(0xFFFF)
-    found_any = false
+    found_count = 0 
 
-    @inbounds for config in support
-        if (config & query_mask0) == 0 && (config & query_mask1) == query_mask1
-            valid_or_agg |= config
-            valid_and_agg &= config
-            found_any = true
-        end
+    @inbounds @simd for i in eachindex(support)
+        config = support[i]
+        # generate masks
+        is_match = ((config & query_mask0) == 0) & ((config & query_mask1) == query_mask1)
+        # Branchless Update
+        valid_or_agg |= is_match ? config : UInt16(0)
+        # If match, AND config; if not match, AND 0xFFFF
+        valid_and_agg &= is_match ? config : UInt16(0xFFFF)
+        # Record if found
+        found_count |= is_match
     end
-    return valid_or_agg, valid_and_agg, found_any
+    return valid_or_agg, valid_and_agg, (found_count != 0)
 end
 
 # return (query_mask0, query_mask1)
@@ -33,16 +35,11 @@ end
         old_domain = doms[var_id]
         (old_domain == DM_0 || old_domain == DM_1) && continue
 
-        can_be_1 = (valid_or >> (i - 1)) & 1 == 1
-        must_be_1 = (valid_and >> (i - 1)) & 1 == 1
+        shift = i - 1
+        can_be_1 = (valid_or >> shift) & 1 == 1
+        must_be_1 = (valid_and >> shift) & 1 == 1
 
-        new_dom = if must_be_1
-            DM_1
-        elseif !can_be_1
-            DM_0
-        else
-            DM_BOTH
-        end
+        new_dom = must_be_1 ? DM_1 : (!can_be_1 ? DM_0 : DM_BOTH)
 
         if new_dom != old_domain
             doms[var_id] = new_dom

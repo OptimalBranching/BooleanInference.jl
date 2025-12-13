@@ -19,6 +19,7 @@ using NetworkLayout: SFDP, Spring, Stress, Spectral
 import ProblemReductions: BooleanExpr, simple_form, extract_symbols!
 using Gurobi
 
+include("core/preprocess.jl")
 include("core/static.jl")
 include("core/domain.jl")
 include("core/stats.jl")

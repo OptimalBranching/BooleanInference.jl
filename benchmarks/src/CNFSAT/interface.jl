@@ -29,7 +29,7 @@ function read_instances(::Type{CNFSATProblem}, config::CNFSATConfig)
 end
 
 # Read instances from a directory path (for benchmark_dataset)
-function read_instances(::Type{CNFSATProblem}, path::AbstractString)
+function read_instances(::Type{CNFSATProblem}, path::AbstractString; kwargs...)
     if isfile(path)
         # Single file
         if !endswith(path, ".cnf")

@@ -87,6 +87,20 @@ struct MinisatSolver <: CNFSolver
     end
 end
 
+struct CnCSolver <: CNFSolver
+    warmup::Bool
+    cnc_path::String
+    abc_path::Union{String, Nothing}
+    verify::Bool
+    timeout::Real
+    quiet::Bool
+    function CnCSolver(;cnc_path, abc_path=joinpath(dirname(@__DIR__), "artifacts", "bin", "abc"), timeout=600.0, quiet=false)
+        @assert !isnothing(abc_path) "march_cu is required for CnCSolver"
+        abc_path = validate_executable_path(abc_path, "ABC")
+        new(false, cnc_path, abc_path, false, timeout, quiet)
+    end
+end
+
 # ----------------------------------------
 # Core Interface (must be implemented)
 # ----------------------------------------

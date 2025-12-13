@@ -15,18 +15,19 @@ function compute_var_cover_scores_weighted(problem::TNProblem)
     # Compute scores by directly iterating active tensors and their variables
     @inbounds for tensor_id in active_tensors
         vars = problem.static.tensors[tensor_id].var_axes
-        
-        # Count unfixed variables in this tensor
         degree = 0
+
         @inbounds for var in vars
             !is_fixed(problem.doms[var]) && (degree += 1)
         end
-        
-        # Only contribute to scores if degree > 2
+    
         if degree > 2
-            weight = degree - 2
+            weight = 100.0 / degree 
+            
             @inbounds for var in vars
-                !is_fixed(problem.doms[var]) && (scores[var] += weight)
+                if !is_fixed(problem.doms[var])
+                    scores[var] += weight
+                end
             end
         end
     end

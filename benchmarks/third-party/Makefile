@@ -11,7 +11,7 @@ ABC_DIR := $(ROOT)/abc
 ABC_BIN := $(ABC_DIR)/abc
 ABC_LIB := $(ABC_DIR)/libabc.a
 
-.PHONY: all aiger x-sat aig-data yosys kissat abc libabc submodule-abc submodule-cir_bench iscas85 clean distclean
+.PHONY: all aiger x-sat aig-data yosys kissat abc libabc CnC submodule-abc submodule-cir_bench iscas85 clean distclean
 
 all: aiger x-sat abc aig-data yosys iscas85
 	@echo "✅ All third-party benchmarks built."
@@ -148,6 +148,17 @@ libabc: submodule-abc
 # ensure the submodule is initialized
 submodule-abc:
 	@git submodule update --init --recursive $(ABC_DIR)
+
+CnC: $(ROOT)/CnC/build.sh
+	@echo ">>> Building CnC..."
+	cd $(ROOT)/CnC && ./build.sh
+	$(call mkdir_p,$(OUTDIR))
+	@if [ -f "$(ROOT)/CnC/march_cu/march_cu" ]; then \
+		cp -f "$(ROOT)/CnC/march_cu/march_cu" "$(OUTDIR)/"; \
+		echo "✓ march_cu copied to $(OUTDIR)"; \
+	else \
+		echo "⚠️  Warning: march_cu executable not found at $(ROOT)/CnC/march_cu/march_cu"; \
+	fi
 
 # === copy ISCAS85 ===
 CIR_BENCH_DIR := $(ROOT)/cir_bench

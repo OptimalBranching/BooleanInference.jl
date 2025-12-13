@@ -74,9 +74,9 @@ function solve_factoring(
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
         # selector=MinGammaSelector(2,4,TNContractionSolver(), GreedyMerge()),
-        selector=MostOccurrenceSelector(3,6),
+        selector=MostOccurrenceSelector(3,5),
         measure=NumUnfixedVars(),
-        set_cover_solver=GreedyMerge()
+        set_cover_solver=NaiveBranch()
     ),
     reducer::AbstractReducer=NoReducer(),
     show_stats::Bool=false

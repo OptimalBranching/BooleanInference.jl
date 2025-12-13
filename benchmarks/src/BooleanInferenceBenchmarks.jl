@@ -65,7 +65,7 @@ export load_circuit_instance, load_verilog_dataset, load_aag_dataset
 export load_circuit_datasets, discover_circuit_files, create_circuitsat_configs
 export is_satisfiable
 export BooleanInferenceSolver, IPSolver, XSATSolver
-export CNFSolver, KissatSolver, MinisatSolver
+export CNFSolver, KissatSolver, MinisatSolver, CnCSolver
 export CNFSolverResult, run_cnf_solver
 export CNFSATProblem, CNFSATConfig, CNFSATInstance
 export parse_cnf_file, cnf_instantiation
