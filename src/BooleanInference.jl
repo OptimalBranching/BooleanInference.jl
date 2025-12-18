@@ -74,7 +74,7 @@ export k_neighboring
 export get_unfixed_vars, count_unfixed, bits_to_int
 export compute_circuit_info, map_tensor_to_circuit_info
 
-export get_branching_stats, reset_problem!
+export get_branching_stats, reset_stats!
 
 export BranchingStats
 export print_stats_summary

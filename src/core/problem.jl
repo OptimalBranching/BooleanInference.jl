@@ -28,6 +28,12 @@ function Base.show(io::IO, a::Assignment)
     end
 end
 
+mutable struct PropagateReason
+    reason_tensor_id::Int
+    mask0::UInt16
+    mask1::UInt16
+end
+
 struct SolverBuffer
     touched_tensors::Vector{Int}  # Tensors that need propagation
     in_queue::BitVector           # Track which tensors are queued for processing
@@ -42,11 +48,12 @@ struct SolverBuffer
     # === CDCL 加速查找表 (Indexed by var_id) ===
     # 避免遍历 trail，实现 O(1) 查找
     var_to_level::Vector{Int}      # 变量的决策层级 (未赋值为 -1)
-    var_to_reason::Vector{Int}     # 导致赋值的 Tensor ID (0 表示 Decision)
+    var_to_reason::Vector{PropagateReason}     # 导致赋值的 Tensor ID (0 表示 Decision)
     
     # === 冲突分析复用 ===
     seen::BitVector                # 标记变量是否已处理
     seen_list::Vector{Int}         # 记录本次分析标记了哪些变量 (用于快速清空)
+    conflict_queue::Vector{Int}    # 冲突分析时的队列（复用缓冲，避免重复分配）
     
     # === 学习子句存储 ===
     learned_clauses::Vector{Vector{Tuple{Int, DomainMask}}}  # 存储所有学习到的子句
@@ -66,9 +73,10 @@ function SolverBuffer(cn::ConstraintNetwork)
         zeros(Float64, n_vars),
         sizehint!(Assignment[], n_vars), Int[],
         fill(-1, n_vars),  # var_to_level: -1 indicates unassigned
-        zeros(Int, n_vars),  # var_to_reason: 0 indicates decision or unassigned
+        fill(PropagateReason(-1, UInt16(0), UInt16(0)), n_vars),  # var_to_reason: 0 indicates decision, -1 indicates unassigned
         falses(n_vars),
-        Int[],
+        Int[],  # seen_list
+        Int[],  # conflict_queue
         Vector{Vector{Tuple{Int, DomainMask}}}(),
         Set{UInt64}(),
         Vector{Tuple{Int, DomainMask}}()
@@ -113,10 +121,5 @@ is_solved(problem::TNProblem) = count_unfixed(problem) == 0
 
 get_branching_stats(problem::TNProblem) = copy(problem.stats)
 
-function reset_problem!(problem::TNProblem)
-    reset!(problem.stats)
-    empty!(problem.buffer.branching_cache)
-    clear_trail!(problem.buffer)
-end
-
+reset_stats!(problem::TNProblem) = reset!(problem.stats)
 reset_propagated_cache!(problem::TNProblem) = empty!(problem.buffer.branching_cache)

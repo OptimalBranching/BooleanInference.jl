@@ -1,10 +1,10 @@
-@inline probe_branch!(cn::ConstraintNetwork, buffer::SolverBuffer, base_doms::Vector{DomainMask}, clause::Clause, variables::Vector{Int}, record_trail::Bool=false, level::Int=0) = probe_assignment_core!(cn, buffer, base_doms, variables, clause.mask, clause.val, record_trail, level)
+@inline probe_branch!(cn::ConstraintNetwork, buffer::SolverBuffer, base_doms::Vector{DomainMask}, clause::Clause, variables::Vector{Int}, record_trail::Bool, level::Int) = probe_assignment_core!(cn, buffer, base_doms, variables, clause.mask, clause.val, record_trail, level)
 
 function OptimalBranchingCore.size_reduction(p::TNProblem, m::AbstractMeasure, cl::Clause{UInt64}, variables::Vector{Int})
     if haskey(p.buffer.branching_cache, cl)
         new_measure = p.buffer.branching_cache[cl]
     else
-        new_doms = probe_branch!(p.static, p.buffer, p.doms, cl, variables)
+        new_doms = probe_branch!(p.static, p.buffer, p.doms, cl, variables, false, 0)
         @assert !has_contradiction(new_doms) "Contradiction found when probing branch $cl"
         new_measure = measure_core(p.static, new_doms, m)
         p.buffer.branching_cache[cl] = new_measure
@@ -32,64 +32,54 @@ function bbsat!(problem::TNProblem, config::OptimalBranchingCore.BranchingStrate
 end
 
 function _bbsat!(ctx::SearchContext, doms::Vector{DomainMask})
-    if count_unfixed(doms) == 0 
+    if count_unfixed(doms) == 0
+        # @show ctx.buffer.learned_clauses
         for lcl in ctx.buffer.learned_clauses
-            satisfied = false
-            for literal in lcl
-                if doms[literal[1]] == literal[2]
-                    satisfied = true
+            sat = false
+            for (var_id, value) in lcl
+                if doms[var_id] == value
+                    sat = true
                     break
                 end
             end
-            if !satisfied
+            if !sat
                 @show lcl
             end
         end
-        return Result(true, doms, copy(ctx.stats))
+        return Result(true, copy(doms), copy(ctx.stats))
     end
+    
+    if is_two_sat(doms, ctx.static)
+        solution = solve_2sat(TNProblem(ctx.static, doms, ctx.stats, ctx.buffer))
+        return Result(isnothing(solution) ? false : true, isnothing(solution) ? DomainMask[] : solution, copy(ctx.stats))
+    end
+    
     empty!(ctx.buffer.branching_cache)
-    # Enter new decision level
     
     temp_problem = TNProblem(ctx.static, doms, ctx.stats, ctx.buffer)
-    # @show ctx.buffer.trail
-    # @show "-----"
-    branch_result = findbest(ctx.region_cache, temp_problem, ctx.config.measure, ctx.config.set_cover_solver, ctx.config.selector)
-    # @show ctx.buffer.trail
+    clauses, variables = findbest(ctx.region_cache, temp_problem, ctx.config.measure, ctx.config.set_cover_solver, ctx.config.selector)
 
     # Handle failure case: no valid branching found
-    isnothing(branch_result) && (return Result(false, DomainMask[], copy(ctx.stats)))
+    isnothing(clauses) && (return Result(false, DomainMask[], copy(ctx.stats)))
     
     # Get parent level for backtracking
     parent_level = get_current_level(ctx.buffer)
-    
-    # TODO: (draft version) Now this is ugly, but at least it's fast.
-    # Handle 2-SAT case: findbest returns pre-propagated domains
-    if branch_result isa Vector{Vector{DomainMask}}
-        record_branch!(ctx.stats, length(branch_result))
-        @inbounds for subproblem_doms in branch_result
-            record_visit!(ctx.stats)
-            result = _bbsat!(ctx, subproblem_doms)
-            result.found && return result
-            # No need to backtrack - subproblem_doms is independent
-        end
-    else
-        # Handle normal case: findbest returns (clauses, variables)
-        # Each variable assignment in probe_branch! will create its own decision level
-        clauses, variables = branch_result
-        record_branch!(ctx.stats, length(clauses))
 
-        @inbounds for i in 1:length(clauses)
-            record_visit!(ctx.stats)
-            # Propagate this branch on-demand with trail recording enabled
-            # Note: probe_branch! now creates a new decision level for each variable assignment
-            subproblem_doms = probe_branch!(ctx.static, ctx.buffer, doms, clauses[i], variables, true, parent_level)
-            # Must copy
-            result = _bbsat!(ctx, copy(subproblem_doms))
-            result.found && return result
-            # This branch failed, backtrack to parent before trying next clause
-            if i < length(clauses)
-                backtrack!(ctx.buffer, parent_level)
-            end
+    # All variable assignments in each branch are placed in the same decision level
+    record_branch!(ctx.stats, length(clauses))
+
+    @inbounds for i in 1:length(clauses)
+        record_visit!(ctx.stats)
+        # Create a new decision level for this branch
+        new_level = new_decision_level!(ctx.buffer)
+        # Propagate this branch on-demand with trail recording enabled
+        subproblem_doms = probe_branch!(ctx.static, ctx.buffer, doms, clauses[i], variables, true, new_level)
+        # Recursively solve
+        result = _bbsat!(ctx, copy(subproblem_doms))
+        result.found && return result
+        # This branch failed, backtrack to parent before trying next clause
+        if i < length(clauses)
+            backtrack!(ctx.buffer, parent_level)
         end
     end
 

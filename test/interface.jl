@@ -92,7 +92,7 @@ end
     print_stats_summary(result.stats)
     
     # Test reset functionality
-    reset_problem!(tn_problem)
+    reset_stats!(tn_problem)
     reset_stats = get_branching_stats(tn_problem)
     @test reset_stats.branching_nodes == 0
     @test reset_stats.total_visited_nodes == 0

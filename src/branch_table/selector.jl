@@ -46,15 +46,22 @@ function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasu
         end
     end
     
+    # Find maximum activity score among unfixed variables
+    # max_score = -Inf
+    # var_id = 0
+    # @inbounds for i in eachindex(problem.buffer.activity_scores)
+    #     is_fixed(problem.doms[i]) && continue
+    #     if problem.buffer.activity_scores[i] > max_score
+    #         max_score = problem.buffer.activity_scores[i]
+    #         var_id = i
+    #     end
+    # end
+    
     # Check if all scores are zero - problem has reduced to 2-SAT
-    if max_score == 0.0
-        @info "2-SAT detected"
-        solution = solve_2sat(problem)
-        return isnothing(solution) ? nothing : [solution]
-    end
+    # @assert max_score > 0.0 "Max score is zero"
 
     result, variables = compute_branching_result(cache, problem, var_id, measure, set_cover_solver)
-    isnothing(result) && return nothing
+    isnothing(result) && return nothing, variables
     return (OptimalBranchingCore.get_clauses(result), variables)
 end
 

@@ -78,3 +78,15 @@ end
 packint(bits::NTuple{N, Int}) where {N} = reduce(|, (UInt64(b) << (i - 1) for (i, b) in enumerate(bits)); init = UInt64(0))
 packint(i::Int) = packint((i - 1,))
 packint(ci::CartesianIndex{N}) where {N} = packint(ntuple(j -> ci.I[j] - 1, N))
+
+function is_two_sat(doms::Vector{DomainMask}, static::ConstraintNetwork)
+    @inbounds for tensor in static.tensors
+        vars = tensor.var_axes
+        unfixed_count = 0
+        @inbounds for var_id in vars
+            !is_fixed(doms[var_id]) && (unfixed_count += 1)
+            unfixed_count > 2 && return false
+        end
+    end
+    return true
+end

@@ -14,7 +14,7 @@ function setup_from_sat(sat::ConstraintSatisfactionProblem)
 end
 
 function solve(problem::TNProblem, bsconfig::BranchingStrategy, reducer::AbstractReducer; show_stats::Bool=false)
-    reset_problem!(problem)  # Reset stats before solving
+    reset_stats!(problem)  # Reset stats before solving
     result = bbsat!(problem, bsconfig, reducer)
     show_stats && print_stats_summary(result.stats)
     return result

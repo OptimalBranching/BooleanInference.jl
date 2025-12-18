@@ -20,18 +20,16 @@ end
     # All variables in config are being set, so mask = all 1s
     mask = (UInt64(1) << length(vars)) - 1
     
-    # Manage decision level to allow conflict analysis (activity scores)
+    # Record trail during probing to enable conflict learning
     current_lvl = get_current_level(buffer)
     new_lvl = new_decision_level!(buffer)
-    # @assert !(buffer.scratch_doms === problem.doms) "buffer.scratch_doms and problem.doms are the same object!"
     scratch = probe_assignment_core!(problem.static, buffer, problem.doms, vars, mask, config, true, new_lvl)
-    # @assert scratch === buffer.scratch_doms "scratch should be buffer.scratch_doms"
-    # @assert !(scratch === problem.doms) "scratch should not be problem.doms"
     
     is_feasible = (scratch[1] != DM_NONE)
     if is_feasible
         buffer.branching_cache[Clause(mask, config)] = measure_core(problem.static, scratch, measure)
     end
+    # If conflict occurred, learned clause is already saved in buffer.learned_clauses
     
     # Always backtrack to restore solver state
     backtrack!(buffer, current_lvl)
