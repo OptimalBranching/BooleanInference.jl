@@ -95,17 +95,17 @@ struct TNProblem <: AbstractProblem
     end
 end
 
-# Constructor 1: Initialize from ConstraintNetwork (auto-propagate)
-function TNProblem(static::ConstraintNetwork)
-    buffer = SolverBuffer(static)
+# Initialize domains with propagation
+function initialize(static::ConstraintNetwork, buffer::SolverBuffer)
     doms = propagate(static, init_doms(static), collect(1:length(static.tensors)), buffer)
     has_contradiction(doms) && error("Domain has contradiction")
-    return TNProblem(static, doms, BranchingStats(), buffer)
+    return doms
 end
 
-# Constructor 2: Create with explicit domains (creates new buffer)
-function TNProblem(static::ConstraintNetwork, doms::Vector{DomainMask}, stats::BranchingStats=BranchingStats())
+# Constructor: Initialize from ConstraintNetwork with optional explicit domains
+function TNProblem(static::ConstraintNetwork, doms::Union{Vector{DomainMask}, Nothing}=nothing, stats::BranchingStats=BranchingStats())
     buffer = SolverBuffer(static)
+    isnothing(doms) && (doms = initialize(static, buffer))
     return TNProblem(static, doms, stats, buffer)
 end
 

@@ -26,7 +26,6 @@ include("core/problem.jl")
 include("core/region.jl")
 
 include("utils/utils.jl")
-include("utils/circuit_analysis.jl")
 include("utils/twosat.jl")
 
 include("branching/propagate.jl")

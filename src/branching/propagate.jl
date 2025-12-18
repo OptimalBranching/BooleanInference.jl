@@ -19,6 +19,7 @@ end
     return valid_or_agg, valid_and_agg, found_any
 end
 
+
 # return (query_mask0, query_mask1)
 @inline function compute_query_masks(doms::Vector{DomainMask}, var_axes::Vector{Int})
     mask0 = UInt16(0); mask1 = UInt16(0);
