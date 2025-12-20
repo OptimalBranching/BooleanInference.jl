@@ -2,10 +2,9 @@
     (config & query_mask0) == 0 && (config & query_mask1) == query_mask1
 end
 
-@inline function scan_supports(support::Vector{UInt16}, query_mask0::UInt16, query_mask1::UInt16)
-    # the OR of all feasible configs
+@inline function scan_supports(support::Vector{UInt16}, query_mask0::UInt16, query_mask1::UInt16)    
+    # General case: filter by compatibility
     valid_or_agg = UInt16(0)
-    # the AND of all feasible configs
     valid_and_agg = UInt16(0xFFFF)
     found_any = false
 
@@ -22,6 +21,7 @@ end
 
 # return (query_mask0, query_mask1)
 @inline function compute_query_masks(doms::Vector{DomainMask}, var_axes::Vector{Int})
+    @assert length(var_axes) <= 16
     mask0 = UInt16(0); mask1 = UInt16(0);
 
     @inbounds for (axis, var_id) in enumerate(var_axes)
@@ -70,11 +70,11 @@ end
     # Clear metadata for backtracked assignments
     @inbounds for i in (trail_pos + 1):length(buffer.trail)
         var_id = buffer.trail[i].var_id
-        buffer.var_to_level[var_id] = -1  # 重置为未赋值！
+        buffer.var_to_level[var_id] = -1
         buffer.var_to_reason[var_id].reason_tensor_id = -1 
         buffer.var_to_reason[var_id].mask0 = UInt16(0)
         buffer.var_to_reason[var_id].mask1 = UInt16(0)
-        buffer.seen[var_id] = false       # 保险起见，清理 seen 标记
+        buffer.seen[var_id] = false
     end
 
     # Truncate trail and trail_lim
@@ -135,7 +135,6 @@ function propagate(cn::ConstraintNetwork, doms::Vector{DomainMask}, initial_touc
             push!(queue, t_idx)
         end
     end
-    # Initial propagation does not record trail
     return propagate_core!(cn, doms, buffer, true, 0)
 end
 
@@ -160,6 +159,11 @@ function probe_assignment_core!(cn::ConstraintNetwork, buffer::SolverBuffer, bas
                 # Set the variable
                 scratch_doms[var_id] = new_domain
                 # @info "New assignment: v$(var_id) -> $(new_domain) "
+                if !isempty(buffer.var_to_two_watched_literals[var_id])
+                    for learned_clause_idx in buffer.var_to_two_watched_literals[var_id]
+                        
+                    end
+                end
 
                 if record_trail
                     record_assignment!(buffer, var_id, new_domain, 0, current_level)
@@ -229,7 +233,6 @@ function learn_from_failure!(cn::ConstraintNetwork, doms::Vector{DomainMask}, bu
     # @info "Conflict tensor: $conflict_tensor_id, vars: $conflict_vars"
     # @info "Current level: $current_level"
     
-    # 1. 初始化：从冲突子句开始，当前层变量加入队列
     queue = buffer.conflict_queue
     @inbounds for var_id in conflict_vars
         if is_fixed(doms[var_id]) && buffer.var_to_level[var_id] > 0 && !buffer.seen[var_id]
@@ -240,7 +243,7 @@ function learn_from_failure!(cn::ConstraintNetwork, doms::Vector{DomainMask}, bu
                 # @info "  Queue var $var_id (level $current_level)"
             else
                 # 其他层变量直接加入学到的子句
-                push!(buffer.current_clause, (var_id, negate_domain(doms[var_id])))
+                push!(buffer.current_clause, negate_domain(doms[var_id]) * var_id)
                 # @info "  Add to clause: var $var_id at level $(buffer.var_to_level[var_id])"
             end
         elseif buffer.var_to_level[var_id] <= 0
@@ -251,7 +254,6 @@ function learn_from_failure!(cn::ConstraintNetwork, doms::Vector{DomainMask}, bu
     end
     # @info "Initial queue: $(queue), clause: $(buffer.current_clause)"
 
-    # 2. 解析当前层变量
     while length(queue) > 0
         p = popfirst!(queue)
         # @info "[Resolve] var $p"
@@ -271,14 +273,14 @@ function learn_from_failure!(cn::ConstraintNetwork, doms::Vector{DomainMask}, bu
                         push!(queue, var_id)
                         # @info "    Queue var $var_id (current level)"
                     else
-                        push!(buffer.current_clause, (var_id, negate_domain(doms[var_id])))
+                        push!(buffer.current_clause, negate_domain(doms[var_id]) * var_id)
                         # @info "    Add to clause: var $var_id at level $var_level"
                     end
                 end
             end
         else
             # Decision variable
-            push!(buffer.current_clause, (p, negate_domain(doms[p])))
+            push!(buffer.current_clause, negate_domain(doms[p]) * p)
             # @info "  Decision variable, add to clause"
         end
     end
@@ -287,40 +289,33 @@ function learn_from_failure!(cn::ConstraintNetwork, doms::Vector{DomainMask}, bu
     # @info "Clause: $(buffer.current_clause)"
 
     # Update activity scores for all learned literals
-    for (var_id, _) in buffer.current_clause
-        buffer.activity_scores[var_id] += 1.0
+    for signed_var_id in buffer.current_clause
+        buffer.activity_scores[abs(signed_var_id)] += 1.0
     end
 
     finish_analysis!(buffer, buffer.current_clause)
 
     # Store the learned clause (copy it since buffer is reused)
-    learned_clause = copy(buffer.current_clause)
-
-    for (var_id, _) in learned_clause
-        buffer.activity_scores[var_id] += 1.0
+    if length(buffer.current_clause) <= 6
+        learned_clause = copy(buffer.current_clause)
+        # Check for duplicates using hash signature
+        clause_signature = compute_clause_signature(learned_clause)
+        if !(clause_signature in buffer.learned_clauses_signatures)
+            push!(buffer.learned_clauses_signatures, clause_signature)
+            push!(buffer.learned_clauses, learned_clause)
+            # @info "Clause added (total: $(length(buffer.learned_clauses)))"
+        # else
+        #     @info "Clause is duplicate, skipped"
+        end
+        # No backtracking for now
+        return learned_clause, 0
     end
-
-    # Check for duplicates using hash signature
-    clause_signature = compute_clause_signature(learned_clause)
-    if !(clause_signature in buffer.learned_clauses_signatures)
-        push!(buffer.learned_clauses_signatures, clause_signature)
-        push!(buffer.learned_clauses, learned_clause)
-        # @info "Clause added (total: $(length(buffer.learned_clauses)))"
-    # else
-        # @info "Clause is duplicate, skipped"
-    end
-    
-    # No backtracking for now
-    return learned_clause, 0
 end
 
-# ---------------------------------------------------------
-# 辅助函数
-# ---------------------------------------------------------
 
 # Compute a hash signature for a clause (sorted for canonical form)
 # Note: This creates a temporary sorted copy, but it's necessary for canonical hashing
-@inline function compute_clause_signature(clause::Vector{Tuple{Int, DomainMask}})::UInt64
+@inline function compute_clause_signature(clause::Vector{Int})::UInt64
     # Sort the clause to get canonical form (same clause content = same signature)
     # This ensures that clauses with same literals in different order have same signature
     return hash(sort(clause))
@@ -330,7 +325,7 @@ end
 # Sub-function 3: Cleanup (no backtracking computation)
 # Responsibility: Clear markers only, we don't backtrack for now
 # ---------------------------------------------------------
-@inline function finish_analysis!(buffer::SolverBuffer, current_clause::Vector{Tuple{Int, DomainMask}})
+@inline function finish_analysis!(buffer::SolverBuffer, current_clause::Vector{Int})
     # Quickly clear seen markers
     seen = buffer.seen
     for v in buffer.seen_list
@@ -344,7 +339,6 @@ end
 
 # Simple preparation function
 @inline function prepare_analysis!(buffer::SolverBuffer)
-    # 先清理上一次分析可能残留的 seen 标记
     seen = buffer.seen
     for v in buffer.seen_list
         seen[v] = false

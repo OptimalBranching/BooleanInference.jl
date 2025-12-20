@@ -10,31 +10,10 @@ function compute_branching_result(cache::RegionCache, problem::TNProblem, var_id
 
     # Build branching table from filtered configs
     table = BranchingTable(length(region.vars), [[c] for c in feasible_configs])
+    # @show length(table.table)
     # Compute optimal branching rule
     result = OptimalBranchingCore.optimal_branching_rule(table, region.vars, problem, measure, set_cover_solver)
     return result, region.vars
-end
-
-
-@inline function probe_config!(buffer::SolverBuffer, problem::TNProblem, vars::Vector{Int}, config::UInt64, measure::AbstractMeasure)
-    # All variables in config are being set, so mask = all 1s
-    mask = (UInt64(1) << length(vars)) - 1
-    
-    # Record trail during probing to enable conflict learning
-    current_lvl = get_current_level(buffer)
-    new_lvl = new_decision_level!(buffer)
-    scratch = probe_assignment_core!(problem.static, buffer, problem.doms, vars, mask, config, true, new_lvl)
-    
-    is_feasible = (scratch[1] != DM_NONE)
-    if is_feasible
-        buffer.branching_cache[Clause(mask, config)] = measure_core(problem.static, scratch, measure)
-    end
-    # If conflict occurred, learned clause is already saved in buffer.learned_clauses
-    
-    # Always backtrack to restore solver state
-    backtrack!(buffer, current_lvl)
-    
-    return is_feasible
 end
 
 @inline function get_region_masks(doms::Vector{DomainMask}, vars::Vector{Int})
@@ -52,4 +31,20 @@ function filter_feasible_configs(problem::TNProblem, region::Region, configs::Ve
         is_feasible && push!(feasible, config)
     end
     return feasible
+end
+
+function probe_config!(buffer::SolverBuffer, problem::TNProblem, vars::Vector{Int}, config::UInt64, measure::AbstractMeasure)
+    # All variables in config are being set, so mask = all 1s
+    mask = (UInt64(1) << length(vars)) - 1
+    
+    # Record trail during probing to enable conflict learning
+    current_lvl = get_current_level(buffer)
+    new_lvl = new_decision_level!(buffer)
+    scratch = probe_assignment_core!(problem.static, buffer, problem.doms, vars, mask, config, false, new_lvl)
+    is_feasible = scratch[1] != DM_NONE
+    is_feasible && (buffer.branching_cache[Clause(mask, config)] = measure_core(problem.static, scratch, measure))
+
+    # Always backtrack to restore solver state
+    backtrack!(buffer, current_lvl)
+    return is_feasible
 end

@@ -66,7 +66,7 @@ end
 @inline get_support(cn::ConstraintNetwork, tensor::BoolTensor) = get_tensor_data(cn, tensor).support
 @inline get_dense_tensor(cn::ConstraintNetwork, tensor::BoolTensor) = get_tensor_data(cn, tensor).dense_tensor
 
-function setup_problem(var_num::Int, tensors_to_vars::Vector{Vector{Int}}, tensor_data::Vector{BitVector})
+function setup_problem(var_num::Int, tensors_to_vars::Vector{Vector{Int}}, tensor_data::Vector{BitVector}; precontract::Bool=true)
     F = length(tensors_to_vars)
     tensors = Vector{BoolTensor}(undef, F)
     vars_to_tensors = [Int[] for _ in 1:var_num]
@@ -94,6 +94,12 @@ function setup_problem(var_num::Int, tensors_to_vars::Vector{Vector{Int}}, tenso
         end
     end
 
+    # Pre-contract degree-2 variables if enabled
+    if precontract
+        tensors, vars_to_tensors, unique_data, data_to_idx = 
+            precontract_degree2!(tensors, vars_to_tensors, unique_data, data_to_idx)
+    end
+
     vars = Vector{Variable}(undef, var_num)
     for i in 1:var_num
         vars[i] = Variable(length(vars_to_tensors[i]))
@@ -101,7 +107,7 @@ function setup_problem(var_num::Int, tensors_to_vars::Vector{Vector{Int}}, tenso
     return ConstraintNetwork(vars, unique_data, tensors, vars_to_tensors)
 end
 
-function setup_from_csp(csp::ConstraintSatisfactionProblem)
+function setup_from_csp(csp::ConstraintSatisfactionProblem; precontract::Bool=true)
     # Extract constraints directly
     cons = constraints(csp)
     var_num = num_variables(csp)
@@ -110,33 +116,139 @@ function setup_from_csp(csp::ConstraintSatisfactionProblem)
     tensors_to_vars = [c.variables for c in cons]
     tensor_data = [BitVector(c.specification) for c in cons]
 
-    return setup_problem(var_num, tensors_to_vars, tensor_data)
+    return setup_problem(var_num, tensors_to_vars, tensor_data; precontract=precontract)
 end
 
-# function setup_from_tensor_network(tn)
-#     t2v = getixsv(tn.code)
-#     tensors = GenericTensorNetworks.generate_tensors(1, tn)
+"""
+    contract_two_tensors(data1::BitVector, vars1::Vector{Int}, data2::BitVector, vars2::Vector{Int}, contract_var::Int) -> (BitVector, Vector{Int})
 
-#     # Convert to sparse representation directly
-#     sparse_tensors = [UInt16[UInt16(idx - 1) for (idx, x) in enumerate(vec(t)) if x == 1] for t in tensors]
+Contract two boolean tensors along a shared variable using Einstein summation.
+Boolean contraction semantics: result[config] = ∃val. tensor1[config ∪ val] ∧ tensor2[config ∪ val]
+Returns the contracted tensor data and its variable axes.
+"""
+function contract_two_tensors(data1::BitVector, vars1::Vector{Int}, data2::BitVector, vars2::Vector{Int}, contract_var::Int)
+    # Convert BitVectors to multi-dimensional Int arrays (0/1)
+    dims1 = ntuple(_ -> 2, length(vars1))
+    dims2 = ntuple(_ -> 2, length(vars2))
     
-#     # Create BipartiteGraph
-#     F = length(t2v)
-#     bool_tensors = Vector{BoolTensor}(undef, F)
-#     var_num = length(tn.problem.symbols)
-#     vars_to_tensors = [Int[] for _ in 1:var_num]
+    arr1 = reshape(Int.(data1), dims1)
+    arr2 = reshape(Int.(data2), dims2)
     
-#     @inbounds for i in 1:F
-#         var_axes = t2v[i]
-#         bool_tensors[i] = BoolTensor(var_axes, sparse_tensors[i])
-#         for v in var_axes
-#             push!(vars_to_tensors[v], i)
-#         end
-#     end
+    # Build output variable list (union minus the contracted variable)
+    out_vars = Int[]
+    for v in vars1
+        v != contract_var && push!(out_vars, v)
+    end
+    for v in vars2
+        v != contract_var && !(v in out_vars) && push!(out_vars, v)
+    end
+    
+    # Use OMEinsum for tensor contraction
+    # Boolean semantics: ∃ (OR over contracted indices) ∧ (AND pointwise)
+    # In arithmetic: product for AND, sum for OR (∃), then check > 0
+    eincode = OMEinsum.EinCode([vars1, vars2], out_vars)
+    optcode = OMEinsum.optimize_code(eincode, OMEinsum.uniformsize(eincode, 2), OMEinsum.GreedyMethod())
+    
+    # Perform contraction: sum of products (at least one satisfying assignment exists)
+    result_arr = optcode(arr1, arr2)
+    
+    # Convert back to BitVector: any positive value means satisfiable
+    # Need to flatten multi-dimensional result first
+    result = BitVector(vec(result_arr .> 0))
+    
+    return result, out_vars
+end
 
-#     vars = Vector{Variable}(undef, var_num)
-#     for i in 1:var_num
-#         vars[i] = Variable(length(vars_to_tensors[i]))
-#     end
-#     return BipartiteGraph(vars, bool_tensors, vars_to_tensors)
-# end
+
+function precontract_degree2!(tensors::Vector{BoolTensor}, vars_to_tensors::Vector{Vector{Int}}, unique_data::Vector{TensorData}, data_to_idx::Dict{BitVector, Int})
+    n_vars = length(vars_to_tensors)
+    active_tensors = trues(length(tensors))  # Track which tensors are still active
+    contracted_count = 0
+    
+    # Iterate until no more degree-2 variables can be contracted
+    changed = true
+    while changed
+        changed = false
+        
+        # Find degree-2 variables
+        for var_id in 1:n_vars
+            tensor_list = vars_to_tensors[var_id]
+            
+            # Filter to only active tensors
+            active_list = filter(t -> active_tensors[t], tensor_list)
+            
+            if length(active_list) == 2
+                t1_idx, t2_idx = active_list
+                t1 = tensors[t1_idx]
+                t2 = tensors[t2_idx]
+                
+                # Get tensor data
+                data1 = unique_data[t1.tensor_data_idx].dense_tensor
+                data2 = unique_data[t2.tensor_data_idx].dense_tensor
+                
+                # Contract the two tensors
+                new_data, new_vars = contract_two_tensors(data1, t1.var_axes, data2, t2.var_axes, var_id)
+                
+                # Find or create unique tensor data for the contracted result
+                if haskey(data_to_idx, new_data)
+                    new_data_idx = data_to_idx[new_data]
+                else
+                    push!(unique_data, TensorData(new_data))
+                    new_data_idx = length(unique_data)
+                    data_to_idx[new_data] = new_data_idx
+                end
+                
+                # Create new contracted tensor (reuse one of the slots)
+                new_tensor = BoolTensor(new_vars, new_data_idx)
+                tensors[t1_idx] = new_tensor
+                
+                # Mark second tensor as inactive
+                active_tensors[t2_idx] = false
+                
+                # Update vars_to_tensors mapping
+                # Remove old references
+                for v in t1.var_axes
+                    filter!(t -> t != t1_idx, vars_to_tensors[v])
+                end
+                for v in t2.var_axes
+                    filter!(t -> t != t2_idx, vars_to_tensors[v])
+                end
+                
+                # Add new references
+                for v in new_vars
+                    push!(vars_to_tensors[v], t1_idx)
+                end
+                
+                contracted_count += 1
+                changed = true
+                break  # Restart the search after each contraction
+            end
+        end
+    end
+    
+    # Compact the tensor list by removing inactive tensors
+    active_indices = findall(active_tensors)
+    new_tensors = tensors[active_indices]
+    
+    # Build index mapping: old_idx -> new_idx
+    idx_map = Dict{Int, Int}()
+    for (new_idx, old_idx) in enumerate(active_indices)
+        idx_map[old_idx] = new_idx
+    end
+    
+    # Update vars_to_tensors with new indices
+    new_vars_to_tensors = [Int[] for _ in 1:n_vars]
+    for (var_id, tensor_list) in enumerate(vars_to_tensors)
+        for old_t_idx in tensor_list
+            if haskey(idx_map, old_t_idx)
+                push!(new_vars_to_tensors[var_id], idx_map[old_t_idx])
+            end
+        end
+    end
+    
+    if contracted_count > 0
+        @info "Pre-contracted $contracted_count degree-2 variables, reducing tensors from $(length(tensors)) to $(length(new_tensors))"
+    end
+    
+    return new_tensors, new_vars_to_tensors, unique_data, data_to_idx
+end

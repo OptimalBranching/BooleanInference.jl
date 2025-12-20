@@ -28,8 +28,14 @@ end
 
 @inline function negate_domain(dm::DomainMask)
     b = bits(dm)
-    # Swap the two lowest bits: 0x01 <-> 0x02, 0x00 and 0x03 remain unchanged
-    DomainMask(((b & 0x01) << 1) | ((b & 0x02) >> 1))
+    # Return sign: 0x01 (DM_0) -> 1, 0x02 (DM_1) -> -1
+    if b == 0x01
+        return 1
+    elseif b == 0x02
+        return -1
+    else
+        error("negate_domain: domain must be DM_0 (0x01) or DM_1 (0x02), got $(dm)")
+    end
 end
 
 function active_degree(tn::ConstraintNetwork, doms::Vector{DomainMask})

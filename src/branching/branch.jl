@@ -33,19 +33,18 @@ end
 
 function _bbsat!(ctx::SearchContext, doms::Vector{DomainMask})
     if count_unfixed(doms) == 0
-        # @show ctx.buffer.learned_clauses
-        for lcl in ctx.buffer.learned_clauses
-            sat = false
-            for (var_id, value) in lcl
-                if doms[var_id] == value
-                    sat = true
-                    break
-                end
-            end
-            if !sat
-                @show lcl
-            end
-        end
+        # for lcl in ctx.buffer.learned_clauses
+        #     sat = false
+        #     for (var_id, value) in lcl
+        #         if doms[var_id] == value
+        #             sat = true
+        #             break
+        #         end
+        #     end
+        #     if !sat
+        #         @show lcl
+        #     end
+        # end
         return Result(true, copy(doms), copy(ctx.stats))
     end
     

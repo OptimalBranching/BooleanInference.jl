@@ -56,9 +56,12 @@ struct SolverBuffer
     conflict_queue::Vector{Int}    # 冲突分析时的队列（复用缓冲，避免重复分配）
     
     # === 学习子句存储 ===
-    learned_clauses::Vector{Vector{Tuple{Int, DomainMask}}}  # 存储所有学习到的子句
+    learned_clauses::Vector{Vector{Int}}  # 存储所有学习到的子句
     learned_clauses_signatures::Set{UInt64}  # 用于去重检查（子句的哈希签名）
-    current_clause::Vector{Tuple{Int, DomainMask}}           # 当前正在构建的子句（复用缓冲）
+    current_clause::Vector{Int}           # 当前正在构建的子句（复用缓冲，存储带符号的变量ID）
+
+    two_watched_literals::Vector{Vector{Int}}  # 存储每个字句中watched literal
+    var_to_two_watched_literals::Vector{Vector{Int}}  # per-literal watch lists (indexed by signed literal)
 end
 
 function SolverBuffer(cn::ConstraintNetwork)
@@ -77,9 +80,11 @@ function SolverBuffer(cn::ConstraintNetwork)
         falses(n_vars),
         Int[],  # seen_list
         Int[],  # conflict_queue
-        Vector{Vector{Tuple{Int, DomainMask}}}(),
+        Vector{Vector{Int}}(),
         Set{UInt64}(),
-        Vector{Tuple{Int, DomainMask}}()
+        Int[],
+        Vector{Vector{Int}}(),
+        [Int[] for _ in 1:(2 * n_vars + 1)]
     )
 end
 
@@ -99,6 +104,9 @@ end
 function initialize(static::ConstraintNetwork, buffer::SolverBuffer)
     doms = propagate(static, init_doms(static), collect(1:length(static.tensors)), buffer)
     has_contradiction(doms) && error("Domain has contradiction")
+    @inbounds for var_id in 1:length(static.vars)
+        isempty(static.v2t[var_id]) && (doms[var_id] = DM_0)
+    end
     return doms
 end
 
