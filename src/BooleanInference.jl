@@ -40,6 +40,8 @@ include("branch_table/branchtable.jl")
 include("utils/visualization.jl")
 include("branching/branch.jl")
 
+include("cdcl/cdcl.jl")
+
 include("interface.jl")
 
 
@@ -87,4 +89,5 @@ export NumHardTensors, NumUnfixedVars, NumUnfixedTensors, HardSetSize
 export TNContractionSolver
 
 export solve_2sat, is_2sat_reducible
+export solve_cdcl, parse_cnf_file
 end

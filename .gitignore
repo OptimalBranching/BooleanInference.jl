@@ -44,3 +44,7 @@ OptimalBranching.jl/
 /notes/
 
 /benchmarks/results/
+*.dylib
+*.o
+*.so
+*.dll
