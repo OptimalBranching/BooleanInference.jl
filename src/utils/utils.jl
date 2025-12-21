@@ -90,3 +90,18 @@ function is_two_sat(doms::Vector{DomainMask}, static::ConstraintNetwork)
     end
     return true
 end
+
+function primal_graph(static::ConstraintNetwork, doms::Vector{DomainMask})
+    
+    g = SimpleGraph(length(doms))
+
+    active_tensors = get_active_tensors(static, doms)
+    for tensor_id in active_tensors
+        vars = static.tensors[tensor_id].var_axes
+        unfixed_vars_in_tensor = filter(var -> !is_fixed(doms[var]), vars)
+        for vertex_pair in combinations(unfixed_vars_in_tensor, 2)
+            add_edge!(g, vertex_pair[1], vertex_pair[2])
+        end
+    end
+    return g
+end

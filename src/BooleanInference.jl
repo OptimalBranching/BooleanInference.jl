@@ -18,6 +18,8 @@ using CairoMakie: Figure, Axis, save, hidespines!, hidedecorations!, DataAspect
 using NetworkLayout: SFDP, Spring, Stress, Spectral
 import ProblemReductions: BooleanExpr, simple_form, extract_symbols!
 using Gurobi
+using Combinatorics
+using CliqueTrees
 
 include("core/static.jl")
 include("core/domain.jl")
@@ -27,6 +29,7 @@ include("core/region.jl")
 
 include("utils/utils.jl")
 include("utils/twosat.jl")
+include("utils/circuit.jl")
 
 include("branching/propagate.jl")
 include("branching/measure.jl")
@@ -41,6 +44,7 @@ include("utils/visualization.jl")
 include("branching/branch.jl")
 
 include("cdcl/cdcl.jl")
+include("cdcl/CaDiCaLMiner.jl")
 
 include("interface.jl")
 
@@ -90,4 +94,6 @@ export TNContractionSolver
 
 export solve_2sat, is_2sat_reducible
 export solve_cdcl, parse_cnf_file
+export primal_graph
+export circuit_to_cnf
 end

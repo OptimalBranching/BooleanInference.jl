@@ -188,9 +188,25 @@ int Solver::propagate() {
 int Solver::analyze(int conflict, int &backtrackLevel, int &lbd) {
     ++time_stamp;
     learnt.clear();
-    Clause &c = clause_DB[conflict]; 
-    int highestLevel = level[abs(c[0])];
+    // Use the current decision level (not an arbitrary literal in the conflict clause).
+    // Using level[abs(c[0])] is unsafe because c[0] is not guaranteed to be at the current level.
+    int highestLevel = (int)pos_in_trail.size();
     if (highestLevel == 0) return 20;
+
+    // Sanity: the conflict clause should contain at least one literal from the current level.
+    // If not, fall back to the maximum level present in the clause.
+    {
+        Clause &c0 = clause_DB[conflict];
+        bool has_cur = false;
+        int maxL = 0;
+        for (int lit : c0.lit) {
+            int l = level[abs(lit)];
+            if (l == highestLevel) has_cur = true;
+            if (l > maxL) maxL = l;
+        }
+        if (!has_cur) highestLevel = maxL;
+        if (highestLevel == 0) return 20;
+    }
     learnt.push_back(0);        // leave a place to save the First-UIP
     std::vector<int> bump;      // The variables to bump
     int should_visit_ct = 0,    // The number of literals that have not been visited in the higest level of the implication graph.
@@ -204,14 +220,14 @@ int Solver::analyze(int conflict, int &backtrackLevel, int &lbd) {
                 bump_var(var, 0.5);
                 bump.push_back(var);
                 mark[var] = time_stamp;
-                if (level[var] >= highestLevel) should_visit_ct++;
+                if (level[var] == highestLevel) should_visit_ct++;
                 else learnt.push_back(c[i]);
             }
         }
         do {                                         // Find the last marked literal in the trail to do resolution.
             while (mark[abs(trail[index--])] != time_stamp);
             resolve_lit = trail[index + 1];
-        } while (level[abs(resolve_lit)] < highestLevel);
+        } while (level[abs(resolve_lit)] != highestLevel);
         conflict = reason[abs(resolve_lit)], mark[abs(resolve_lit)] = 0, should_visit_ct--;
     } while (should_visit_ct > 0);                   // Have find the convergence node in the highest level (First UIP)
     learnt[0] = -resolve_lit;

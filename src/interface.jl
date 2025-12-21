@@ -72,7 +72,7 @@ function solve_factoring(
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
         # selector=MinGammaSelector(2,4,TNContractionSolver(), GreedyMerge()),
-        selector=MostOccurrenceSelector(3,3),
+        selector=MostOccurrenceSelector(3,4),
         measure=NumUnfixedVars(),
         set_cover_solver=GreedyMerge()
     ),
@@ -89,6 +89,7 @@ function solve_factoring(
     end
     a = get_var_value(result.solution, circuit_sat.q)
     b = get_var_value(result.solution, circuit_sat.p)
+    @show a
     return bits_to_int(a), bits_to_int(b), result.stats
 end
 

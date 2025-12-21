@@ -10,7 +10,6 @@ function compute_branching_result(cache::RegionCache, problem::TNProblem, var_id
 
     # Build branching table from filtered configs
     table = BranchingTable(length(region.vars), [[c] for c in feasible_configs])
-    # @show length(table.table)
     # Compute optimal branching rule
     result = OptimalBranchingCore.optimal_branching_rule(table, region.vars, problem, measure, set_cover_solver)
     return result, region.vars

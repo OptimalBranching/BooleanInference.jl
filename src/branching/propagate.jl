@@ -1,32 +1,34 @@
-@inline function compatible(config::UInt16, query_mask0::UInt16, query_mask1::UInt16)
-    (config & query_mask0) == 0 && (config & query_mask1) == query_mask1
-end
-
-@inline function scan_supports(support::Vector{UInt16}, query_mask0::UInt16, query_mask1::UInt16)    
+function scan_supports(support::Vector{UInt16}, query_mask0::UInt16, query_mask1::UInt16)
+    m = query_mask0 | query_mask1  
     # General case: filter by compatibility
     valid_or_agg = UInt16(0)
     valid_and_agg = UInt16(0xFFFF)
     found_any = false
 
-    @inbounds for config in support
-        if compatible(config, query_mask0, query_mask1)
+    @inbounds for i in eachindex(support)
+        config = support[i]
+        if (config & m) == query_mask1
             valid_or_agg |= config
             valid_and_agg &= config
             found_any = true
+            # Early exit once both aggregates are saturated.
+            if valid_or_agg == 0xFFFF && valid_and_agg == 0x0000
+                break
+            end
         end
     end
     return valid_or_agg, valid_and_agg, found_any
 end
 
-
 # return (query_mask0, query_mask1)
-@inline function compute_query_masks(doms::Vector{DomainMask}, var_axes::Vector{Int})
+function compute_query_masks(doms::Vector{DomainMask}, var_axes::Vector{Int})
     @assert length(var_axes) <= 16
     mask0 = UInt16(0); mask1 = UInt16(0);
 
-    @inbounds for (axis, var_id) in enumerate(var_axes)
+    @inbounds for i in 1:length(var_axes)
+        var_id = var_axes[i]
         domain = doms[var_id]
-        bit = UInt16(1) << (axis - 1)
+        bit = UInt16(1) << (i - 1)
         mask0 |= (domain == DM_0) ? bit : UInt16(0)
         mask1 |= (domain == DM_1) ? bit : UInt16(0)
     end
@@ -67,16 +69,6 @@ end
     # So to keep levels 0..target_level, we need trail up to trail_lim[target_level+1]
     trail_pos = buffer.trail_lim[target_level + 1]
 
-    # Clear metadata for backtracked assignments
-    @inbounds for i in (trail_pos + 1):length(buffer.trail)
-        var_id = buffer.trail[i].var_id
-        buffer.var_to_level[var_id] = -1
-        buffer.var_to_reason[var_id].reason_tensor_id = -1 
-        buffer.var_to_reason[var_id].mask0 = UInt16(0)
-        buffer.var_to_reason[var_id].mask1 = UInt16(0)
-        buffer.seen[var_id] = false
-    end
-
     # Truncate trail and trail_lim
     resize!(buffer.trail, trail_pos)
     resize!(buffer.trail_lim, target_level)
@@ -85,19 +77,19 @@ end
 # Clear all decision levels and trail
 @inline function clear_trail!(buffer::SolverBuffer)
     # Clear metadata for all variables
-    fill!(buffer.var_to_level, -1)
-    fill!(buffer.var_to_reason, PropagateReason(-1, UInt16(0), UInt16(0)))
     empty!(buffer.trail)
     empty!(buffer.trail_lim)
 end
 
 @inline function apply_updates!(doms::Vector{DomainMask}, var_axes::Vector{Int}, valid_or::UInt16, valid_and::UInt16, ctx::PropagationContext, tensor_id::Int)
-    @inbounds for (i, var_id) in enumerate(var_axes)
+    @inbounds for i in 1:length(var_axes)
+        var_id = var_axes[i]
         old_domain = doms[var_id]
         (old_domain == DM_0 || old_domain == DM_1) && continue
 
-        can_be_1 = (valid_or >> (i - 1)) & 1 == 1
-        must_be_1 = (valid_and >> (i - 1)) & 1 == 1
+        bit = UInt16(1) << (i - 1)
+        can_be_1  = (valid_or & bit) != UInt16(0)
+        must_be_1 = (valid_and & bit) != UInt16(0)
 
         new_dom = must_be_1 ? DM_1 : (can_be_1 ? DM_BOTH : DM_0)
 
@@ -107,15 +99,13 @@ end
             
             if ctx.record_trail 
                 record_assignment!(ctx.buffer, var_id, new_dom, tensor_id, ctx.level)
-                ctx.buffer.var_to_level[var_id] = ctx.level
-                ctx.buffer.var_to_reason[var_id] = PropagateReason(tensor_id, valid_or, valid_and)
             end
         end
     end
 end
 
 @inline function enqueue_neighbors!(queue, in_queue, neighbors)
-    for t_idx in neighbors
+    @inbounds for t_idx in neighbors
         if !in_queue[t_idx]
             in_queue[t_idx] = true
             push!(queue, t_idx)
@@ -159,16 +149,9 @@ function probe_assignment_core!(cn::ConstraintNetwork, buffer::SolverBuffer, bas
                 # Set the variable
                 scratch_doms[var_id] = new_domain
                 # @info "New assignment: v$(var_id) -> $(new_domain) "
-                if !isempty(buffer.var_to_two_watched_literals[var_id])
-                    for learned_clause_idx in buffer.var_to_two_watched_literals[var_id]
-                        
-                    end
-                end
-
+                
                 if record_trail
                     record_assignment!(buffer, var_id, new_domain, 0, current_level)
-                    buffer.var_to_level[var_id] = current_level
-                    buffer.var_to_reason[var_id] = PropagateReason(0, UInt16(0), UInt16(0))  # Direct decision
                 end
 
                 # Enqueue affected tensors for propagation
@@ -184,7 +167,6 @@ function probe_assignment_core!(cn::ConstraintNetwork, buffer::SolverBuffer, bas
 
     # Then propagate all changes together
     scratch_doms = propagate_core!(cn, scratch_doms, buffer, record_trail, current_level)
-
     return scratch_doms
 end
 
@@ -205,11 +187,6 @@ function propagate_core!(cn::ConstraintNetwork, doms::Vector{DomainMask}, buffer
         support = get_support(cn, tensor)
         valid_or, valid_and, found = scan_supports(support, q_mask0, q_mask1)
         if !found
-            # @info "Conflict Detected"
-            if record_trail
-                # @info "[Conflict] $support, $(tensor.var_axes), $(doms[tensor.var_axes])"
-                learn_from_failure!(cn, doms, buffer, tensor_id)
-            end
             doms[1] = DM_NONE
             return doms
         end
@@ -217,133 +194,4 @@ function propagate_core!(cn::ConstraintNetwork, doms::Vector{DomainMask}, buffer
         apply_updates!(doms, tensor.var_axes, valid_or, valid_and, ctx, tensor_id)
     end
     return doms
-end
-
-function learn_from_failure!(cn::ConstraintNetwork, doms::Vector{DomainMask}, buffer::SolverBuffer, conflict_tensor_id::Int)
-    current_level = get_current_level(buffer)
-    if current_level <= 0
-        # @info "Conflict at level 0, problem is UNSAT"
-        return nothing, 0
-    end
-
-    prepare_analysis!(buffer)
-    
-    conflict_vars = cn.tensors[conflict_tensor_id].var_axes
-    # @info "=== Conflict Analysis ==="
-    # @info "Conflict tensor: $conflict_tensor_id, vars: $conflict_vars"
-    # @info "Current level: $current_level"
-    
-    queue = buffer.conflict_queue
-    @inbounds for var_id in conflict_vars
-        if is_fixed(doms[var_id]) && buffer.var_to_level[var_id] > 0 && !buffer.seen[var_id]
-            buffer.seen[var_id] = true
-            push!(buffer.seen_list, var_id)
-            if buffer.var_to_level[var_id] == current_level
-                push!(queue, var_id)  # 当前层变量加入队列待解析
-                # @info "  Queue var $var_id (level $current_level)"
-            else
-                # 其他层变量直接加入学到的子句
-                push!(buffer.current_clause, negate_domain(doms[var_id]) * var_id)
-                # @info "  Add to clause: var $var_id at level $(buffer.var_to_level[var_id])"
-            end
-        elseif buffer.var_to_level[var_id] <= 0
-            # @info "  doms[$(var_id)]: $(doms[var_id])"
-            # @info "  Skip var $var_id: level = $(buffer.var_to_level[var_id])"
-            @assert (buffer.var_to_level[var_id] == 0) || (doms[var_id] == DM_BOTH)
-        end
-    end
-    # @info "Initial queue: $(queue), clause: $(buffer.current_clause)"
-
-    while length(queue) > 0
-        p = popfirst!(queue)
-        # @info "[Resolve] var $p"
-        
-        reason_id = buffer.var_to_reason[p].reason_tensor_id
-        if reason_id != 0  # This var is not a decision variable
-            reason_vars = cn.tensors[reason_id].var_axes
-            # @info "  Reason: tensor $reason_id with vars $reason_vars"
-            
-            @inbounds for var_id in reason_vars
-                var_level = buffer.var_to_level[var_id]
-                if is_fixed(doms[var_id]) && var_level > 0 && !buffer.seen[var_id]
-                    buffer.seen[var_id] = true
-                    push!(buffer.seen_list, var_id)
-                    
-                    if var_level == current_level 
-                        push!(queue, var_id)
-                        # @info "    Queue var $var_id (current level)"
-                    else
-                        push!(buffer.current_clause, negate_domain(doms[var_id]) * var_id)
-                        # @info "    Add to clause: var $var_id at level $var_level"
-                    end
-                end
-            end
-        else
-            # Decision variable
-            push!(buffer.current_clause, negate_domain(doms[p]) * p)
-            # @info "  Decision variable, add to clause"
-        end
-    end
-    
-    # @info "=== Learned Clause ==="
-    # @info "Clause: $(buffer.current_clause)"
-
-    # Update activity scores for all learned literals
-    for signed_var_id in buffer.current_clause
-        buffer.activity_scores[abs(signed_var_id)] += 1.0
-    end
-
-    finish_analysis!(buffer, buffer.current_clause)
-
-    # Store the learned clause (copy it since buffer is reused)
-    if length(buffer.current_clause) <= 6
-        learned_clause = copy(buffer.current_clause)
-        # Check for duplicates using hash signature
-        clause_signature = compute_clause_signature(learned_clause)
-        if !(clause_signature in buffer.learned_clauses_signatures)
-            push!(buffer.learned_clauses_signatures, clause_signature)
-            push!(buffer.learned_clauses, learned_clause)
-            # @info "Clause added (total: $(length(buffer.learned_clauses)))"
-        # else
-        #     @info "Clause is duplicate, skipped"
-        end
-        # No backtracking for now
-        return learned_clause, 0
-    end
-end
-
-
-# Compute a hash signature for a clause (sorted for canonical form)
-# Note: This creates a temporary sorted copy, but it's necessary for canonical hashing
-@inline function compute_clause_signature(clause::Vector{Int})::UInt64
-    # Sort the clause to get canonical form (same clause content = same signature)
-    # This ensures that clauses with same literals in different order have same signature
-    return hash(sort(clause))
-end
-
-# ---------------------------------------------------------
-# Sub-function 3: Cleanup (no backtracking computation)
-# Responsibility: Clear markers only, we don't backtrack for now
-# ---------------------------------------------------------
-@inline function finish_analysis!(buffer::SolverBuffer, current_clause::Vector{Int})
-    # Quickly clear seen markers
-    seen = buffer.seen
-    for v in buffer.seen_list
-        seen[v] = false
-    end
-    empty!(buffer.seen_list)
-    
-    # No backtracking for now, just return 0
-    return 0
-end
-
-# Simple preparation function
-@inline function prepare_analysis!(buffer::SolverBuffer)
-    seen = buffer.seen
-    for v in buffer.seen_list
-        seen[v] = false
-    end
-    empty!(buffer.seen_list)
-    empty!(buffer.conflict_queue)  # Clear the conflict queue for reuse
-    empty!(buffer.current_clause)  # Clear the buffer for building new clause
 end

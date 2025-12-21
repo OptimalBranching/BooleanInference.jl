@@ -27,6 +27,7 @@ statprof/
 OptimalBranching.jl/
 .julia/
 .claude/
+.history/
 
 # === Build outputs ===
 /benchmarks/artifacts/

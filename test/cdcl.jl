@@ -1,5 +1,6 @@
 using BooleanInference
 using Test
+using CairoMakie
 
 function satisfies_cnf(cnf::Vector{Vector{Int}}, model::Vector{Int})
     for clause in cnf
@@ -69,27 +70,57 @@ end
 
 
 @testset "CDCL-parse CNF file" begin
-    cnf, nvars = BooleanInference.parse_cnf_file(joinpath(@__DIR__, "data", "test_3cnf.cnf"))
-    @test nvars == 100
-    @test length(cnf) == 400
+    cnf, nvars = BooleanInference.parse_cnf_file(joinpath(@__DIR__, "data", "test.cnf"))
+    @test nvars == 219
+    @test length(cnf) == 903
     @test all(length(clause) > 0 for clause in cnf)
     @test all(all(abs(lit) <= nvars for lit in clause) for clause in cnf)
     @test all(all(lit != 0 for lit in clause) for clause in cnf)
     sat, model, learnt = BooleanInference.solve_cdcl(cnf)
     @test sat == true
-    @test length(model) == 100
+    @test length(model) == 219
     @test satisfies_cnf(cnf, model)
     @test isa(learnt, Vector{Vector{Int}})
+
+    learnt_lengths = [length(clause) for clause in learnt]
+    fig = Figure(resolution=(800, 600))
+    ax = Axis(fig[1, 1], 
+              xlabel="Length of learnt clauses", 
+              ylabel="Frequency",
+              title="Histogram of length of learnt clauses")
+    hist!(ax, learnt_lengths, bins=50, color=:steelblue, strokewidth=1, strokecolor=:black)
+    save(joinpath(@__DIR__, "learnt_clause_length_histogram_3cnf.png"), fig)
+    @info "Histogram of length of learnt clauses saved to: $(joinpath(@__DIR__, "learnt_clause_length_histogram_3cnf.png"))"
 end
 
 @testset "CDCL-parse Circuit-CNF file" begin
     cnf, nvars = BooleanInference.parse_cnf_file(joinpath(@__DIR__, "data", "circuit.cnf"))
-    @test nvars == 357
-    @test length(cnf) == 1476
+    @test nvars == 219
+    @test length(cnf) == 903
     @test all(length(clause) > 0 for clause in cnf)
     @test all(all(abs(lit) <= nvars for lit in clause) for clause in cnf)
     @test all(all(lit != 0 for lit in clause) for clause in cnf)
     @time sat, model, learnt = BooleanInference.solve_cdcl(cnf)
-    @show learnt
+    @show length(learnt)
+    
+    learnt_lengths = [length(clause) for clause in learnt]
+    fig = Figure(resolution=(800, 600))
+    ax = Axis(fig[1, 1], 
+              xlabel="Length of learnt clauses", 
+              ylabel="Frequency",
+              title="Histogram of length of learnt clauses")
+    hist!(ax, learnt_lengths, bins=50, color=:steelblue, strokewidth=1, strokecolor=:black)
+    save(joinpath(@__DIR__, "learnt_clause_length_histogram.png"), fig)
+    @info "Histogram of length of learnt clauses saved to: $(joinpath(@__DIR__, "learnt_clause_length_histogram.png"))"
 end
 
+
+@testset "CDCL-CaDiCaLMiner" begin
+    cnf, nvars = BooleanInference.parse_cnf_file(joinpath(@__DIR__, "data", "test.cnf"))
+
+    status, model, learned = BooleanInference.solve_and_mine(cnf; conflict_limit=50_000, max_len=3)
+
+    @show status
+    @show model[1:3]
+    @show length(learned)
+end

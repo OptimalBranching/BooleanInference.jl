@@ -45,23 +45,6 @@ struct SolverBuffer
     trail::Vector{Assignment}
     trail_lim::Vector{Int}
 
-    # === CDCL 加速查找表 (Indexed by var_id) ===
-    # 避免遍历 trail，实现 O(1) 查找
-    var_to_level::Vector{Int}      # 变量的决策层级 (未赋值为 -1)
-    var_to_reason::Vector{PropagateReason}     # 导致赋值的 Tensor ID (0 表示 Decision)
-    
-    # === 冲突分析复用 ===
-    seen::BitVector                # 标记变量是否已处理
-    seen_list::Vector{Int}         # 记录本次分析标记了哪些变量 (用于快速清空)
-    conflict_queue::Vector{Int}    # 冲突分析时的队列（复用缓冲，避免重复分配）
-    
-    # === 学习子句存储 ===
-    learned_clauses::Vector{Vector{Int}}  # 存储所有学习到的子句
-    learned_clauses_signatures::Set{UInt64}  # 用于去重检查（子句的哈希签名）
-    current_clause::Vector{Int}           # 当前正在构建的子句（复用缓冲，存储带符号的变量ID）
-
-    two_watched_literals::Vector{Vector{Int}}  # 存储每个字句中watched literal
-    var_to_two_watched_literals::Vector{Vector{Int}}  # per-literal watch lists (indexed by signed literal)
 end
 
 function SolverBuffer(cn::ConstraintNetwork)
@@ -74,17 +57,7 @@ function SolverBuffer(cn::ConstraintNetwork)
         Dict{Clause{UInt64}, Float64}(),
         zeros(Float64, n_vars),
         zeros(Float64, n_vars),
-        sizehint!(Assignment[], n_vars), Int[],
-        fill(-1, n_vars),  # var_to_level: -1 indicates unassigned
-        fill(PropagateReason(-1, UInt16(0), UInt16(0)), n_vars),  # var_to_reason: 0 indicates decision, -1 indicates unassigned
-        falses(n_vars),
-        Int[],  # seen_list
-        Int[],  # conflict_queue
-        Vector{Vector{Int}}(),
-        Set{UInt64}(),
-        Int[],
-        Vector{Vector{Int}}(),
-        [Int[] for _ in 1:(2 * n_vars + 1)]
+        sizehint!(Assignment[], n_vars), Int[]
     )
 end
 
