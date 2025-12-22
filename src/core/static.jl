@@ -15,10 +15,33 @@ function Base.show(io::IO, f::BoolTensor)
     print(io, "BoolTensor(vars=[$(join(f.var_axes, ", "))], data_idx=$(f.tensor_data_idx))")
 end
 
+struct ClauseTensor
+    vars::Vector{Int}
+    polarity::Vector{Bool}  # true = positive literal, false = negated
+end
+
+function ClauseTensor(lits::AbstractVector{<:Integer})
+    vars = Vector{Int}(undef, length(lits))
+    polarity = Vector{Bool}(undef, length(lits))
+    @inbounds for i in eachindex(lits)
+        lit = Int(lits[i])
+        @assert lit != 0 "ClauseTensor literal cannot be 0"
+        vars[i] = abs(lit)
+        polarity[i] = lit > 0
+    end
+    return ClauseTensor(vars, polarity)
+end
+
+function Base.show(io::IO, c::ClauseTensor)
+    print(io, "ClauseTensor(vars=[$(join(c.vars, ", "))], polarity=$(c.polarity))")
+end
+
 # Shared tensor data (flyweight pattern for deduplication)
 struct TensorData
     dense_tensor::BitVector     # For contraction operations: satisfied_configs[config+1] = true
     support::Vector{UInt16}     # For propagation: list of satisfied configs (0-indexed)
+    support_or::UInt16          # OR over support (for fast m==0 scan)
+    support_and::UInt16         # AND over support (for fast m==0 scan)
 end
 
 function Base.show(io::IO, td::TensorData)
@@ -38,7 +61,14 @@ end
 # Constructor that automatically extracts support
 function TensorData(dense_tensor::BitVector)
     support = extract_supports(dense_tensor)
-    return TensorData(dense_tensor, support)
+    support_or = UInt16(0)
+    support_and = UInt16(0xFFFF)
+    @inbounds for i in eachindex(support)
+        config = support[i]
+        support_or |= config
+        support_and &= config
+    end
+    return TensorData(dense_tensor, support, support_or, support_and)
 end
 
 # Constraint network representing the problem structure
@@ -47,6 +77,7 @@ struct ConstraintNetwork
     unique_tensors::Vector{TensorData}
     tensors::Vector{BoolTensor}
     v2t::Vector{Vector{Int}}  # variable to tensor incidence
+    orig_to_new::Vector{Int}  # original var id -> compressed var id (0 if removed)
 end
 
 function Base.show(io::IO, cn::ConstraintNetwork)
@@ -64,6 +95,8 @@ end
 # Helper function to get tensor data from a tensor instance
 @inline get_tensor_data(cn::ConstraintNetwork, tensor::BoolTensor) = cn.unique_tensors[tensor.tensor_data_idx]
 @inline get_support(cn::ConstraintNetwork, tensor::BoolTensor) = get_tensor_data(cn, tensor).support
+@inline get_support_or(cn::ConstraintNetwork, tensor::BoolTensor) = get_tensor_data(cn, tensor).support_or
+@inline get_support_and(cn::ConstraintNetwork, tensor::BoolTensor) = get_tensor_data(cn, tensor).support_and
 @inline get_dense_tensor(cn::ConstraintNetwork, tensor::BoolTensor) = get_tensor_data(cn, tensor).dense_tensor
 
 function setup_problem(var_num::Int, tensors_to_vars::Vector{Vector{Int}}, tensor_data::Vector{BitVector}; precontract::Bool=true)
@@ -100,11 +133,13 @@ function setup_problem(var_num::Int, tensors_to_vars::Vector{Vector{Int}}, tenso
             precontract_degree2!(tensors, vars_to_tensors, unique_data, data_to_idx)
     end
 
-    vars = Vector{Variable}(undef, var_num)
-    for i in 1:var_num
+    tensors, vars_to_tensors, orig_to_new = compress_variables!(tensors, vars_to_tensors)
+
+    vars = Vector{Variable}(undef, length(vars_to_tensors))
+    for i in 1:length(vars_to_tensors)
         vars[i] = Variable(length(vars_to_tensors[i]))
     end
-    return ConstraintNetwork(vars, unique_data, tensors, vars_to_tensors)
+    return ConstraintNetwork(vars, unique_data, tensors, vars_to_tensors, orig_to_new)
 end
 
 function setup_from_csp(csp::ConstraintSatisfactionProblem; precontract::Bool=true)
@@ -251,4 +286,31 @@ function precontract_degree2!(tensors::Vector{BoolTensor}, vars_to_tensors::Vect
     end
     
     return new_tensors, new_vars_to_tensors, unique_data, data_to_idx
+end
+
+function compress_variables!(tensors::Vector{BoolTensor}, vars_to_tensors::Vector{Vector{Int}})
+    n_vars = length(vars_to_tensors)
+    orig_to_new = zeros(Int, n_vars)
+    next_id = 0
+    for i in 1:n_vars
+        if !isempty(vars_to_tensors[i])
+            next_id += 1
+            orig_to_new[i] = next_id
+        end
+    end
+
+    @inbounds for t in tensors
+        for i in eachindex(t.var_axes)
+            t.var_axes[i] = orig_to_new[t.var_axes[i]]
+        end
+    end
+
+    new_vars_to_tensors = [Int[] for _ in 1:next_id]
+    @inbounds for (tid, t) in enumerate(tensors)
+        for v in t.var_axes
+            push!(new_vars_to_tensors[v], tid)
+        end
+    end
+
+    return tensors, new_vars_to_tensors, orig_to_new
 end

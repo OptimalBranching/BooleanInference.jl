@@ -8,11 +8,35 @@ function compute_branching_result(cache::RegionCache, problem::TNProblem, var_id
     feasible_configs = filter_feasible_configs(problem, region, cached_configs, measure)
     isempty(feasible_configs) && return nothing, region.vars
 
+    # Drop variables that are already fixed to avoid no-op branching
+    unfixed_positions = Int[]
+    unfixed_vars = Int[]
+    @inbounds for (i, v) in enumerate(region.vars)
+        if !is_fixed(problem.doms[v])
+            push!(unfixed_positions, i)
+            push!(unfixed_vars, v)
+        end
+    end
+    isempty(unfixed_vars) && return nothing, region.vars
+
+    # Project configs onto unfixed variables only
+    projected = UInt64[]
+    @inbounds for config in feasible_configs
+        new_config = UInt64(0)
+        for (new_i, old_i) in enumerate(unfixed_positions)
+            if (config >> (old_i - 1)) & 1 == 1
+                new_config |= UInt64(1) << (new_i - 1)
+            end
+        end
+        push!(projected, new_config)
+    end
+    unique!(projected)
+
     # Build branching table from filtered configs
-    table = BranchingTable(length(region.vars), [[c] for c in feasible_configs])
+    table = BranchingTable(length(unfixed_vars), [[c] for c in projected])
     # Compute optimal branching rule
-    result = OptimalBranchingCore.optimal_branching_rule(table, region.vars, problem, measure, set_cover_solver)
-    return result, region.vars
+    result = OptimalBranchingCore.optimal_branching_rule(table, unfixed_vars, problem, measure, set_cover_solver)
+    return result, unfixed_vars
 end
 
 @inline function get_region_masks(doms::Vector{DomainMask}, vars::Vector{Int})
@@ -36,14 +60,8 @@ function probe_config!(buffer::SolverBuffer, problem::TNProblem, vars::Vector{In
     # All variables in config are being set, so mask = all 1s
     mask = (UInt64(1) << length(vars)) - 1
     
-    # Record trail during probing to enable conflict learning
-    current_lvl = get_current_level(buffer)
-    new_lvl = new_decision_level!(buffer)
-    scratch = probe_assignment_core!(problem.static, buffer, problem.doms, vars, mask, config, false, new_lvl)
+    scratch = probe_assignment_core!(problem, buffer, problem.doms, vars, mask, config)
     is_feasible = scratch[1] != DM_NONE
     is_feasible && (buffer.branching_cache[Clause(mask, config)] = measure_core(problem.static, scratch, measure))
-
-    # Always backtrack to restore solver state
-    backtrack!(buffer, current_lvl)
     return is_feasible
 end

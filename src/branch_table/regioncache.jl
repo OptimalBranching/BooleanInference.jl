@@ -19,7 +19,7 @@ function get_region_data!(cache::RegionCache, problem::TNProblem, var_id::Int)
         # To ensure consistency with the cache's contract (valid for the subtree),
         # we must use the SAME domains that were present at init_cache time.
         # We create a temporary problem wrapper for create_region.
-        init_problem = TNProblem(problem.static, cache.initial_doms, problem.stats, problem.buffer)
+        init_problem = TNProblem(problem.static, cache.initial_doms, problem.stats, problem.buffer, problem.learned_clauses, problem.v2c)
         
         region = create_region(init_problem, var_id, cache.selector)
         cache.var_to_region[var_id] = region
@@ -31,4 +31,3 @@ function get_region_data!(cache::RegionCache, problem::TNProblem, var_id::Int)
     end
     return cache.var_to_region[var_id], cache.var_to_configs[var_id]
 end
-

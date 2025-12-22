@@ -13,38 +13,14 @@ function Base.show(io::IO, r::Result)
     end
 end
 
-struct Assignment
-    var_id::Int
-    value::DomainMask
-    reason_tensor::Int
-    level::Int
-end
-
-function Base.show(io::IO, a::Assignment)
-    if a.reason_tensor == 0
-        print(io, "x$(a.var_id)@$(a.level) ← $(a.value) (direct decision)")
-    else
-        print(io, "x$(a.var_id)@$(a.level) ← $(a.value) (reason: tensor $(a.reason_tensor))")
-    end
-end
-
-mutable struct PropagateReason
-    reason_tensor_id::Int
-    mask0::UInt16
-    mask1::UInt16
-end
-
 struct SolverBuffer
     touched_tensors::Vector{Int}  # Tensors that need propagation
     in_queue::BitVector           # Track which tensors are queued for processing
+    touched_clauses::Vector{Int}  # ClauseTensors that need propagation
+    clause_in_queue::BitVector    # Track which clauses are queued for processing
     scratch_doms::Vector{DomainMask}  # Temporary domain storage for propagation
     branching_cache::Dict{Clause{UInt64}, Float64}  # Cache measure values for branching configurations
-    activity_scores::Vector{Float64}
     connection_scores::Vector{Float64}
-
-    trail::Vector{Assignment}
-    trail_lim::Vector{Int}
-
 end
 
 function SolverBuffer(cn::ConstraintNetwork)
@@ -53,11 +29,11 @@ function SolverBuffer(cn::ConstraintNetwork)
     SolverBuffer(
         sizehint!(Int[], n_tensors),
         falses(n_tensors),
+        Int[],
+        BitVector(),
         Vector{DomainMask}(undef, n_vars),
         Dict{Clause{UInt64}, Float64}(),
-        zeros(Float64, n_vars),
-        zeros(Float64, n_vars),
-        sizehint!(Assignment[], n_vars), Int[]
+        zeros(Float64, n_vars)
     )
 end
 
@@ -66,28 +42,64 @@ struct TNProblem <: AbstractProblem
     doms::Vector{DomainMask}
     stats::BranchingStats
     buffer::SolverBuffer
+    learned_clauses::Vector{ClauseTensor}
+    v2c::Vector{Vector{Int}}
 
     # Internal constructor: final constructor that creates the instance
-    function TNProblem(static::ConstraintNetwork, doms::Vector{DomainMask}, stats::BranchingStats, buffer::SolverBuffer)
-        new(static, doms, stats, buffer)
+    function TNProblem(static::ConstraintNetwork, doms::Vector{DomainMask}, stats::BranchingStats, buffer::SolverBuffer, learned_clauses::Vector{ClauseTensor}, v2c::Vector{Vector{Int}})
+        new(static, doms, stats, buffer, learned_clauses, v2c)
     end
 end
 
 # Initialize domains with propagation
-function initialize(static::ConstraintNetwork, buffer::SolverBuffer)
-    doms = propagate(static, init_doms(static), collect(1:length(static.tensors)), buffer)
+function initialize(static::ConstraintNetwork, learned_clauses::Vector{ClauseTensor}, v2c::Vector{Vector{Int}}, buffer::SolverBuffer)
+    doms = propagate(static, learned_clauses, v2c, init_doms(static), collect(1:length(static.tensors)), collect(1:length(learned_clauses)), buffer)
     has_contradiction(doms) && error("Domain has contradiction")
-    @inbounds for var_id in 1:length(static.vars)
-        isempty(static.v2t[var_id]) && (doms[var_id] = DM_0)
-    end
     return doms
 end
 
 # Constructor: Initialize from ConstraintNetwork with optional explicit domains
-function TNProblem(static::ConstraintNetwork, doms::Union{Vector{DomainMask}, Nothing}=nothing, stats::BranchingStats=BranchingStats())
+function TNProblem(
+    static::ConstraintNetwork;
+    doms::Union{Vector{DomainMask}, Nothing}=nothing,
+    stats::BranchingStats=BranchingStats(),
+    learned_clauses::Vector{ClauseTensor}=ClauseTensor[],
+)
     buffer = SolverBuffer(static)
-    isnothing(doms) && (doms = initialize(static, buffer))
-    return TNProblem(static, doms, stats, buffer)
+    mapped_clauses = map_clauses_to_compressed(learned_clauses, static.orig_to_new)
+    v2c = build_clause_v2c(length(static.vars), mapped_clauses)
+    isnothing(doms) && (doms = initialize(static, mapped_clauses, v2c, buffer))
+    return TNProblem(static, doms, stats, buffer, mapped_clauses, v2c)
+end
+
+function build_clause_v2c(n_vars::Int, clauses::Vector{ClauseTensor})
+    v2c = [Int[] for _ in 1:n_vars]
+    @inbounds for (c_idx, clause) in enumerate(clauses)
+        for v in clause.vars
+            push!(v2c[v], c_idx)
+        end
+    end
+    return v2c
+end
+
+function map_clauses_to_compressed(clauses::Vector{ClauseTensor}, orig_to_new::Vector{Int})
+    isempty(clauses) && return clauses
+    mapped = ClauseTensor[]
+    @inbounds for clause in clauses
+        keep = true
+        vars = Vector{Int}(undef, length(clause.vars))
+        for i in eachindex(clause.vars)
+            v = clause.vars[i]
+            nv = orig_to_new[v]
+            if nv == 0
+                keep = false
+                break
+            end
+            vars[i] = nv
+        end
+        keep && push!(mapped, ClauseTensor(vars, copy(clause.polarity)))
+    end
+    return mapped
 end
 
 function Base.show(io::IO, problem::TNProblem)
@@ -96,6 +108,14 @@ end
 
 get_var_value(problem::TNProblem, var_id::Int) = get_var_value(problem.doms, var_id)
 get_var_value(problem::TNProblem, var_ids::Vector{Int}) = Bool[get_var_value(problem.doms, var_id) for var_id in var_ids]
+
+map_var(problem::TNProblem, orig_var_id::Int) = problem.static.orig_to_new[orig_var_id]
+map_vars(problem::TNProblem, orig_var_ids::Vector{Int}) = [map_var(problem, v) for v in orig_var_ids]
+function map_vars_checked(problem::TNProblem, orig_var_ids::Vector{Int}, label::AbstractString)
+    mapped = map_vars(problem, orig_var_ids)
+    any(==(0), mapped) && error("$label variables were eliminated during compression")
+    return mapped
+end
 
 count_unfixed(problem::TNProblem) = count_unfixed(problem.doms)
 is_solved(problem::TNProblem) = count_unfixed(problem) == 0

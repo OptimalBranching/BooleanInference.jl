@@ -3,7 +3,7 @@ function measure_core(cn::ConstraintNetwork, doms::Vector{DomainMask}, ::NumUnfi
     return count_unfixed(doms)
 end
 function OptimalBranchingCore.measure(problem::TNProblem, ::NumUnfixedVars)
-    return measure_core(problem.static, problem.doms, NumUnfixedVars())
+    return count_unfixed(problem)
 end
 
 struct NumUnfixedTensors <: AbstractMeasure end
@@ -79,4 +79,3 @@ function OptimalBranchingCore.measure(problem::TNProblem, ::HardSetSize)
     selected = OptimalBranchingCore.weighted_minimum_set_cover(solver, weights, subsets, num_hard_tensors)
     return length(selected)
 end
-

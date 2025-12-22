@@ -39,7 +39,7 @@ function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasu
     max_score = 0.0
     var_id = 0
     @inbounds for i in eachindex(var_scores)
-        if is_fixed(problem.doms[i]) continue end
+        is_fixed(problem.doms[i]) && continue
         if var_scores[i] > max_score
             max_score = var_scores[i]
             var_id = i

@@ -49,7 +49,7 @@ include("cdcl/CaDiCaLMiner.jl")
 include("interface.jl")
 
 
-export Variable, BoolTensor, ConstraintNetwork, DomainMask, TNProblem, Result
+export Variable, BoolTensor, ClauseTensor, ConstraintNetwork, DomainMask, TNProblem, Result
 export DomainMask
 export Region
 
