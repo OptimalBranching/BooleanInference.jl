@@ -23,7 +23,7 @@ submodule:
 # Build CaDiCaL
 cadical: submodule
 	@echo "Building CaDiCaL..."
-	cd deps/cadical && ./configure && make -j4
+	cd deps/cadical && CXXFLAGS="-fPIC" ./configure && make -j4
 
 # Build the custom library (depends on CaDiCaL)
 mylib: cadical
