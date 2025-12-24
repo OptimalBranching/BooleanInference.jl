@@ -18,3 +18,6 @@
 	path = benchmarks/third-party/cir_bench
 	url = https://github.com/santoshsmalagi/Benchmarks.git
 	ignore = all
+[submodule "deps/cadical"]
+	path = deps/cadical
+	url = https://github.com/arminbiere/cadical.git
