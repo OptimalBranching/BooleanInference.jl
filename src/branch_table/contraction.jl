@@ -1,3 +1,7 @@
+function create_region(cn::ConstraintNetwork, doms::Vector{DomainMask}, variable::Int, selector::AbstractSelector)
+    return k_neighboring(cn, doms, variable; max_tensors = selector.max_tensors, k = selector.k)
+end
+
 function contract_region(tn::ConstraintNetwork, region::Region, doms::Vector{DomainMask})
     sliced_tensors = Vector{Array{Tropical{Float64}}}(undef, length(region.tensors))
     tensor_indices = Vector{Vector{Int}}(undef, length(region.tensors))

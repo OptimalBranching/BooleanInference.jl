@@ -24,7 +24,6 @@ Thumbs.db
 *.swo
 
 statprof/
-OptimalBranching.jl/
 .julia/
 .claude/
 .history/

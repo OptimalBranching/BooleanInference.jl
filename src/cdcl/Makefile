@@ -1,26 +1,23 @@
-CXX ?= g++
-CXXFLAGS ?= -O2 -fPIC -std=c++11 -DEASYSAT_NO_MAIN
+CXX = g++
+CXXFLAGS = -O3 -std=c++11 -fPIC
+INCLUDES = -I../../deps/cadical/src
+LIBS = ../../deps/cadical/build/libcadical.a
+OUTPUT = ../../deps/cadical/build/libcadical_mine.dylib
+TARGET_OS := $(shell uname -s)
 
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Darwin)
-SHARED_EXT := dylib
-SHARED_FLAG := -dynamiclib
+ifeq ($(TARGET_OS), Darwin)
+	LDFLAGS = -dynamiclib
 else
-SHARED_EXT := so
-SHARED_FLAG := -shared
+	LDFLAGS = -shared
+	OUTPUT = ../../deps/cadical/build/libcadical_mine.so
 endif
 
-TARGET := libeasysat.$(SHARED_EXT)
-SRCS := EasySAT.cpp
-OBJS := $(SRCS:.cpp=.o)
+.PHONY: all clean
 
-all: $(TARGET)
+all: $(OUTPUT)
 
-$(TARGET): $(OBJS)
-	$(CXX) $(SHARED_FLAG) -o $@ $(OBJS)
-
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+$(OUTPUT): my_cadical.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -o $@ $< $(LIBS)
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(OUTPUT)

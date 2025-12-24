@@ -1,7 +1,3 @@
-function create_region(problem::TNProblem, variable::Int, selector::AbstractSelector)
-    return k_neighboring(problem.static, problem.doms, variable; max_tensors = selector.max_tensors, k = selector.k)
-end
-
 struct MostOccurrenceSelector <: AbstractSelector 
     k::Int
     max_tensors::Int

@@ -188,8 +188,12 @@ function contract_two_tensors(data1::BitVector, vars1::Vector{Int}, data2::BitVe
     result_arr = optcode(arr1, arr2)
     
     # Convert back to BitVector: any positive value means satisfiable
-    # Need to flatten multi-dimensional result first
-    result = BitVector(vec(result_arr .> 0))
+    gt = result_arr .> 0
+    if gt isa AbstractArray
+        result = BitVector(vec(gt))
+    else
+        result = BitVector([gt])
+    end
     
     return result, out_vars
 end

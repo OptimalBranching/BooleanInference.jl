@@ -7,7 +7,8 @@ using BooleanInference: setup_from_csp, TNProblem, setup_problem
     csp = factoring_csp(10, 10, 559619)
     static = setup_from_csp(csp)
     problem = TNProblem(static)
-    @test length(problem.static.vars) == length(csp.symbols)
+    # After precontraction, vars may be fewer than original symbols
+    @test length(problem.static.vars) > 0
     @test length(problem.static.tensors) > 0
     @test length(problem.static.v2t) == length(problem.static.vars)
     @show problem.static
@@ -20,35 +21,25 @@ end
     @test tensor_id == 1
 end
 
-# @testset "setup_problem" begin
-#     var_num = 2
-#     tensors_to_vars = [[1, 2], [2]]
-#     tensor_data = [
-#         [Tropical(0.0), Tropical(0.0), Tropical(0.0), Tropical(1.0)],  # AND: [0,0,0,1]
-#         [Tropical(1.0), Tropical(0.0)]  # NOT: [1,0]
-#     ]
+@testset "setup_problem basic" begin
+    # Create a simple 2-variable problem with 2 tensors
+    tensor_data_1 = BitVector([false, false, false, true])  # AND: only (1,1) satisfies
+    tensor_data_2 = BitVector([true, false])  # NOT: only 0 satisfies
 
-#     tn = setup_problem(var_num, tensors_to_vars, tensor_data)
+    static = setup_problem(2, [[1, 2], [2]], [tensor_data_1, tensor_data_2]; precontract=false)
 
-#     @test length(tn.vars) == 2
-#     @test all(v.deg > 0 for v in tn.vars)
+    @test length(static.vars) == 2
+    @test all(v.deg > 0 for v in static.vars)
 
-#     @test length(tn.tensors) == 2
-#     @test length(tn.tensors[1].var_axes) == 2
-#     @test length(tn.tensors[2].var_axes) == 1
+    @test length(static.tensors) == 2
+    @test length(static.tensors[1].var_axes) == 2
+    @test length(static.tensors[2].var_axes) == 1
 
-#     @test length(tn.v2t) == 2
-#     @test length(tn.v2t[1]) == 1
-#     @test length(tn.v2t[2]) == 2
+    @test length(static.v2t) == 2
+    @test length(static.v2t[1]) == 1
+    @test length(static.v2t[2]) == 2
 
-#     # Verify var_axes can replace t2v
-#     @test length(tn.tensors[1].var_axes) == 2
-#     @test 1 in tn.tensors[1].var_axes
-#     @test 2 in tn.tensors[1].var_axes
-# end
-
-# @testset "setup_from_tensor_network" begin
-#     tn = GenericTensorNetwork(generate_example_problem())
-#     tn_static = setup_from_tensor_network(tn)
-#     tn_problem = TNProblem(tn_static)
-# end
+    # Verify var_axes contains expected variables
+    @test 1 in static.tensors[1].var_axes
+    @test 2 in static.tensors[1].var_axes
+end

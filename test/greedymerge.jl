@@ -3,15 +3,17 @@ using BooleanInference
 using BooleanInference: TNProblem, NumUnfixedVars, setup_problem
 using OptimalBranchingCore
 using TropicalNumbers: Tropical
+using GenericTensorNetworks: ∧, ∨, ¬, @bools, Satisfiability
 
-# Helper function to create a simple test problem
+# Helper function to create a simple test problem using new API (BitVector)
 function create_test_problem()
     dummy_tensors_to_vars = [[1, 2], [2, 3]]
+    # Use BitVector format for tensor data (true = satisfied)
     dummy_tensor_data = [
-        fill(Tropical(0.0), 4),
-        fill(Tropical(0.0), 4)
+        BitVector(ones(Bool, 4)),  # All configs satisfy
+        BitVector(ones(Bool, 4))
     ]
-    static = BooleanInference.setup_problem(3, dummy_tensors_to_vars, dummy_tensor_data)
+    static = BooleanInference.setup_problem(3, dummy_tensors_to_vars, dummy_tensor_data; precontract=false)
     return TNProblem(static)
 end
 
@@ -28,16 +30,16 @@ end
     cnf = ∧(∨(a, b), ∨(¬a, c), ∨(c, d))
     sat = Satisfiability(cnf; use_constraints=true)
     problem = setup_from_sat(sat)
-    
+
     # Test basic properties
     @test problem isa TNProblem
     @test count_unfixed(problem) > 0
-    
+
     # Test solving with simple strategy
     br_strategy = BranchingStrategy(
-        table_solver = TNContractionSolver(),
-        selector = MostOccurrenceSelector(1,2),
-        measure = NumUnfixedVars()
+        table_solver=TNContractionSolver(),
+        selector=MostOccurrenceSelector(1, 2),
+        measure=NumUnfixedVars()
     )
     result = bbsat!(problem, br_strategy, NoReducer())
     @test !isnothing(result)

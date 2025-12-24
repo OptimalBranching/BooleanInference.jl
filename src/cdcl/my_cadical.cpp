@@ -80,7 +80,9 @@ int cadical_mine_learned_cnf(
 ) {
   Solver s;
 
-  s.reserve(nvars);
+  // Disable factor/factorcheck to avoid "undeclared variable" errors
+  s.set("factor", 0);
+  s.set("factorcheck", 0);
 
   // feed CNF
   for (int32_t i = 0; i < nclauses; ++i) {
@@ -161,7 +163,9 @@ int cadical_solve_and_mine(
 ) {
   Solver s;
 
-  s.reserve(nvars);
+  // Disable factor/factorcheck to avoid "undeclared variable" errors
+  s.set("factor", 0);
+  s.set("factorcheck", 0);
 
   // feed CNF
   for (int32_t i = 0; i < nclauses; ++i) {

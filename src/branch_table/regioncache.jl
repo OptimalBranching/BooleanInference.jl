@@ -1,3 +1,17 @@
+struct Region
+    id::Int
+    tensors::Vector{Int}
+    vars::Vector{Int}
+end
+
+function Base.show(io::IO, region::Region)
+    print(io, "Region(focus=$(region.id), tensors=$(region.tensors), vars=$(region.vars))")
+end
+
+function Base.copy(region::Region)
+    return Region(region.id, region.tensors, region.vars)
+end
+
 struct RegionCache{S}
     selector::S
     initial_doms::Vector{DomainMask}
@@ -16,12 +30,7 @@ end
 
 function get_region_data!(cache::RegionCache, problem::TNProblem, var_id::Int)
     if isnothing(cache.var_to_region[var_id])
-        # To ensure consistency with the cache's contract (valid for the subtree),
-        # we must use the SAME domains that were present at init_cache time.
-        # We create a temporary problem wrapper for create_region.
-        init_problem = TNProblem(problem.static, cache.initial_doms, problem.stats, problem.buffer, problem.learned_clauses, problem.v2c)
-        
-        region = create_region(init_problem, var_id, cache.selector)
+        region = create_region(problem.static, cache.initial_doms, var_id, cache.selector)
         cache.var_to_region[var_id] = region
 
         # Compute full branching table with initial doms

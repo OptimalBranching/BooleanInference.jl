@@ -21,3 +21,4 @@
 [submodule "deps/cadical"]
 	path = deps/cadical
 	url = https://github.com/arminbiere/cadical.git
+	ignore = all

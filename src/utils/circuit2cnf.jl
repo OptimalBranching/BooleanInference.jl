@@ -3,20 +3,25 @@ const _FALSE_SYMBOL = Symbol("false")
 const _XOR_SYMBOL = Symbol("\u22bb")
 
 """
-    circuit_to_cnf(circuit::Circuit) -> (cnf, symbols)
+    circuit_to_cnf(circuit::Circuit; simplify::Bool=true) -> (cnf, symbols)
 
 Convert a `ProblemReductions.@circuit` circuit into CNF in DIMACS-style
 `Vector{Vector{Int}}` form. Returns the CNF and the symbol order used for
 variable indexing (1-based).
+
+If `simplify=false`, the circuit is used as-is without calling `simple_form`.
+This is useful when the circuit has already been simplified and you want to
+preserve the symbol order.
 """
-function circuit_to_cnf(circuit::Circuit)
-    simplified = simple_form(circuit)
-    symbols = ProblemReductions.symbols(simplified)
+function circuit_to_cnf(circuit::Circuit; simplify::Bool=true)
+    # Only simplify if requested - avoid re-simplifying already optimized circuits
+    working_circuit = simplify ? simple_form(circuit) : circuit
+    symbols = ProblemReductions.symbols(working_circuit)
     sym_to_var = Dict{Symbol, Int}(s => i for (i, s) in enumerate(symbols))
     cnf = Vector{Vector{Int}}()
     next_var = Ref(length(symbols))
 
-    for assignment in simplified.exprs
+    for assignment in working_circuit.exprs
         for out_sym in assignment.outputs
             out_var = sym_to_var[out_sym]
             add_equivalence!(cnf, out_var, assignment.expr, sym_to_var, next_var)
