@@ -18,7 +18,6 @@ using CairoMakie: Figure, Axis, save, hidespines!, hidedecorations!, DataAspect
 using NetworkLayout: SFDP, Spring, Stress, Spectral
 using Gurobi
 using Combinatorics
-using CliqueTrees
 
 include("core/static.jl")
 include("core/domain.jl")
