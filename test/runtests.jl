@@ -40,3 +40,7 @@ end
 @testset "branchtable.jl" begin
     include("branchtable.jl")
 end
+
+@testset "cdcl.jl" begin
+    include("cdcl.jl")
+end

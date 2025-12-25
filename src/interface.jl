@@ -7,35 +7,14 @@ function setup_from_circuit(cir::Circuit)
 end
 
 # Use multiple dispatch for different SAT types
-function setup_from_sat(sat::CircuitSAT)
-    tn = GenericTensorNetwork(sat)
-    t2v = getixsv(tn.code)
-    tensors = GenericTensorNetworks.generate_tensors(Tropical(1.0), tn)
-    # Merge vec + replace to avoid intermediate allocation
-    tensor_data = [replace(vec(t), Tropical(1.0) => zero(Tropical{Float64})) for t in tensors]
-
-    # # Extract circuit metadata and symbols
-    # circuit = sat.circuit
-    # n_tensors = length(t2v)
-    # tensor_symbols = [circuit.exprs[i].expr.head for i in 1:min(n_tensors, length(circuit.exprs))]
-
-    # # Compute circuit topology (depths, fanin, fanout)
-    # circuit_info = compute_circuit_info(sat)
-    # tensor_info = map_tensor_to_circuit_info(tn, circuit_info, sat)
-
-    # Build BipartiteGraph
-    static = setup_problem(length(sat.symbols), t2v, tensor_data)
-    TNProblem(static)
-end
-
-function setup_from_sat(sat::ConstraintSatisfactionProblem)
-    tn = GenericTensorNetwork(sat)
-    static = setup_from_tensor_network(tn)
-    TNProblem(static)
+function setup_from_sat(sat::ConstraintSatisfactionProblem; learned_clauses::Vector{ClauseTensor}=ClauseTensor[], precontract::Bool=false)
+    # Direct conversion from CSP to BipartiteGraph, avoiding GenericTensorNetwork overhead
+    static = setup_from_csp(sat; precontract)
+    return TNProblem(static; learned_clauses)
 end
 
 function solve(problem::TNProblem, bsconfig::BranchingStrategy, reducer::AbstractReducer; show_stats::Bool=false)
-    reset_problem!(problem)  # Reset stats before solving
+    reset_stats!(problem)  # Reset stats before solving
     result = bbsat!(problem, bsconfig, reducer)
     show_stats && print_stats_summary(result.stats)
     return result
@@ -45,7 +24,7 @@ function solve_sat_problem(
     sat::ConstraintSatisfactionProblem;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
+        selector=MostOccurrenceSelector(1, 2),
         measure=NumUnfixedVars(),
         set_cover_solver=GreedyMerge()
     ),
@@ -61,7 +40,7 @@ function solve_sat_with_assignments(
     sat::ConstraintSatisfactionProblem;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
+        selector=MostOccurrenceSelector(1, 2),
         measure=NumUnfixedVars(),
         set_cover_solver=GreedyMerge()
     ),
@@ -74,13 +53,13 @@ function solve_sat_with_assignments(
 
     if result.found
         # Convert Result to variable assignments
-        assignments = Dict{Symbol, Int}()
+        assignments = Dict{Symbol,Int}()
         for (i, symbol) in enumerate(sat.symbols)
             assignments[symbol] = get_var_value(result.solution, i)
         end
         return true, assignments, result.stats
     else
-        return false, Dict{Symbol, Int}(), result.stats
+        return false, Dict{Symbol,Int}(), result.stats
     end
 end
 
@@ -92,33 +71,53 @@ function solve_factoring(
     n::Int, m::Int, N::Int;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        # selector=MinGammaSelector(2,4,TNContractionSolver(), GreedyMerge()),
-        selector=MostOccurrenceSelector(3,3),
-        measure=NumHardTensors(),
+        selector=MostOccurrenceSelector(3, 4),
+        measure=NumUnfixedTensors(),
         set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
     show_stats::Bool=false
 )
-    fproblem = Factoring(n, m, N)
-    circuit_sat = reduceto(CircuitSAT, fproblem)
-    problem = CircuitSAT(circuit_sat.circuit.circuit; use_constraints=true)
-    tn_problem = setup_from_sat(problem)
-    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
-    if !result.found
-        return nothing, nothing, result.stats
+    function _solve_and_mine_factoring(circuit::CircuitSAT, q_indices::Vector{Int}, p_indices::Vector{Int}; conflict_limit::Int, max_len::Int)
+        # Use simplify=false to preserve symbol order from simplify_circuit
+        cnf, _ = circuit_to_cnf(circuit.circuit; simplify=false)
+        status, model, learned = solve_and_mine(cnf; conflict_limit, max_len)
+        a = [model[i] > 0 for i in q_indices]
+        b = [model[i] > 0 for i in p_indices]
+        learned_tensors = ClauseTensor.(learned)
+        return status, bits_to_int(a), bits_to_int(b), learned_tensors
     end
-    a = get_var_value(result.solution, circuit_sat.q)
-    b = get_var_value(result.solution, circuit_sat.p)
+
+    reduction = reduceto(CircuitSAT, Factoring(n, m, N))
+    @show length(reduction.circuit.symbols)
+    simplified_circuit, fix_indices = simplify_circuit(reduction.circuit.circuit, [reduction.q..., reduction.p...])
+    q_indices = fix_indices[1:length(reduction.q)]
+    p_indices = fix_indices[(length(reduction.q)+1):end]
+
+    circuit_sat = CircuitSAT(simplified_circuit; use_constraints=true)
+    @show length(circuit_sat.symbols)
+    status, a, b, learned_tensors = _solve_and_mine_factoring(circuit_sat, q_indices, p_indices; conflict_limit=30000, max_len=5)
+    status == :sat && return a, b, BranchingStats()
+    @assert status != :unsat
+
+    tn_problem = setup_from_sat(circuit_sat; learned_clauses=learned_tensors, precontract=false)
+
+    # tn_problem = setup_from_sat(problem)
+    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
+    !result.found && return nothing, nothing, result.stats
+
+    q_vars = map_vars_checked(tn_problem, q_indices, "q")
+    p_vars = map_vars_checked(tn_problem, p_indices, "p")
+    a = get_var_value(result.solution, q_vars)
+    b = get_var_value(result.solution, p_vars)
     return bits_to_int(a), bits_to_int(b), result.stats
 end
-
 
 function solve_circuit_sat(
     circuit::Circuit;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=MinGammaSelector(1,2,TNContractionSolver(), GreedyMerge()),
+        selector=MostOccurrenceSelector(1, 2),
         measure=NumUnfixedVars()
     ),
     reducer::AbstractReducer=NoReducer(),

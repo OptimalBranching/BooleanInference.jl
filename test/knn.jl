@@ -2,7 +2,7 @@ using Test
 using BooleanInference
 using ProblemReductions: Factoring, reduceto, CircuitSAT
 using GenericTensorNetworks
-using BooleanInference: setup_from_cnf, k_neighboring
+using BooleanInference: setup_from_cnf, setup_from_sat, k_neighboring
 using BooleanInference.GenericTensorNetworks: ∧, ∨, ¬
 
 function generate_example_problem()
@@ -14,16 +14,16 @@ end
 
 @testset "knn" begin
     problem = generate_example_problem()
-    tn = GenericTensorNetwork(problem)
-    tn = BooleanInference.setup_from_tensor_network(tn)
-    doms = BooleanInference.init_doms(tn)
-    region = BooleanInference.k_neighboring(tn, doms, 1; k=2, max_tensors=10)
+    # Use setup_from_sat instead of deprecated setup_from_tensor_network
+    tn = setup_from_sat(problem)
+    doms = BooleanInference.init_doms(tn.static)
+    region = BooleanInference.k_neighboring(tn.static, doms, 1; k=2, max_tensors=10)
     @show region
 end
 
 @testset "original_test_for_neighboring" begin
     @bools a b c d e f g
-    cnf = ∧(∨(b), ∨(a,¬c), ∨(d,¬b), ∨(¬c,¬d), ∨(a,e), ∨(a,e,¬c))
+    cnf = ∧(∨(b), ∨(a, ¬c), ∨(d, ¬b), ∨(¬c, ¬d), ∨(a, e), ∨(a, e, ¬c))
     problem = setup_from_cnf(cnf)
     # Use unpropagated doms for testing k_neighboring
     doms = BooleanInference.init_doms(problem.static)
@@ -39,7 +39,7 @@ end
 
 @testset "original_test_for_k_neighboring" begin
     @bools a b c d e
-    cnf = ∧(∨(b), ∨(a,¬c), ∨(d,¬b), ∨(¬c,¬d), ∨(a,e), ∨(a,e,¬c))
+    cnf = ∧(∨(b), ∨(a, ¬c), ∨(d, ¬b), ∨(¬c, ¬d), ∨(a, e), ∨(a, e, ¬c))
     problem = setup_from_cnf(cnf)
     # Use unpropagated doms for testing k_neighboring
     doms = BooleanInference.init_doms(problem.static)

@@ -25,14 +25,13 @@ for nn in n
     least_avg_branch_value = Inf
     least_avg_branch_index = 0
     for (i, result) in enumerate(bi_results)
-        if result.solver_config["selector_type"] == "MostOccurrenceSelector" && result.solver_config["measure"] == "NumHardTensors"
+        if result.solver_config["selector_type"] == "MostOccurrenceSelector" && result.solver_config["measure"] == "NumHardTensors" && result.solver_config["set_cover_solver"] == "GreedyMerge"
             if mean(result.branches) < least_avg_branch_value
                 least_avg_branch_value = mean(result.branches)
                 least_avg_branch_index = i
             end
         end
     end
-
     branches = bi_results[least_avg_branch_index].branches
     times = bi_results[least_avg_branch_index].times
 
@@ -53,7 +52,7 @@ for nn in n
 end
 
 # ==================== Figure 1: Branch Count Comparison ====================
-begin
+ begin
     fig1 = Figure(size = (450, 300), backgroundcolor = :transparent)
 
     # Flatten data for boxplot
@@ -104,7 +103,7 @@ end
 
 # ==================== Figure 2: Time Comparison ====================
 begin
-    fig2 = Figure(size = (800, 500))
+    fig2 = Figure(size = (550, 450), backgroundcolor = :transparent)
 
     # Flatten data for boxplot
     times_x_bi = Float64[]
@@ -149,7 +148,7 @@ begin
     end
 
     ax2 = Axis(fig2[1, 1], xlabel = "Bit length", ylabel = "Time (s)", yscale = log10, 
-            xticks = (n, string.(2 .* n)), title = "Time Comparison")
+            xticks = (n, string.(2 .* n)), title = "Time Comparison", backgroundcolor = :transparent)
     boxplot!(ax2, times_x_gurobi, times_y_gurobi; label = "Gurobi", width = 0.25, color = :orange)
     boxplot!(ax2, times_x_xsat, times_y_xsat; label = "X-SAT", width = 0.25, color = :purple)
     boxplot!(ax2, times_x_bi, times_y_bi; label = "BI", width = 0.25, color = :red)

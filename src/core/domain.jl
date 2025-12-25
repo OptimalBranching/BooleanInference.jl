@@ -5,7 +5,7 @@
     DM_BOTH = 0x03
 end
 
-init_doms(static::BipartiteGraph) = fill(DM_BOTH, length(static.vars))
+init_doms(static::ConstraintNetwork) = fill(DM_BOTH, length(static.vars))
 # Get the underlying bits value
 @inline bits(dm::DomainMask)::UInt8 = UInt8(dm)
 
@@ -26,7 +26,19 @@ function get_var_value(dms::Vector{DomainMask}, var_ids::Vector{Int})
     return Bool[get_var_value(dms, var_id) for var_id in var_ids]
 end
 
-function active_degree(tn::BipartiteGraph, doms::Vector{DomainMask})
+@inline function negate_domain(dm::DomainMask)
+    b = bits(dm)
+    # Return sign: 0x01 (DM_0) -> 1, 0x02 (DM_1) -> -1
+    if b == 0x01
+        return 1
+    elseif b == 0x02
+        return -1
+    else
+        error("negate_domain: domain must be DM_0 (0x01) or DM_1 (0x02), got $(dm)")
+    end
+end
+
+function active_degree(tn::ConstraintNetwork, doms::Vector{DomainMask})
     degree = zeros(Int, length(tn.tensors))
     @inbounds for (tensor_id, tensor) in enumerate(tn.tensors)
         vars = tensor.var_axes
@@ -34,7 +46,7 @@ function active_degree(tn::BipartiteGraph, doms::Vector{DomainMask})
     end
     return degree
 end
-is_hard(tn::BipartiteGraph, doms::Vector{DomainMask}) = active_degree(tn, doms) .> 2
+is_hard(tn::ConstraintNetwork, doms::Vector{DomainMask}) = active_degree(tn, doms) .> 2
 
 @inline has_contradiction(doms::Vector{DomainMask}) = any(dm -> dm == DM_NONE, doms)
 

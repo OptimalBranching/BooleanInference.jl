@@ -1,5 +1,8 @@
-using ProblemReductions
-using ProblemReductions: BoolVar, CNFClause
+using BooleanInference
+using GenericTensorNetworks
+using GenericTensorNetworks: ∧, ∨, ¬
+using GenericTensorNetworks.ProblemReductions
+using GenericTensorNetworks.ProblemReductions: BoolVar, CNFClause, CNF
 using OptimalBranchingCore: GreedyMerge
 using Test
 
@@ -69,7 +72,7 @@ using Test
             set_cover_solver=GreedyMerge()
         )
 
-        result = solve(problem, bsconfig, NoReducer(); show_stats=false)
+        result = BooleanInference.solve(problem, bsconfig, NoReducer(); show_stats=false)
 
         # Should find a solution
         @test result.found == true

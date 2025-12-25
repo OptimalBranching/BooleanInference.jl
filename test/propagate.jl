@@ -1,181 +1,218 @@
 using Test
 using BooleanInference
-using TropicalNumbers
-using BooleanInference: setup_from_cnf, propagate, has1, is_fixed, has0, setup_from_circuit, has_contradiction
-using ProblemReductions: @circuit, Assignment, BooleanExpr, Factoring, reduceto
-using GenericTensorNetworks
-
-# Helper function to propagate over all tensors
-function propagate_all(static::BipartiteGraph, doms::Vector{DomainMask})
-    touched_tensors = collect(1:length(static.tensors))
-    new_doms, _ = propagate(static, doms, touched_tensors)
-    return new_doms
-end
+using BooleanInference: setup_problem, propagate, has_contradiction, init_doms, SolverBuffer
+using BooleanInference: DM_NONE, DM_0, DM_1, DM_BOTH, is_fixed, has0, has1
 
 @testset "propagate" begin
-    # Test 1: Simple AND gate (x1 ∧ x2 = 1)
-    # Only one feasible config: (1, 1)
-    T1 = one(Tropical{Float64})
-    T0 = zero(Tropical{Float64})
-    @testset "Simple unit propagation - AND gate" begin
-        # Create a 2-variable AND constraint
-        # Tensor encodes: only (1,1) is feasible (Tropical(0.0))
-        tensor_data = [
-            T0,  # (0,0) - infeasible
-            T0,  # (1,0) - infeasible
-            T0,  # (0,1) - infeasible
-            T1   # (1,1) - feasible
-        ]
-        
-        static = BooleanInference.setup_problem(
-            2,
-            [[1, 2]],
-            [tensor_data]
-        )
-        
+    @testset "Simple AND gate - full propagation" begin
+        # AND gate: only (1,1) is feasible
+        # BitVector layout: [00, 10, 01, 11] = [false, false, false, true]
+        tensor_data = BitVector([false, false, false, true])
+
+        static = setup_problem(2, [[1, 2]], [tensor_data]; precontract=false)
+        buffer = SolverBuffer(static)
+
         # Initially both variables are unfixed
-        doms = BooleanInference.init_doms(static)
-        @test doms[1] == BooleanInference.DM_BOTH
-        @test doms[2] == BooleanInference.DM_BOTH
-        
+        doms = init_doms(static)
+        @test doms[1] == DM_BOTH
+        @test doms[2] == DM_BOTH
+
         # After propagation, both should be fixed to 1
-        propagated = propagate_all(static, doms)
-        @test propagated[1] == BooleanInference.DM_1
-        @test propagated[2] == BooleanInference.DM_1
+        propagated = propagate(static, doms, collect(1:length(static.tensors)), buffer)
+        @test propagated[1] == DM_1
+        @test propagated[2] == DM_1
+        @test !has_contradiction(propagated)
     end
-    
-    # Test 2: No unit propagation possible
-    @testset "No propagation - multiple solutions" begin
+
+    @testset "OR gate - no propagation" begin
         # OR gate: (0,0) is infeasible, others are feasible
-        tensor_data = [
-            T0,  # (0,0) - infeasible
-            T1,  # (1,0) - feasible
-            T1,  # (0,1) - feasible
-            T1   # (1,1) - feasible
-        ]
-        
-        static = BooleanInference.setup_problem(
-            2,
-            [[1, 2]],
-            [tensor_data]
-        )
-        
-        doms = BooleanInference.init_doms(static)
-        
-        # No unit propagation should occur
-        propagated = propagate_all(static, doms)
-        @test propagated[1] == BooleanInference.DM_BOTH
-        @test propagated[2] == BooleanInference.DM_BOTH
+        # BitVector layout: [00, 10, 01, 11] = [false, true, true, true]
+        tensor_data = BitVector([false, true, true, true])
+
+        static = setup_problem(2, [[1, 2]], [tensor_data]; precontract=false)
+        buffer = SolverBuffer(static)
+
+        doms = init_doms(static)
+
+        # No propagation should occur - multiple solutions
+        propagated = propagate(static, doms, collect(1:length(static.tensors)), buffer)
+        @test propagated[1] == DM_BOTH
+        @test propagated[2] == DM_BOTH
+        @test !has_contradiction(propagated)
     end
-    
-    # Test 3: Partial assignment leading to unit propagation
+
     @testset "Propagation after partial assignment" begin
-        # AND gate again
-        tensor_data = [
-            T0,  # (0,0) - infeasible
-            T0,  # (1,0) - infeasible
-            T0,  # (0,1) - infeasible
-            T1   # (1,1) - feasible
-        ]
-        
-        static = BooleanInference.setup_problem(
-            2,
-            [[1, 2]],
-            [tensor_data]
-        )
-        
+        # Implication: x1 → x2 (NOT x1 OR x2)
+        # Table: (0,0)=true, (1,0)=false, (0,1)=true, (1,1)=true
+        # BitVector layout: [00, 10, 01, 11] = [true, false, true, true]
+        tensor_data = BitVector([true, false, true, true])
+
+        static = setup_problem(2, [[1, 2]], [tensor_data]; precontract=false)
+        buffer = SolverBuffer(static)
+
         # Fix x1 = 1
-        doms = BooleanInference.init_doms(static)
-        doms[1] = BooleanInference.DM_1
-        
-        # Propagation should fix x2 = 1
-        propagated = propagate_all(static, doms)
-        @test propagated[1] == BooleanInference.DM_1
-        @test propagated[2] == BooleanInference.DM_1
+        doms = init_doms(static)
+        doms[1] = DM_1
+
+        # Propagation should fix x2 = 1 (since x1=1 and x1→x2)
+        propagated = propagate(static, doms, collect(1:length(static.tensors)), buffer)
+        @test propagated[1] == DM_1
+        @test propagated[2] == DM_1
+        @test !has_contradiction(propagated)
     end
-    
-    # Test 4: Contradiction detection
+
     @testset "Contradiction detection" begin
-        # AND gate with x1 = 0 should lead to contradiction
-        tensor_data = [
-            T0,  # (0,0) - infeasible
-            T0,  # (1,0) - infeasible
-            T0,  # (0,1) - infeasible
-            T1   # (1,1) - feasible
-        ]
-        
-        static = BooleanInference.setup_problem(
-            2,
-            [[1, 2]],
-            [tensor_data]
-        )
-        
+        # AND gate with initial contradiction: x1 must be 0 but AND requires both 1
+        tensor_data = BitVector([false, false, false, true])  # AND: only (1,1)
+
+        static = setup_problem(2, [[1, 2]], [tensor_data]; precontract=false)
+        buffer = SolverBuffer(static)
+
         # Fix x1 = 0 (contradicts the AND constraint)
-        doms = BooleanInference.init_doms(static)
-        doms[1] = BooleanInference.DM_0
-        
-        # Propagation should detect contradiction (at least one variable should be DM_NONE)
-        propagated = propagate_all(static, doms)
+        doms = init_doms(static)
+        doms[1] = DM_0
+
+        # Propagation should detect contradiction
+        propagated = propagate(static, doms, collect(1:length(static.tensors)), buffer)
         @test has_contradiction(propagated)
     end
-    
-    # Test 5: Chain propagation
-    @testset "Chain propagation" begin
-        # Two constraints: x1 = x2, x2 = x3
-        # x1 = x2: (0,0) and (1,1) are feasible
-        tensor1 = [
-            T1,  # (0,0) - feasible
-            T0,  # (1,0) - infeasible
-            T0,  # (0,1) - infeasible
-            T1   # (1,1) - feasible
-        ]
-        
-        # x2 = x3: (0,0) and (1,1) are feasible
-        tensor2 = [
-            T1,  # (0,0) - feasible
-            T0,  # (1,0) - infeasible
-            T0,  # (0,1) - infeasible
-            T1   # (1,1) - feasible
-        ]
-        
-        static = BooleanInference.setup_problem(
-            3,
-            [[1, 2], [2, 3]],
-            [tensor1, tensor2]
-        )
-        
+
+    @testset "Chain propagation - equality constraints" begin
+        # Two equality constraints: x1 = x2, x2 = x3
+        # Equality: (0,0)=true, (1,0)=false, (0,1)=false, (1,1)=true
+        eq_tensor = BitVector([true, false, false, true])
+
+        static = setup_problem(3, [[1, 2], [2, 3]], [eq_tensor, eq_tensor]; precontract=false)
+        buffer = SolverBuffer(static)
+
         # Fix x1 = 1
-        doms = BooleanInference.init_doms(static)
-        doms[1] = BooleanInference.DM_1
-        
+        doms = init_doms(static)
+        doms[1] = DM_1
+
         # Propagation should fix x2 = 1 and x3 = 1
-        propagated = propagate_all(static, doms)
-        @test propagated[1] == BooleanInference.DM_1
-        @test propagated[2] == BooleanInference.DM_1
-        @test propagated[3] == BooleanInference.DM_1
+        propagated = propagate(static, doms, collect(1:length(static.tensors)), buffer)
+        @test propagated[1] == DM_1
+        @test propagated[2] == DM_1
+        @test propagated[3] == DM_1
+        @test !has_contradiction(propagated)
+    end
+
+    @testset "XOR constraint - no immediate propagation" begin
+        # XOR: exactly one of x1, x2 must be true
+        # Table: (0,0)=false, (1,0)=true, (0,1)=true, (1,1)=false
+        xor_tensor = BitVector([false, true, true, false])
+
+        static = setup_problem(2, [[1, 2]], [xor_tensor]; precontract=false)
+        buffer = SolverBuffer(static)
+
+        doms = init_doms(static)
+
+        # No propagation without initial assignment
+        propagated = propagate(static, doms, collect(1:length(static.tensors)), buffer)
+        @test propagated[1] == DM_BOTH
+        @test propagated[2] == DM_BOTH
+    end
+
+    @testset "XOR with partial assignment" begin
+        # XOR with x1 fixed to 1 should propagate x2 = 0
+        xor_tensor = BitVector([false, true, true, false])
+
+        static = setup_problem(2, [[1, 2]], [xor_tensor]; precontract=false)
+        buffer = SolverBuffer(static)
+
+        doms = init_doms(static)
+        doms[1] = DM_1
+
+        propagated = propagate(static, doms, collect(1:length(static.tensors)), buffer)
+        @test propagated[1] == DM_1
+        @test propagated[2] == DM_0
+        @test !has_contradiction(propagated)
+    end
+
+    @testset "Unit literal - single variable tensor" begin
+        # Single variable constraint: x1 must be 1
+        # BitVector layout: [0, 1] = [false, true]
+        unit_tensor = BitVector([false, true])
+
+        static = setup_problem(1, [[1]], [unit_tensor]; precontract=false)
+        buffer = SolverBuffer(static)
+
+        doms = init_doms(static)
+
+        propagated = propagate(static, doms, collect(1:length(static.tensors)), buffer)
+        @test propagated[1] == DM_1
+        @test !has_contradiction(propagated)
+    end
+
+    @testset "Empty initial touched - no propagation" begin
+        tensor_data = BitVector([false, false, false, true])
+
+        static = setup_problem(2, [[1, 2]], [tensor_data]; precontract=false)
+        buffer = SolverBuffer(static)
+
+        doms = init_doms(static)
+
+        # Empty touched list should not trigger any propagation
+        propagated = propagate(static, doms, Int[], buffer)
+        @test propagated[1] == DM_BOTH
+        @test propagated[2] == DM_BOTH
+    end
+
+    @testset "Multiple tensors with shared variables" begin
+        # x1 AND x2 = 1, x2 AND x3 = 1
+        and_tensor = BitVector([false, false, false, true])
+
+        static = setup_problem(3, [[1, 2], [2, 3]], [and_tensor, and_tensor]; precontract=false)
+        buffer = SolverBuffer(static)
+
+        doms = init_doms(static)
+
+        # Initial propagation should fix all to 1
+        propagated = propagate(static, doms, collect(1:length(static.tensors)), buffer)
+        @test propagated[1] == DM_1
+        @test propagated[2] == DM_1
+        @test propagated[3] == DM_1
+        @test !has_contradiction(propagated)
+    end
+
+    @testset "Contradiction from conflicting constraints" begin
+        # x1 must be 1 (from first tensor), x1 must be 0 (from second tensor)
+        must_be_1 = BitVector([false, true])
+        must_be_0 = BitVector([true, false])
+
+        static = setup_problem(1, [[1], [1]], [must_be_1, must_be_0]; precontract=false)
+        buffer = SolverBuffer(static)
+
+        doms = init_doms(static)
+
+        propagated = propagate(static, doms, collect(1:length(static.tensors)), buffer)
+        @test has_contradiction(propagated)
     end
 end
 
-@testset "reduce_problem" begin
-    @bools a b c d e f g
-    cnf = ∧(∨(a, b, ¬d, ¬e), ∨(¬a, d, e, ¬f), ∨(f, g), ∨(¬b, c), ∨(¬a))
-    problem = setup_from_cnf(cnf)
-    new_doms = propagate_all(problem.static, problem.doms)
-    @show new_doms[1]
-    @test has0(new_doms[1]) && is_fixed(new_doms[1]) == true
-    # TODO: undecided_literal has not been refactored yet
-
-    @bools x1 x2 x3 x4 x5
-    cnf = ∧(∨(x1), ∨(x2, ¬x3), ∨(x4, ¬x1), ∨(¬x3, ¬x4), ∨(x2, x5), ∨(x2, x5, ¬x3))
-    problem = setup_from_cnf(cnf)
-    new_doms = propagate_all(problem.static, problem.doms)
-    # TODO: undecided_literal has not been refactored yet
-
-    circuit = @circuit begin
-        c = x ∧ y
+@testset "domain operations" begin
+    @testset "is_fixed" begin
+        @test is_fixed(DM_0) == true
+        @test is_fixed(DM_1) == true
+        @test is_fixed(DM_BOTH) == false
+        @test is_fixed(DM_NONE) == false
     end
-    push!(circuit.exprs, Assignment([:c], BooleanExpr(true)))
-    problem = setup_from_circuit(circuit)
-    new_doms = propagate_all(problem.static, problem.doms)
-    @show new_doms
+
+    @testset "has0 and has1" begin
+        @test has0(DM_0) == true
+        @test has0(DM_1) == false
+        @test has0(DM_BOTH) == true
+        @test has0(DM_NONE) == false
+
+        @test has1(DM_0) == false
+        @test has1(DM_1) == true
+        @test has1(DM_BOTH) == true
+        @test has1(DM_NONE) == false
+    end
+
+    @testset "has_contradiction" begin
+        @test has_contradiction([DM_0, DM_1, DM_BOTH]) == false
+        @test has_contradiction([DM_NONE, DM_1]) == true
+        @test has_contradiction([DM_0, DM_NONE]) == true
+    end
 end

@@ -1,57 +1,59 @@
-function contract_region(tn::BipartiteGraph, region::Region, doms::Vector{DomainMask})
-    sliced_tensors = Vector{Vector{Tropical{Float64}}}(undef, length(region.tensors))
+function create_region(cn::ConstraintNetwork, doms::Vector{DomainMask}, variable::Int, selector::AbstractSelector)
+    return k_neighboring(cn, doms, variable; max_tensors = selector.max_tensors, k = selector.k)
+end
+
+function contract_region(tn::ConstraintNetwork, region::Region, doms::Vector{DomainMask})
+    sliced_tensors = Vector{Array{Tropical{Float64}}}(undef, length(region.tensors))
     tensor_indices = Vector{Vector{Int}}(undef, length(region.tensors))
-    
+
     @inbounds for (i, tensor_id) in enumerate(region.tensors)
         tensor = tn.tensors[tensor_id]
-        sliced_tensors[i] = slicing(tensor.tensor, doms, tensor.var_axes)
+        sliced_tensors[i] = slicing(tn, tensor, doms)
         tensor_indices[i] = filter(v -> !is_fixed(doms[v]), tensor.var_axes)
     end
-    
+
     # Collect unfixed variables from the region
     output_vars = filter(v -> !is_fixed(doms[v]), region.vars)
     contracted = contract_tensors(sliced_tensors, tensor_indices, output_vars)
-    
+
     isempty(output_vars) && @assert length(contracted) == 1
     return contracted, output_vars
 end
 
-function contract_tensors(tensors::Vector{Vector{T}}, ixs::Vector{Vector{Int}}, iy::Vector{Int}) where T
+function contract_tensors(tensors::Vector{<:AbstractArray{T}}, ixs::Vector{Vector{Int}}, iy::Vector{Int}) where T
     eincode = EinCode(ixs, iy)
     optcode = optimize_code(eincode, uniformsize(eincode, 2), GreedyMethod())
-    return optcode([tensor_unwrapping(t) for t in tensors]...)
+    return optcode(tensors...)
 end
 
-function slicing(tensor::Vector{T}, doms::Vector{DomainMask}, axis_vars::Vector{Int}) where T
-    k = trailing_zeros(length(tensor))  # log2(length)
+const ONE_TROP = one(Tropical{Float64})
+const ZERO_TROP = zero(Tropical{Float64})
+
+# Slice BoolTensor and directly construct multi-dimensional Tropical tensor
+function slicing(static::ConstraintNetwork, tensor::BoolTensor, doms::Vector{DomainMask})
+    free_axes = Int[]
     
-    fixed_idx = 0; free_axes = Int[]
+    @inbounds for (i, var_id) in enumerate(tensor.var_axes)
+        dm = doms[var_id]
+        is_fixed(dm) || push!(free_axes, i)
+    end
+    fixed_mask, fixed_val = mask_value(doms, tensor.var_axes, UInt16)
+
+    dims = ntuple(_ -> 2, length(free_axes))
+    out = fill(ZERO_TROP, dims) # Allocate dense array
     
-    @inbounds for axis in 1:k  # each variable
-        if is_fixed(doms[axis_vars[axis]])
-            has1(doms[axis_vars[axis]]) && (fixed_idx |= (1 << (axis-1)))
-        else
-            push!(free_axes, axis)
+    supports = get_support(static, tensor)
+
+    @inbounds for config in supports
+        if (config & fixed_mask) == fixed_val
+            dense_idx = 1
+            for (bit_pos, axis_idx) in enumerate(free_axes)
+                if (config >> (axis_idx - 1)) & 1 == 1
+                    dense_idx += (1 << (bit_pos - 1))
+                end
+            end
+            out[dense_idx] = ONE_TROP
         end
     end
-    
-    out = Vector{T}(undef, 1 << length(free_axes))
-    
-    @inbounds for free_idx in eachindex(out)
-        full_idx = fixed_idx
-        for (i, axis) in enumerate(free_axes)
-            ((free_idx-1) >> (i-1)) & 0x1 == 1 && (full_idx |= (1 << (axis-1)))
-        end
-        out[free_idx] = tensor[full_idx+1]
-    end
-    
     return out
-end
-
-
-function tensor_unwrapping(vec::Vector{T}) where T
-    k = trailing_zeros(length(vec))
-    @assert (1 << k) == length(vec) "vector length is not power-of-two"
-    dims = ntuple(_->2, k)
-    return reshape(vec, dims)
 end
