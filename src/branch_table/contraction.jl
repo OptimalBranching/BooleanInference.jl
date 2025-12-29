@@ -1,9 +1,9 @@
 function create_region(cn::ConstraintNetwork, doms::Vector{DomainMask}, variable::Int, selector::AbstractSelector)
-    return k_neighboring(cn, doms, variable; max_tensors = selector.max_tensors, k = selector.k)
+    return k_neighboring(cn, doms, variable; max_tensors=selector.max_tensors, k=selector.k)
 end
 
 function contract_region(tn::ConstraintNetwork, region::Region, doms::Vector{DomainMask})
-    sliced_tensors = Vector{Array{Tropical{Float64}}}(undef, length(region.tensors))
+    sliced_tensors = Vector{Array{Bool}}(undef, length(region.tensors))
     tensor_indices = Vector{Vector{Int}}(undef, length(region.tensors))
 
     @inbounds for (i, tensor_id) in enumerate(region.tensors)
@@ -20,19 +20,22 @@ function contract_region(tn::ConstraintNetwork, region::Region, doms::Vector{Dom
     return contracted, output_vars
 end
 
-function contract_tensors(tensors::Vector{<:AbstractArray{T}}, ixs::Vector{Vector{Int}}, iy::Vector{Int}) where T
+function contract_tensors(tensors::Vector{<:AbstractArray{Bool}}, ixs::Vector{Vector{Int}}, iy::Vector{Int})
+    # Convert Bool arrays to Int for contraction (OMEinsum works with standard arithmetic)
+    int_tensors = [Int.(t) for t in tensors]
+
     eincode = EinCode(ixs, iy)
     optcode = optimize_code(eincode, uniformsize(eincode, 2), GreedyMethod())
-    return optcode(tensors...)
+
+    # Contract using standard arithmetic, then convert back to Bool
+    result = optcode(int_tensors...)
+    return result .> 0
 end
 
-const ONE_TROP = one(Tropical{Float64})
-const ZERO_TROP = zero(Tropical{Float64})
-
-# Slice BoolTensor and directly construct multi-dimensional Tropical tensor
+# Slice BoolTensor and directly construct multi-dimensional Bool tensor
 function slicing(static::ConstraintNetwork, tensor::BoolTensor, doms::Vector{DomainMask})
     free_axes = Int[]
-    
+
     @inbounds for (i, var_id) in enumerate(tensor.var_axes)
         dm = doms[var_id]
         is_fixed(dm) || push!(free_axes, i)
@@ -40,8 +43,8 @@ function slicing(static::ConstraintNetwork, tensor::BoolTensor, doms::Vector{Dom
     fixed_mask, fixed_val = mask_value(doms, tensor.var_axes, UInt16)
 
     dims = ntuple(_ -> 2, length(free_axes))
-    out = fill(ZERO_TROP, dims) # Allocate dense array
-    
+    out = fill(false, dims)  # Allocate dense array
+
     supports = get_support(static, tensor)
 
     @inbounds for config in supports
@@ -52,7 +55,7 @@ function slicing(static::ConstraintNetwork, tensor::BoolTensor, doms::Vector{Dom
                     dense_idx += (1 << (bit_pos - 1))
                 end
             end
-            out[dense_idx] = ONE_TROP
+            out[dense_idx] = true
         end
     end
     return out

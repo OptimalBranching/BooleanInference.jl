@@ -7,15 +7,15 @@ function setup_from_circuit(cir::Circuit)
 end
 
 # Use multiple dispatch for different SAT types
-function setup_from_sat(sat::ConstraintSatisfactionProblem; learned_clauses::Vector{ClauseTensor}=ClauseTensor[], precontract::Bool=false)
+function setup_from_sat(sat::ConstraintSatisfactionProblem; learned_clauses::Vector{ClauseTensor}=ClauseTensor[], precontract::Bool=false, protected_vars::Vector{Int}=Int[])
     # Direct conversion from CSP to BipartiteGraph, avoiding GenericTensorNetwork overhead
-    static = setup_from_csp(sat; precontract)
+    static = setup_from_csp(sat; precontract, protected_vars)
     return TNProblem(static; learned_clauses)
 end
 
-function solve(problem::TNProblem, bsconfig::BranchingStrategy, reducer::AbstractReducer; show_stats::Bool=false)
+function solve(problem::TNProblem, bsconfig::BranchingStrategy, reducer::AbstractReducer; show_stats::Bool=false, logger::AbstractLogger=NoLogger())
     reset_stats!(problem)  # Reset stats before solving
-    result = bbsat!(problem, bsconfig, reducer)
+    result = bbsat!(problem, bsconfig, reducer; logger=logger)
     show_stats && print_stats_summary(result.stats)
     return result
 end
@@ -24,15 +24,16 @@ function solve_sat_problem(
     sat::ConstraintSatisfactionProblem;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=MostOccurrenceSelector(1, 2),
+        selector=MostOccurrenceSelector(3, 6),
         measure=NumUnfixedVars(),
         set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
-    show_stats::Bool=false
+    show_stats::Bool=false,
+    logger::AbstractLogger=NoLogger()
 )
     tn_problem = setup_from_sat(sat)
-    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
+    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats, logger=logger)
     return result.found, result.stats
 end
 
@@ -45,11 +46,12 @@ function solve_sat_with_assignments(
         set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
-    show_stats::Bool=false
+    show_stats::Bool=false,
+    logger::AbstractLogger=NoLogger()
 )
     # Solve directly to get result
     tn_problem = setup_from_sat(sat)
-    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
+    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats, logger=logger)
 
     if result.found
         # Convert Result to variable assignments
@@ -71,59 +73,139 @@ function solve_factoring(
     n::Int, m::Int, N::Int;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=MostOccurrenceSelector(3, 4),
+        selector=MinGammaSelector(3, 2),
+        # selector=MostOccurrenceSelector(3,3),
         measure=NumUnfixedTensors(),
         set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
-    show_stats::Bool=false
+    show_stats::Bool=false,
+    logger::AbstractLogger=NoLogger(),
 )
-    function _solve_and_mine_factoring(circuit::CircuitSAT, q_indices::Vector{Int}, p_indices::Vector{Int}; conflict_limit::Int, max_len::Int)
-        # Use simplify=false to preserve symbol order from simplify_circuit
-        cnf, _ = circuit_to_cnf(circuit.circuit; simplify=false)
-        status, model, learned = solve_and_mine(cnf; conflict_limit, max_len)
-        a = [model[i] > 0 for i in q_indices]
-        b = [model[i] > 0 for i in p_indices]
-        learned_tensors = ClauseTensor.(learned)
-        return status, bits_to_int(a), bits_to_int(b), learned_tensors
+    # Step 1: Create factoring problem and get variable indices
+    reduction = reduceto(CircuitSAT, Factoring(n, m, N))
+    # Rebuild with use_constraints=true to get LocalConstraints for TN conversion
+    circuit_sat = CircuitSAT(reduction.circuit.circuit; use_constraints=true)
+    q_indices = collect(reduction.q)
+    p_indices = collect(reduction.p)
+
+    # The variables we care about - these should not be eliminated during precontraction
+    protected = [q_indices; p_indices]
+
+    @info "Factoring setup" n m N symbols = length(circuit_sat.symbols)
+
+    # Step 2: Convert to TN WITH precontraction
+    tn_problem = setup_from_sat(circuit_sat; precontract=false, protected_vars=protected)
+
+    # Map original indices to compressed variable space
+    orig_to_new = tn_problem.static.orig_to_new
+    q_vars = [orig_to_new[i] for i in q_indices]
+    p_vars = [orig_to_new[i] for i in p_indices]
+
+    # Verify all protected variables are still in the network
+    @assert all(v -> v > 0, q_vars) "Some q variables were unexpectedly eliminated"
+    @assert all(v -> v > 0, p_vars) "Some p variables were unexpectedly eliminated"
+
+    @info "After TN precontraction" tn_vars = length(tn_problem.static.vars) tn_tensors = length(tn_problem.static.tensors)
+
+    # # Step 3: Optionally use CDCL to learn clauses from the precontracted TN
+    # learned_tensors = ClauseTensor[]
+    # if use_cdcl
+    #     # Convert precontracted TN to CNF
+    #     cnf = tn_to_cnf(tn_problem.static)
+    #     nvars = num_tn_vars(tn_problem.static)
+
+    #     @info "CDCL clause mining" cnf_clauses = length(cnf) nvars = nvars
+
+    #     # Try CDCL solver with clause learning
+    #     status, model, learned = solve_and_mine(cnf; nvars=nvars, conflict_limit=conflict_limit, max_len=max_clause_len)
+    #     if status == :sat
+    #         # CDCL solved it directly!
+    #         a = bits_to_int([model[v] > 0 for v in q_vars])
+    #         b = bits_to_int([model[v] > 0 for v in p_vars])
+    #         @info "Solved by CDCL" a b
+    #         return a, b, BranchingStats()
+    #     elseif status == :unsat
+    #         error("Problem is UNSAT")
+    #     else
+    #         # Timeout - use learned clauses
+    #         learned_tensors = ClauseTensor.(learned)
+    #         @info "CDCL timeout, learned $(length(learned_tensors)) clauses"
+    #     end
+    # end
+    # # Step 4: Add learned clauses to the problem
+    # if !isempty(learned_tensors)
+    #     # Rebuild problem with learned clauses (already in compressed variable space)
+    #     tn_problem = TNProblem(tn_problem.static; learned_clauses=learned_tensors)
+    # end
+
+    # Step 5: Solve with branch-and-bound
+    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats, logger=logger)
+
+    if !result.found
+        return nothing, nothing, result.stats
     end
 
-    reduction = reduceto(CircuitSAT, Factoring(n, m, N))
-    @show length(reduction.circuit.symbols)
-    simplified_circuit, fix_indices = simplify_circuit(reduction.circuit.circuit, [reduction.q..., reduction.p...])
-    q_indices = fix_indices[1:length(reduction.q)]
-    p_indices = fix_indices[(length(reduction.q)+1):end]
+    # Extract solution
+    a = bits_to_int(get_var_value(result.solution, q_vars))
+    b = bits_to_int(get_var_value(result.solution, p_vars))
 
-    circuit_sat = CircuitSAT(simplified_circuit; use_constraints=true)
-    @show length(circuit_sat.symbols)
-    status, a, b, learned_tensors = _solve_and_mine_factoring(circuit_sat, q_indices, p_indices; conflict_limit=30000, max_len=5)
-    status == :sat && return a, b, BranchingStats()
-    @assert status != :unsat
-
-    tn_problem = setup_from_sat(circuit_sat; learned_clauses=learned_tensors, precontract=false)
-
-    # tn_problem = setup_from_sat(problem)
-    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
-    !result.found && return nothing, nothing, result.stats
-
-    q_vars = map_vars_checked(tn_problem, q_indices, "q")
-    p_vars = map_vars_checked(tn_problem, p_indices, "p")
-    a = get_var_value(result.solution, q_vars)
-    b = get_var_value(result.solution, p_vars)
-    return bits_to_int(a), bits_to_int(b), result.stats
+    return a, b, result.stats
 end
 
 function solve_circuit_sat(
     circuit::Circuit;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=MostOccurrenceSelector(1, 2),
-        measure=NumUnfixedVars()
+        selector=MostOccurrenceSelector(3, 1),
+        measure=NumUnfixedVars(),
+        set_cover_solver=GreedyMerge()
     ),
     reducer::AbstractReducer=NoReducer(),
-    show_stats::Bool=false
+    show_stats::Bool=false,
+    logger::AbstractLogger=NoLogger(),
+    use_cdcl::Bool=false,
+    conflict_limit::Int=40000,
+    max_clause_len::Int=5
 )
-    tn_problem = setup_from_circuit(circuit)
-    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats)
+    circuit_sat = CircuitSAT(circuit; use_constraints=true)
+
+    # Step 1: Convert to TN
+    tn_problem = setup_from_sat(circuit_sat; precontract=false, protected_vars=Int[])
+
+    # Step 2: Optionally use CDCL to learn clauses
+    learned_tensors = ClauseTensor[]
+    if use_cdcl
+        # Convert TN to CNF
+        cnf = tn_to_cnf(tn_problem.static)
+        nvars = num_tn_vars(tn_problem.static)
+
+        @info "CDCL clause mining" cnf_clauses = length(cnf) nvars = nvars
+
+        # Try CDCL solver with clause learning
+        status, model, learned = solve_and_mine(cnf; nvars=nvars, conflict_limit=conflict_limit, max_len=max_clause_len)
+        if status == :sat
+            # CDCL solved it directly!
+            @info "Solved by CDCL"
+            return true, BranchingStats()
+        elseif status == :unsat
+            @info "UNSAT detected by CDCL"
+            return false, BranchingStats()
+        else
+            # Timeout - use learned clauses
+            learned_tensors = ClauseTensor.(learned)
+            @info "CDCL timeout, learned $(length(learned_tensors)) clauses"
+        end
+    end
+
+    # Step 3: Add learned clauses to the problem if any
+    if !isempty(learned_tensors)
+        # Rebuild problem with learned clauses (already in compressed variable space)
+        tn_problem = TNProblem(tn_problem.static; learned_clauses=learned_tensors)
+    end
+
+    # Step 4: Solve with branch-and-bound
+    result = solve(tn_problem, bsconfig, reducer; show_stats=show_stats, logger=logger)
+    @show result.solution
     return result.found, result.stats
 end

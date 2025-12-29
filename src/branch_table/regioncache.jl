@@ -12,31 +12,54 @@ function Base.copy(region::Region)
     return Region(region.id, region.tensors, region.vars)
 end
 
+"""
+    RegionCache
+
+Cache for region contraction results, keyed by the tensor ID set.
+This allows sharing contraction results across different variables that
+happen to produce the same region (same set of tensors).
+"""
 struct RegionCache{S}
     selector::S
     initial_doms::Vector{DomainMask}
-    var_to_region::Vector{Union{Region, Nothing}}  # Fixed at initialization: var_to_region[var_id] gives the region for variable var_id
-    var_to_configs::Vector{Union{Vector{UInt64}, Nothing}}  # Cached full configs from initial contraction for each variable's region
+
+    # Primary cache: keyed by sorted tensor IDs (as a tuple for hashing)
+    tensor_set_to_configs::Dict{Vector{Int},Vector{UInt64}}
+
+    # Secondary lookup: var_id -> Region (for quick region retrieval)
+    var_to_region::Dict{Int,Region}
 end
 
 function init_cache(problem::TNProblem, table_solver::AbstractTableSolver, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, selector::AbstractSelector)
-    num_vars = length(problem.static.vars)
-    
-    var_to_region = Vector{Union{Region, Nothing}}(nothing, num_vars)
-    var_to_configs = Vector{Union{Vector{UInt64}, Nothing}}(nothing, num_vars)
-
-    return RegionCache(selector, copy(problem.doms), var_to_region, var_to_configs)
+    return RegionCache(
+        selector,
+        copy(problem.doms),
+        Dict{Vector{Int},Vector{UInt64}}(),
+        Dict{Int,Region}()
+    )
 end
 
+"""
+Get or compute region data for a variable.
+The contraction result is cached by tensor set, enabling cross-variable reuse.
+"""
 function get_region_data!(cache::RegionCache, problem::TNProblem, var_id::Int)
-    if isnothing(cache.var_to_region[var_id])
+    # Step 1: Get or create region for this variable
+    if !haskey(cache.var_to_region, var_id)
         region = create_region(problem.static, cache.initial_doms, var_id, cache.selector)
         cache.var_to_region[var_id] = region
+    end
+    region = cache.var_to_region[var_id]
 
-        # Compute full branching table with initial doms
+    # Step 2: Check if we've already contracted this tensor set
+    tensor_key = sort(region.tensors)  # Canonical key
+
+    if !haskey(cache.tensor_set_to_configs, tensor_key)
+        # Compute and cache
         contracted_tensor, _ = contract_region(problem.static, region, cache.initial_doms)
         configs = map(packint, findall(isone, contracted_tensor))
-        cache.var_to_configs[var_id] = configs
+        cache.tensor_set_to_configs[tensor_key] = configs
     end
-    return cache.var_to_region[var_id], cache.var_to_configs[var_id]
+
+    return region, cache.tensor_set_to_configs[tensor_key]
 end

@@ -260,3 +260,142 @@ function parse_cnf_file(path::String)
 
     return cnf, nvars
 end
+
+# -----------------------------
+# CDCL Statistics API
+# -----------------------------
+
+# int cadical_solve_with_stats(...)
+function _ccall_solve_with_stats(in_lits::Vector{Int32}, in_offsets::Vector{Int32},
+    nclauses::Int32, nvars::Int32)
+    out_decisions = Ref{Int64}(0)
+    out_conflicts = Ref{Int64}(0)
+    out_propagations = Ref{Int64}(0)
+    out_restarts = Ref{Int64}(0)
+    out_model_ptr = Ref{Ptr{Int32}}(C_NULL)
+
+    res = ccall((:cadical_solve_with_stats, lib), Cint,
+        (Ptr{Int32}, Ptr{Int32}, Int32, Int32,
+            Ref{Int64}, Ref{Int64}, Ref{Int64}, Ref{Int64},
+            Ref{Ptr{Int32}}),
+        pointer(in_lits), pointer(in_offsets), nclauses, nvars,
+        out_decisions, out_conflicts, out_propagations, out_restarts,
+        out_model_ptr)
+
+    return res, out_decisions, out_conflicts, out_propagations, out_restarts, out_model_ptr
+end
+
+"""
+    solve_with_stats(cnf; nvars=infer_nvars(cnf))
+        -> (status::Symbol, stats::NamedTuple, model::Vector{Int32})
+
+Solve CNF and return CDCL solving statistics for comparison with tensor network approaches.
+
+Returns:
+- `status`: `:sat`, `:unsat`, or `:unknown`
+- `stats`: NamedTuple containing:
+  - `decisions`: number of decision made during solving
+  - `conflicts`: number of conflicts encountered
+  - `propagations`: number of unit propagations
+  - `restarts`: number of restarts
+- `model`: length `nvars`, encoding assignment as ±var_id, or 0 if unknown
+
+This is useful for comparing CDCL solving behavior with tensor network-based approaches.
+"""
+function solve_with_stats(cnf::Vector{<:AbstractVector{<:Integer}};
+    nvars::Integer=infer_nvars(cnf))
+
+    in_lits, in_offsets = flatten_cnf(cnf)
+    nclauses = Int32(length(cnf))
+
+    res, out_decisions, out_conflicts, out_propagations, out_restarts, out_model_ptr =
+        _ccall_solve_with_stats(in_lits, in_offsets, nclauses, Int32(nvars))
+
+    status = res == 10 ? :sat : res == 20 ? :unsat : :unknown
+
+    stats = (
+        decisions=out_decisions[],
+        conflicts=out_conflicts[],
+        propagations=out_propagations[],
+        restarts=out_restarts[]
+    )
+
+    # Copy model
+    model_view = unsafe_wrap(Vector{Int32}, out_model_ptr[], Int(nvars); own=false)
+    model = copy(model_view)
+
+    # Free C buffers
+    Libc.free(out_model_ptr[])
+
+    return status, stats, model
+end
+
+# -----------------------------
+# CDCL Decision Sequence API
+# -----------------------------
+
+# int cadical_solve_with_decisions(...)
+function _ccall_solve_with_decisions(in_lits::Vector{Int32}, in_offsets::Vector{Int32},
+    nclauses::Int32, nvars::Int32)
+    out_decision_vars_ptr = Ref{Ptr{Int32}}(C_NULL)
+    out_n_decisions = Ref{Int32}(0)
+    out_conflicts = Ref{Int64}(0)
+    out_model_ptr = Ref{Ptr{Int32}}(C_NULL)
+
+    res = ccall((:cadical_solve_with_decisions, lib), Cint,
+        (Ptr{Int32}, Ptr{Int32}, Int32, Int32,
+            Ref{Ptr{Int32}}, Ref{Int32}, Ref{Int64},
+            Ref{Ptr{Int32}}),
+        pointer(in_lits), pointer(in_offsets), nclauses, nvars,
+        out_decision_vars_ptr, out_n_decisions, out_conflicts,
+        out_model_ptr)
+
+    return res, out_decision_vars_ptr, out_n_decisions, out_conflicts, out_model_ptr
+end
+
+"""
+    solve_with_decisions(cnf; nvars=infer_nvars(cnf))
+        -> (status::Symbol, decision_vars::Vector{Int32}, n_conflicts::Int, model::Vector{Int32})
+
+Solve CNF and return the VSIDS decision variable sequence.
+
+Returns:
+- `status`: `:sat`, `:unsat`, or `:unknown`
+- `decision_vars`: array of decision variable IDs (in order of selection by VSIDS)
+- `n_conflicts`: number of conflicts encountered
+- `model`: length `nvars`, encoding assignment as ±var_id, or 0 if unknown
+
+This is useful for comparing CDCL/VSIDS variable selection with MinGamma.
+"""
+function solve_with_decisions(cnf::Vector{<:AbstractVector{<:Integer}};
+    nvars::Integer=infer_nvars(cnf))
+
+    in_lits, in_offsets = flatten_cnf(cnf)
+    nclauses = Int32(length(cnf))
+
+    res, out_decision_vars_ptr, out_n_decisions, out_conflicts, out_model_ptr =
+        _ccall_solve_with_decisions(in_lits, in_offsets, nclauses, Int32(nvars))
+
+    status = res == 10 ? :sat : res == 20 ? :unsat : :unknown
+
+    # Copy decision variables
+    nd = Int(out_n_decisions[])
+    if nd > 0
+        decisions_view = unsafe_wrap(Vector{Int32}, out_decision_vars_ptr[], nd; own=false)
+        decision_vars = copy(decisions_view)
+    else
+        decision_vars = Int32[]
+    end
+
+    # Copy model
+    model_view = unsafe_wrap(Vector{Int32}, out_model_ptr[], Int(nvars); own=false)
+    model = copy(model_view)
+
+    # Free C buffers
+    if nd > 0
+        Libc.free(out_decision_vars_ptr[])
+    end
+    Libc.free(out_model_ptr[])
+
+    return status, decision_vars, Int(out_conflicts[]), model
+end

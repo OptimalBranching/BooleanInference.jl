@@ -1,96 +1,66 @@
-# Example: CircuitSAT Benchmarking with Verilog and AAG files
+#=
+CircuitSAT Benchmarking Example
+================================
+=#
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, ".."))
-
 using BooleanInferenceBenchmarks
-using BooleanInference
+using BooleanInference: MostOccurrenceSelector, NumUnfixedVars, NumHardTensors
+using Statistics: median
 
-# # Example 1: Benchmark a single Verilog file
-# println("="^60)
-# println("Example 1: Benchmark Single Verilog File (c17)")
-# println("="^60)
+println("="^60)
+println("CircuitSAT Benchmarks")
+println("="^60)
 
-# c17_path = joinpath(@__DIR__, "..", "data", "iscas85", "c17.v")
-# result = benchmark_dataset(CircuitSATProblem, c17_path)
+# ============================================================================
+# Solve with default solver
+# ============================================================================
+println("\n📁 Solve with default solver")
+println("-"^40)
 
-# if result !== nothing
-#     println("\nResults:")
-#     println("  Instances tested: ", result["instances_tested"])
-#     println("  Successful runs: ", result["successful_runs"])
-#     println("  Accuracy rate: ", round(result["accuracy_rate"] * 100, digits=2), "%")
-#     println("  Median time: ", round(result["median_time"], digits=6), " seconds")
-# end
-# println()
-
-c3540_path = joinpath(@__DIR__, "..", "data", "aig", "non-arithmetic", "c3540.aag")
-result = benchmark_dataset(CircuitSATProblem, c3540_path)
-
-if result !== nothing
-    println("\nResults:")
-    println("  Instances tested: ", result["instances_tested"])
-    println("  Successful runs: ", result["successful_runs"])
-    println("  Accuracy rate: ", round(result["accuracy_rate"] * 100, digits=2), "%")
-    println("  Median time: ", round(result["median_time"], digits=6), " seconds")
+path = joinpath(@__DIR__, "..", "data", "iscas85", "c17.v")
+if isfile(path)
+    result = solve(path)
+    println("c17: $(result.status) | $(round(result.time, digits=3))s | $(result.branches) branches")
 end
-println()
 
-# Example 2: Benchmark ISCAS85 directory (all Verilog files)
-println("="^60)
-println("Example 2: Benchmark ISCAS85 Dataset")
-println("="^60)
+println("\n🔧 Compare Solvers")
+println("-"^40)
 
-iscas85_dir = joinpath(@__DIR__, "..", "data", "iscas85")
-result = benchmark_dataset(CircuitSATProblem, iscas85_dir)
+# path = joinpath(@__DIR__, "..", "data", "iscas85", "c7552.v")
+path = joinpath(@__DIR__, "..", "data", "aig", "non-arithmetic", "b14.aag")
+if isfile(path)
+    circuit = load(path)
 
-if result !== nothing
-    println("\nResults:")
-    println("  Instances tested: ", result["instances_tested"])
-    println("  Successful runs: ", result["successful_runs"])
-    println("  Accuracy rate: ", round(result["accuracy_rate"] * 100, digits=2), "%")
-    println("  Median time: ", round(result["median_time"], digits=6), " seconds")
+    # solver = Solvers.BI(selector=MostOccurrenceSelector(3, 4))
+    # r = solve(circuit, solver=solver)
+    # println("MostOcc(3,4): $(r.status) | $(round(r.time, digits=3))s | $(r.branches) branches")
+
+    # Kissat comparison
+    r = solve(circuit, solver=Solvers.Kissat())
+    println("Kissat: $(r.status) | $(round(r.time, digits=3))s | $(r.branches) decisions")
+
+    r = solve(circuit, solver=Solvers.Minisat())
+    println("MiniSat: $(r.status) | $(round(r.time, digits=3))s | $(r.branches) decisions")
 end
-println()
 
-# Example 3: Benchmark AAG files (if available)
-println("="^60)
-println("Example 3: Benchmark AAG Dataset")
-println("="^60)
+# ============================================================================
+# Benchmark directory
+# ============================================================================
+println("\n📊 Benchmark ISCAS85 dataset")
+println("-"^40)
 
-aag_dir = joinpath(@__DIR__, "..", "data", "aig", "non-arithmetic")
-if isdir(aag_dir)
-    result = benchmark_dataset(CircuitSATProblem, aag_dir)
-    
-    if result !== nothing
-        println("\nResults:")
-        println("  Instances tested: ", result["instances_tested"])
-        println("  Successful runs: ", result["successful_runs"])
-        println("  Accuracy rate: ", round(result["accuracy_rate"] * 100, digits=2), "%")
-        println("  Median time: ", round(result["median_time"], digits=6), " seconds")
-    end
-else
-    println("AAG directory not found: $aag_dir")
+iscas_dir = joinpath(@__DIR__, "..", "data", "iscas85")
+if isdir(iscas_dir)
+    res = benchmark(iscas_dir, verbose=false)
+    sat_count = count(r -> r.status == SAT, res.results)
+    unsat_count = count(r -> r.status == UNSAT, res.results)
+    println("Instances: $(length(res.times)) (SAT: $sat_count, UNSAT: $unsat_count)")
+    println("Median time: $(round(median(res.times), digits=4))s")
+    println("Total branches: $(sum(res.branches))")
 end
-println()
 
-# # Example 4: Discover available circuits
-# println("="^60)
-# println("Example 4: Discover Available Circuits")
-# println("="^60)
-
-# verilog_files = discover_circuit_files(iscas85_dir; format=:verilog)
-# println("Found $(length(verilog_files)) Verilog circuits:")
-# for (i, file) in enumerate(verilog_files)
-#     println("  $i. ", basename(file))
-# end
-
-# if isdir(aag_dir)
-#     aag_files = discover_circuit_files(aag_dir; format=:aag)
-#     println("\nFound $(length(aag_files)) AAG circuits")
-# end
-# println()
-
+println("\n" * "="^60)
+println("✅ Examples Complete!")
 println("="^60)
-println("Examples completed!")
-println("="^60)
-

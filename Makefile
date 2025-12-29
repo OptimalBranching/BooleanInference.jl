@@ -26,8 +26,8 @@ cadical: submodule
 	cd deps/cadical && \
 	  make clean || true && \
 	  export CFLAGS="-fPIC" CXXFLAGS="-fPIC" && \
-	  ./configure && \
-	  $(MAKE) -j4 CFLAGS="-fPIC" CXXFLAGS="-fPIC"
+	  ./configure --no-closefrom && \
+	  $(MAKE) -j4
 
 # Build the custom library (depends on CaDiCaL)
 mylib: cadical

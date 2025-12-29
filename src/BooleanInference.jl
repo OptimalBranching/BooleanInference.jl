@@ -9,8 +9,6 @@ using GenericTensorNetworks
 using GenericTensorNetworks.OMEinsum
 import ProblemReductions
 import ProblemReductions: CircuitSAT, Circuit, Factoring, reduceto, Satisfiability, Assignment, BooleanExpr, simple_form, extract_symbols!
-using DataStructures
-using DataStructures: PriorityQueue
 using Statistics: median
 using Graphs, GraphMakie, Colors
 using GraphMakie
@@ -19,14 +17,17 @@ using NetworkLayout: SFDP, Spring, Stress, Spectral
 using Gurobi
 using Combinatorics
 
+
 include("core/static.jl")
 include("core/domain.jl")
 include("core/stats.jl")
+include("core/diagnostics.jl")
 include("core/problem.jl")
 
 include("utils/utils.jl")
 include("utils/twosat.jl")
 include("utils/circuit2cnf.jl")
+include("utils/tn2cnf.jl")
 include("utils/simplify_circuit.jl")
 
 include("branching/propagate.jl")
@@ -34,6 +35,7 @@ include("branching/measure.jl")
 
 include("branch_table/knn.jl")
 include("branch_table/regioncache.jl")
+include("branch_table/clustering.jl")
 include("branch_table/selector.jl")
 include("branch_table/contraction.jl")
 include("branch_table/branchtable.jl")
@@ -50,6 +52,12 @@ export Variable, BoolTensor, ClauseTensor, ConstraintNetwork, DomainMask, TNProb
 export DomainMask
 export Region
 
+# Tensor-based clustering
+export TensorRegion, RegionGraph
+export init_region_graph, greedy_cluster!, merge_regions!
+export compute_merge_gain, compute_open_legs
+export get_sorted_regions, region_to_legacy
+
 export is_fixed, has0, has1, init_doms, get_var_value, bits
 
 export setup_problem, setup_from_cnf, setup_from_circuit, setup_from_sat
@@ -62,7 +70,8 @@ export solve_circuit_sat
 
 export NumUnfixedVars
 
-export MostOccurrenceSelector
+export MostOccurrenceSelector, DPLLSelector, MinGammaSelector, ClusteringSelector
+export ClusteringCache
 
 export TNContractionSolver
 
@@ -81,6 +90,10 @@ export get_branching_stats, reset_stats!
 export BranchingStats
 export print_stats_summary
 
+# Diagnostics/Logging
+export AbstractLogger, NoLogger, BranchingLogger, BranchingLog
+export print_logger_summary, export_logs
+
 export to_graph, visualize_problem, visualize_highest_degree_vars
 export get_highest_degree_variables, get_tensors_containing_variables
 
@@ -89,8 +102,9 @@ export BranchingStrategy, NoReducer
 export NumHardTensors, NumUnfixedVars, NumUnfixedTensors, HardSetSize
 export TNContractionSolver
 
+
 export solve_2sat, is_2sat_reducible
-export solve_and_mine, mine_learned, parse_cnf_file
+export solve_and_mine, mine_learned, parse_cnf_file, solve_with_stats, solve_with_decisions
 export primal_graph
-export circuit_to_cnf
+export circuit_to_cnf, tn_to_cnf, num_tn_vars
 end

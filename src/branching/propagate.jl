@@ -1,5 +1,5 @@
 function scan_supports(support::Vector{UInt16}, support_or::UInt16, support_and::UInt16, query_mask0::UInt16, query_mask1::UInt16)
-    m = query_mask0 | query_mask1  
+    m = query_mask0 | query_mask1
     # General case: filter by compatibility
     if m == UInt16(0)
         return support_or, support_and, !isempty(support)
@@ -25,7 +25,8 @@ end
 # return (query_mask0, query_mask1)
 function compute_query_masks(doms::Vector{DomainMask}, var_axes::Vector{Int})
     @assert length(var_axes) <= 16
-    mask0 = UInt16(0); mask1 = UInt16(0);
+    mask0 = UInt16(0)
+    mask1 = UInt16(0)
 
     @inbounds for i in eachindex(var_axes)
         var_id = var_axes[i]
@@ -59,7 +60,7 @@ end
         (old_domain == DM_0 || old_domain == DM_1) && continue
 
         bit = UInt16(1) << (i - 1)
-        can_be_1  = (valid_or & bit) != UInt16(0)
+        can_be_1 = (valid_or & bit) != UInt16(0)
         must_be_1 = (valid_and & bit) != UInt16(0)
 
         new_dom = must_be_1 ? DM_1 : (can_be_1 ? DM_BOTH : DM_0)
@@ -68,7 +69,7 @@ end
             doms[var_id] = new_dom
             enqueue_neighbors!(ctx.queue, ctx.in_queue, ctx.cn.v2t[var_id])
             !isempty(ctx.learned_clauses) && enqueue_clause_neighbors!(ctx.clause_queue, ctx.clause_in_queue, ctx.v2c[var_id])
-            
+
         end
     end
 end
@@ -144,8 +145,10 @@ end
 # Only used for initial propagation
 function propagate(cn::ConstraintNetwork, doms::Vector{DomainMask}, initial_touched::Vector{Int}, buffer::SolverBuffer)
     isempty(initial_touched) && return doms
-    queue = buffer.touched_tensors; empty!(queue)
-    in_queue = buffer.in_queue; fill!(in_queue, false)
+    queue = buffer.touched_tensors
+    empty!(queue)
+    in_queue = buffer.in_queue
+    fill!(in_queue, false)
 
     for t_idx in initial_touched
         if !in_queue[t_idx]
@@ -157,9 +160,12 @@ function propagate(cn::ConstraintNetwork, doms::Vector{DomainMask}, initial_touc
 end
 
 function propagate(cn::ConstraintNetwork, clauses::Vector{ClauseTensor}, v2c::Vector{Vector{Int}}, doms::Vector{DomainMask}, initial_touched_tensors::Vector{Int}, initial_touched_clauses::Vector{Int}, buffer::SolverBuffer)
-    queue = buffer.touched_tensors; empty!(queue)
-    in_queue = buffer.in_queue; fill!(in_queue, false)
-    clause_queue = buffer.touched_clauses; empty!(clause_queue)
+    queue = buffer.touched_tensors
+    empty!(queue)
+    in_queue = buffer.in_queue
+    fill!(in_queue, false)
+    clause_queue = buffer.touched_clauses
+    empty!(clause_queue)
     ensure_clause_queue!(buffer, length(clauses))
     clause_in_queue = buffer.clause_in_queue
 
@@ -187,9 +193,12 @@ function probe_assignment_core!(problem::TNProblem, buffer::SolverBuffer, base_d
     copyto!(scratch_doms, base_doms)
 
     # Initialize propagation queue
-    queue = buffer.touched_tensors; empty!(queue)
-    in_queue = buffer.in_queue; fill!(in_queue, false)
-    clause_queue = buffer.touched_clauses; empty!(clause_queue)
+    queue = buffer.touched_tensors
+    empty!(queue)
+    in_queue = buffer.in_queue
+    fill!(in_queue, false)
+    clause_queue = buffer.touched_clauses
+    empty!(clause_queue)
     ensure_clause_queue!(buffer, length(clauses))
     clause_in_queue = buffer.clause_in_queue
 
@@ -203,7 +212,7 @@ function probe_assignment_core!(problem::TNProblem, buffer::SolverBuffer, base_d
                 # Set the variable
                 scratch_doms[var_id] = new_domain
                 # @info "New assignment: v$(var_id) -> $(new_domain) "
-                
+
                 # Enqueue affected tensors for propagation
                 @inbounds for t_idx in problem.static.v2t[var_id]
                     if !in_queue[t_idx]
@@ -236,13 +245,13 @@ function propagate_core!(cn::ConstraintNetwork, clauses::Vector{ClauseTensor}, v
     clause_queue = buffer.touched_clauses
     clause_in_queue = buffer.clause_in_queue
     ctx = PropagationContext(cn, buffer, queue, in_queue, clause_queue, clause_in_queue, clauses, v2c)
-    
+
     queue_head = 1
     clause_head = 1
     while queue_head <= length(queue) || clause_head <= length(clause_queue)
         if queue_head <= length(queue)
             tensor_id = queue[queue_head]
-            queue_head += 1 
+            queue_head += 1
             in_queue[tensor_id] = false
 
             tensor = cn.tensors[tensor_id]
@@ -269,4 +278,32 @@ function propagate_core!(cn::ConstraintNetwork, clauses::Vector{ClauseTensor}, v
         end
     end
     return doms
+end
+
+"""
+    propagate!(problem::TNProblem)
+
+Simple in-place propagation on a TNProblem. 
+Propagates constraints until fixpoint, modifying problem.doms in-place.
+Returns true if consistent, false if contradiction found.
+"""
+function propagate!(problem::TNProblem)
+    cn = problem.static
+    doms = problem.doms
+    buffer = problem.buffer
+
+    # Initialize queue with all tensors (full propagation)
+    queue = buffer.touched_tensors
+    empty!(queue)
+    in_queue = buffer.in_queue
+    fill!(in_queue, false)
+
+    for t_idx in eachindex(cn.tensors)
+        in_queue[t_idx] = true
+        push!(queue, t_idx)
+    end
+
+    # Propagate without learned clauses
+    result = propagate_core!(cn, ClauseTensor[], Vector{Vector{Int}}(), doms, buffer)
+    return result[1] != DM_NONE
 end

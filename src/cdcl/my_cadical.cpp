@@ -228,4 +228,207 @@ int cadical_solve_and_mine(
   return res;
 }
 
+// =============================================================================
+// Solve with statistics for path analysis
+// =============================================================================
+
+// Solve and return statistics about the solving process
+// This is useful for comparing CDCL behavior with tensor network approaches
+//
+// Returns:
+//   10 = SAT, 20 = UNSAT, 0 = UNKNOWN
+//
+// out_decisions: number of decisions made
+// out_conflicts: number of conflicts encountered
+// out_propagations: number of propagations
+//
+// Caller must free out_model using free().
+int cadical_solve_with_stats(
+    // CNF input in flattened form
+    const int32_t* in_lits,
+    const int32_t* in_offsets,
+    int32_t nclauses,
+    int32_t nvars,
+    // outputs: statistics
+    int64_t* out_decisions,
+    int64_t* out_conflicts,
+    int64_t* out_propagations,
+    int64_t* out_restarts,
+    // output: model (length nvars, caller must free)
+    int32_t** out_model
+) {
+  Solver s;
+
+  // Disable factor/factorcheck
+  s.set("factor", 0);
+  s.set("factorcheck", 0);
+
+  // feed CNF
+  for (int32_t i = 0; i < nclauses; ++i) {
+    int32_t a = in_offsets[i];
+    int32_t b = in_offsets[i + 1];
+    for (int32_t k = a; k < b; ++k) s.add((int)in_lits[k]);
+    s.add(0);
+  }
+
+  int res = s.solve();
+
+  // Get statistics using get_statistic_value()
+  *out_decisions = s.get_statistic_value("decisions");
+  *out_conflicts = s.get_statistic_value("conflicts");
+  *out_propagations = s.get_statistic_value("propagations");
+  *out_restarts = s.get_statistic_value("restarts");
+
+  // export model
+  *out_model = (int32_t*)malloc(sizeof(int32_t) * (size_t)nvars);
+  if (!*out_model) return 0;
+
+  if (res == 10) {
+    for (int32_t v = 1; v <= nvars; ++v) {
+      int val = s.val((int)v);
+      if (val > 0) (*out_model)[v - 1] = v;
+      else if (val < 0) (*out_model)[v - 1] = -v;
+      else (*out_model)[v - 1] = 0;
+    }
+  } else {
+    for (int32_t v = 1; v <= nvars; ++v) (*out_model)[v - 1] = 0;
+  }
+
+  return res;
+}
+
+// =============================================================================
+// Decision Tracker - ExternalPropagator to capture VSIDS decisions
+// =============================================================================
+
+class DecisionTracker : public ExternalPropagator {
+public:
+  std::vector<int32_t> decision_vars;  // Variables chosen at each decision level
+  std::vector<int32_t> current_trail;  // Current assignment trail
+  int current_level = 0;
+  
+  // Track when a new decision level starts - the next assignment is a decision
+  bool expecting_decision = false;
+  
+  void notify_assignment(const std::vector<int>& lits) override {
+    for (int lit : lits) {
+      if (expecting_decision) {
+        // This is a decision variable (first assignment after new level)
+        decision_vars.push_back(abs(lit));
+        expecting_decision = false;
+      }
+      current_trail.push_back(lit);
+    }
+  }
+  
+  void notify_new_decision_level() override {
+    current_level++;
+    expecting_decision = true;  // Next assignment will be a decision
+  }
+  
+  void notify_backtrack(size_t new_level) override {
+    current_level = (int)new_level;
+    // Note: we don't remove from decision_vars, we keep the full history
+  }
+  
+  bool cb_check_found_model(const std::vector<int>& model) override {
+    (void)model;
+    return true;  // Accept any model
+  }
+  
+  bool cb_has_external_clause(bool& is_forgettable) override {
+    (void)is_forgettable;
+    return false;  // No external clauses
+  }
+  
+  int cb_add_external_clause_lit() override {
+    return 0;
+  }
+};
+
+// Solve and return the decision variable sequence (for VSIDS vs MinGamma comparison)
+// Returns:
+//   10 = SAT, 20 = UNSAT, 0 = UNKNOWN
+//
+// out_decision_vars: array of decision variables (absolute var IDs, in order)
+// out_n_decisions: number of unique decisions made (including backtracks)
+//
+// Caller must free out_decision_vars and out_model using free().
+int cadical_solve_with_decisions(
+    // CNF input in flattened form
+    const int32_t* in_lits,
+    const int32_t* in_offsets,
+    int32_t nclauses,
+    int32_t nvars,
+    // outputs: decision sequence
+    int32_t** out_decision_vars,
+    int32_t* out_n_decisions,
+    // output: statistics
+    int64_t* out_conflicts,
+    // output: model (length nvars, caller must free)
+    int32_t** out_model
+) {
+  Solver s;
+
+  // Disable factor/factorcheck
+  s.set("factor", 0);
+  s.set("factorcheck", 0);
+
+  // feed CNF
+  for (int32_t i = 0; i < nclauses; ++i) {
+    int32_t a = in_offsets[i];
+    int32_t b = in_offsets[i + 1];
+    for (int32_t k = a; k < b; ++k) s.add((int)in_lits[k]);
+    s.add(0);
+  }
+
+  // Connect decision tracker FIRST
+  DecisionTracker tracker;
+  s.connect_external_propagator(&tracker);
+  
+  // Now we can observe all variables
+  for (int32_t v = 1; v <= nvars; ++v) {
+    s.add_observed_var(v);
+  }
+
+  int res = s.solve();
+
+  // Export decision sequence
+  int32_t nd = (int32_t)tracker.decision_vars.size();
+  *out_n_decisions = nd;
+  
+  *out_decision_vars = (int32_t*)malloc(sizeof(int32_t) * (size_t)(nd > 0 ? nd : 1));
+  if (!*out_decision_vars) return 0;
+  
+  if (nd > 0) {
+    memcpy(*out_decision_vars, tracker.decision_vars.data(), sizeof(int32_t) * (size_t)nd);
+  }
+
+  // Get conflict count
+  *out_conflicts = s.get_statistic_value("conflicts");
+
+  // export model
+  *out_model = (int32_t*)malloc(sizeof(int32_t) * (size_t)nvars);
+  if (!*out_model) return 0;
+
+  if (res == 10) {
+    for (int32_t v = 1; v <= nvars; ++v) {
+      int val = s.val((int)v);
+      if (val > 0) (*out_model)[v - 1] = v;
+      else if (val < 0) (*out_model)[v - 1] = -v;
+      else (*out_model)[v - 1] = 0;
+    }
+  } else {
+    for (int32_t v = 1; v <= nvars; ++v) (*out_model)[v - 1] = 0;
+  }
+  
+  // Disconnect propagator
+  s.disconnect_external_propagator();
+
+  return res;
+}
+
 } // extern "C"
+
+
+

@@ -19,7 +19,7 @@ struct SolverBuffer
     touched_clauses::Vector{Int}  # ClauseTensors that need propagation
     clause_in_queue::BitVector    # Track which clauses are queued for processing
     scratch_doms::Vector{DomainMask}  # Temporary domain storage for propagation
-    branching_cache::Dict{Clause{UInt64}, Float64}  # Cache measure values for branching configurations
+    branching_cache::Dict{Clause{UInt64},Float64}  # Cache measure values for branching configurations
     connection_scores::Vector{Float64}
 end
 
@@ -32,7 +32,7 @@ function SolverBuffer(cn::ConstraintNetwork)
         Int[],
         BitVector(),
         Vector{DomainMask}(undef, n_vars),
-        Dict{Clause{UInt64}, Float64}(),
+        Dict{Clause{UInt64},Float64}(),
         zeros(Float64, n_vars)
     )
 end
@@ -61,15 +61,15 @@ end
 # Constructor: Initialize from ConstraintNetwork with optional explicit domains
 function TNProblem(
     static::ConstraintNetwork;
-    doms::Union{Vector{DomainMask}, Nothing}=nothing,
+    doms::Union{Vector{DomainMask},Nothing}=nothing,
     stats::BranchingStats=BranchingStats(),
     learned_clauses::Vector{ClauseTensor}=ClauseTensor[],
 )
     buffer = SolverBuffer(static)
-    mapped_clauses = map_clauses_to_compressed(learned_clauses, static.orig_to_new)
-    v2c = build_clause_v2c(length(static.vars), mapped_clauses)
-    isnothing(doms) && (doms = initialize(static, mapped_clauses, v2c, buffer))
-    return TNProblem(static, doms, stats, buffer, mapped_clauses, v2c)
+    # Learned clauses are assumed to be in compressed variable space
+    length(learned_clauses) > 0 ? v2c = build_clause_v2c(length(static.vars), learned_clauses) : v2c = Vector{Int}[]
+    isnothing(doms) && (doms = initialize(static, learned_clauses, v2c, buffer))
+    return TNProblem(static, doms, stats, buffer, learned_clauses, v2c)
 end
 
 function build_clause_v2c(n_vars::Int, clauses::Vector{ClauseTensor})
@@ -80,26 +80,6 @@ function build_clause_v2c(n_vars::Int, clauses::Vector{ClauseTensor})
         end
     end
     return v2c
-end
-
-function map_clauses_to_compressed(clauses::Vector{ClauseTensor}, orig_to_new::Vector{Int})
-    isempty(clauses) && return clauses
-    mapped = ClauseTensor[]
-    @inbounds for clause in clauses
-        keep = true
-        vars = Vector{Int}(undef, length(clause.vars))
-        for i in eachindex(clause.vars)
-            v = clause.vars[i]
-            nv = orig_to_new[v]
-            if nv == 0
-                keep = false
-                break
-            end
-            vars[i] = nv
-        end
-        keep && push!(mapped, ClauseTensor(vars, copy(clause.polarity)))
-    end
-    return mapped
 end
 
 function Base.show(io::IO, problem::TNProblem)

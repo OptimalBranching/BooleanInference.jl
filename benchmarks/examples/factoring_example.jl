@@ -6,15 +6,15 @@ using Random
 using ProblemReductions
 using BooleanInference
 using OptimalBranchingCore
-using Gurobi
+# using Gurobi
 
 const env = Gurobi.Env()
 
 result_dir = resolve_results_dir("factoring")
 
-println("=" ^80)
+println("="^80)
 println("Generating Factoring Datasets")
-println("=" ^80)
+println("="^80)
 
 configs = [
     # FactoringConfig(8, 8),
@@ -56,3 +56,31 @@ for path in paths
     times, branches, _ = benchmark_dataset(FactoringProblem, path; solver=BooleanInferenceBenchmarks.IPSolver(Gurobi.Optimizer, env), verify=true, save_result=result_dir)
     # times, branches, _ = benchmark_dataset(FactoringProblem, path; solver=XSATSolver(csat_path=joinpath(dirname(@__DIR__), "artifacts", "bin", "csat"), timeout=300.0), verify=true, save_result=result_dir)
 end
+
+inst = FactoringInstance(16, 16, 3363471157)  # p, q 是可选的正确答案
+# ========================================
+# 方法1: BooleanInference Solver (TN-based)
+# ========================================
+solver = Solvers.BI(selector=MinGammaSelector(3, 3), show_stats=true)
+result = solve_instance(FactoringProblem, inst, solver)
+println("BI Result: $result")
+
+# ========================================
+# 方法2: Kissat (CDCL SAT solver)
+# ========================================
+solver = Solvers.Kissat(timeout=60.0, quiet=false)
+result = solve_instance(FactoringProblem, inst, solver)
+println("Kissat Result: status=$(result.status), decisions=$(result.decisions)")
+
+# ========================================
+# 方法3: Minisat
+# ========================================
+solver = Solvers.Minisat(timeout=60.0, quiet=false)
+result = solve_instance(FactoringProblem, inst, solver)
+println("Minisat Result: status=$(result.status), decisions=$(result.decisions)")
+# ========================================
+# 方法4: Cube and Conquer (march_cu + kissat)
+# ========================================
+solver = Solvers.MarchCu(timeout=60.0)
+result = solve_instance(FactoringProblem, inst, solver)
+println("MarchCu Result: status=$(result.status), cubes/decisions=$(result.decisions)")

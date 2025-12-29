@@ -1,76 +1,69 @@
+"""
+    BooleanInferenceBenchmarks
+
+Benchmarking suite for BooleanInference.jl.
+
+# Quick Start
+```julia
+using BooleanInferenceBenchmarks
+
+result = solve("circuit.v")              # Solve a circuit
+result = factor(143; m=4, n=4)           # Factor a number
+res = benchmark("data/circuits")         # Benchmark directory
+```
+"""
 module BooleanInferenceBenchmarks
 
+# Dependencies
 using Random
-using JSON3
 using Primes
-using Dates: now
-using BenchmarkTools
-using BooleanInference
 using JuMP, HiGHS, Gurobi
+using JuMP: MOI
 using Statistics: mean, median
-using SHA: bytes2hex, sha256, sha1
+using BooleanInference
+using BooleanInference: Circuit, Assignment, BooleanExpr
 using ProblemReductions
-using ProblemReductions: Factoring, CircuitSAT, reduceto, constraints, objectives, AbstractProblem, Symbol
+using ProblemReductions: Factoring, CircuitSAT, reduceto
 using ProblemReductions: BoolVar, CNFClause, CNF, Satisfiability
 using OptimalBranchingCore
 
-include("abstract_types.jl")
-include("utils.jl")
-include("result_io.jl")
-include("benchmark.jl")
-include("formatting.jl")
-include("comparison.jl")
-
-# CircuitIO
+# CircuitIO module (keep separate - it's self-contained)
 include("circuitIO/circuitIO.jl")
 using .CircuitIO
 
-include("solver/solver_ip.jl")
-include("solver/solver_xsat.jl")
-include("solver/solver_cnfsat.jl")
+# Core files (simplified structure)
+include("types.jl")      # All types + Solvers module
+include("problems.jl")   # Problem loading
+include("solvers.jl")    # solve_instance implementations
+include("api.jl")        # High-level API
 
-# Factoring problem
-include("factoring/types.jl")
-include("factoring/interface.jl")
-include("factoring/generators.jl")
-include("factoring/solvers.jl")
-include("factoring/dataset.jl")
+# ============================================================================
+# Exports
+# ============================================================================
 
-# CircuitSAT problem
-include("circuitSAT/types.jl")
-include("circuitSAT/interface.jl")
-include("circuitSAT/dataset.jl")
-include("circuitSAT/solvers.jl")
+# New API (recommended)
+export SolveStatus, SAT, UNSAT, TIMEOUT, UNKNOWN, ERROR
+export SolveResult, is_sat, is_unsat
+export Solvers
+export load, load_dir, solve, factor, benchmark
 
-# CNFSAT problem
-include("CNFSAT/types.jl")
-include("CNFSAT/parser.jl")
-include("CNFSAT/dataset.jl")
-include("CNFSAT/interface.jl")
-include("CNFSAT/solvers.jl")
-
+# Types
 export AbstractBenchmarkProblem, AbstractProblemConfig, AbstractInstance, AbstractSolver
-export solve_instance, verify_solution, read_instances, generate_instance
-export available_solvers, default_solver, solver_name, problem_id
-export benchmark_dataset, run_solver_comparison
-export list_available_solvers, print_solver_comparison_summary, compare_solver_results
-export BenchmarkResult, save_benchmark_result, load_benchmark_result
-export print_result_summary, find_result_file, solver_config_dict
-export resolve_results_dir
-export load_all_results, load_dataset_results, compare_results, filter_results
-export print_detailed_comparison, get_config_summary
-export FactoringProblem, FactoringConfig, FactoringInstance, generate_factoring_datasets
+export FactoringProblem, FactoringConfig, FactoringInstance
 export CircuitSATProblem, CircuitSATConfig, CircuitSATInstance
-export load_circuit_instance, load_verilog_dataset, load_aag_dataset
-export load_circuit_datasets, discover_circuit_files, create_circuitsat_configs
-export is_satisfiable
-export BooleanInferenceSolver, IPSolver, XSATSolver
-export CNFSolver, KissatSolver, MinisatSolver
-export CNFSolverResult, run_cnf_solver
 export CNFSATProblem, CNFSATConfig, CNFSATInstance
+
+# Solvers
+export BooleanInferenceSolver, IPSolver, XSATSolver
+export CNFSolver, KissatSolver, MinisatSolver, CNFSolverResult
+
+# Legacy (backward compatibility)
+export solve_instance, default_solver, solver_name
+export read_instances, load_circuit_instance
+export discover_circuit_files, discover_cnf_files
 export parse_cnf_file, cnf_instantiation
-export load_cnf_dataset, load_cnf_datasets, discover_cnf_files, create_cnfsat_configs
-export load_cnf_instance, is_cnf_satisfiable
-export resolve_data_dir
+export generate_factoring_datasets
+export resolve_data_dir, resolve_results_dir
+export run_cnf_solver
 
 end
