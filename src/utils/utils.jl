@@ -22,7 +22,21 @@ end
 count_unfixed(doms::Vector{DomainMask}) = count(dom -> !is_fixed(dom), doms)
 
 bits_to_int(v::Vector{Bool}) = sum(b << (i - 1) for (i, b) in enumerate(v))
-  
+
+# Count active tensors without allocating a list
+function count_active_tensors(static::ConstraintNetwork, doms::Vector{DomainMask})
+    count = 0
+    @inbounds for tensor in static.tensors
+        for var_id in tensor.var_axes
+            if !is_fixed(doms[var_id])
+                count += 1
+                break  # Found one unfixed var, tensor is active
+            end
+        end
+    end
+    return count
+end
+
 function get_active_tensors(static::ConstraintNetwork, doms::Vector{DomainMask})
     active = Int[]
     sizehint!(active, length(static.tensors))
@@ -50,7 +64,7 @@ function is_legal(checklist::Vector{DomainMask})
     value = UInt64(0)
     @inbounds for (var_idx, v) in enumerate(checklist)
         v == DM_BOTH && continue
-        bit = UInt64(1) << (var_idx-1)
+        bit = UInt64(1) << (var_idx - 1)
         mask |= bit
         if v == DM_1
             value |= bit
@@ -75,7 +89,7 @@ end
     return mask, value
 end
 
-packint(bits::NTuple{N, Int}) where {N} = reduce(|, (UInt64(b) << (i - 1) for (i, b) in enumerate(bits)); init = UInt64(0))
+packint(bits::NTuple{N,Int}) where {N} = reduce(|, (UInt64(b) << (i - 1) for (i, b) in enumerate(bits)); init=UInt64(0))
 packint(i::Int) = packint((i - 1,))
 packint(ci::CartesianIndex{N}) where {N} = packint(ntuple(j -> ci.I[j] - 1, N))
 
@@ -92,7 +106,7 @@ function is_two_sat(doms::Vector{DomainMask}, static::ConstraintNetwork)
 end
 
 function primal_graph(static::ConstraintNetwork, doms::Vector{DomainMask})
-    
+
     g = SimpleGraph(length(doms))
 
     active_tensors = get_active_tensors(static, doms)

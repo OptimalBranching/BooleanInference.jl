@@ -1,195 +1,347 @@
-struct MostOccurrenceSelector <: AbstractSelector
-    k::Int
-    max_tensors::Int
+# ============================================================================
+# Common utilities for selectors
+# ============================================================================
+
+"""
+Sort clauses by branching vector in descending order.
+"""
+function sort_clauses_by_branching_vector(result)
+    clauses = OptimalBranchingCore.get_clauses(result)
+    length(clauses) > 1 && (clauses = clauses[sortperm(result.branching_vector, rev=true)])
+    return clauses
 end
 
 """
 Compute variable selection scores based on weighted occurrence in high-degree tensors.
-
-Score(var) = Σ (degree - 2) for all tensors containing var with degree > 2
-
-This simple heuristic has been empirically validated to work well.
+Score(var) = Σ degree for all tensors containing var with degree > 2
 """
 function compute_var_cover_scores_weighted(problem::TNProblem)
     scores = problem.buffer.connection_scores
     fill!(scores, 0.0)
-
     active_tensors = get_active_tensors(problem.static, problem.doms)
 
-    # Compute scores by directly iterating active tensors and their variables
     @inbounds for tensor_id in active_tensors
         vars = problem.static.tensors[tensor_id].var_axes
-
-        # Count unfixed variables in this tensor
-        degree = 0
-        @inbounds for var in vars
-            !is_fixed(problem.doms[var]) && (degree += 1)
-        end
-
-        # Only contribute to scores if degree > 2
+        degree = count(v -> !is_fixed(problem.doms[v]), vars)
         if degree > 2
-            weight = degree
             @inbounds for var in vars
-                !is_fixed(problem.doms[var]) && (scores[var] += weight)
+                !is_fixed(problem.doms[var]) && (scores[var] += degree)
             end
         end
     end
     return scores
 end
 
-function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, ::MostOccurrenceSelector)
-    var_scores = compute_var_cover_scores_weighted(problem)
-    # Find maximum and its index in a single pass
-    max_score = 0.0
-    var_id = 0
-    @inbounds for i in eachindex(var_scores)
+"""
+Find the unfixed variable with highest score.
+Falls back to first unfixed variable if all scores are zero.
+"""
+function find_best_var_by_score(problem::TNProblem)
+    scores = compute_var_cover_scores_weighted(problem)
+    max_score, var_id = 0.0, 0
+    first_unfixed = 0
+
+    @inbounds for i in eachindex(scores)
         is_fixed(problem.doms[i]) && continue
-        if var_scores[i] > max_score
-            max_score = var_scores[i]
-            var_id = i
-        end
+        first_unfixed == 0 && (first_unfixed = i)
+        scores[i] > max_score && (max_score = scores[i]; var_id = i)
     end
 
-    result, variables, region = compute_branching_result_with_region(cache, problem, var_id, measure, set_cover_solver)
+    # Fallback to first unfixed variable if no high-score variable found
+    var_id == 0 && (var_id = first_unfixed)
+    return var_id
+end
+
+# ============================================================================
+# MostOccurrenceSelector: Fast heuristic based on variable connectivity
+# ============================================================================
+
+struct MostOccurrenceSelector <: AbstractSelector
+    k::Int
+    max_tensors::Int
+end
+
+function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, selector::MostOccurrenceSelector, depth::Int=0)
+    var_id = find_best_var_by_score(problem)
+    result, variables = compute_branching_result(cache, problem, var_id, measure, set_cover_solver)
     isnothing(result) && return nothing, variables
-    return (OptimalBranchingCore.get_clauses(result), variables)
+    return sort_clauses_by_branching_vector(result), variables
 end
 
-# Version that also returns the region for logging purposes
-function findbest_with_region(cache::RegionCache, problem::TNProblem, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, selector::MostOccurrenceSelector, depth::Int=0)
-    var_scores = compute_var_cover_scores_weighted(problem)
-    # Find maximum and its index in a single pass
-    max_score = 0.0
-    var_id = 0
-    @inbounds for i in eachindex(var_scores)
-        is_fixed(problem.doms[i]) && continue
-        if var_scores[i] > max_score
-            max_score = var_scores[i]
-            var_id = i
-        end
-    end
-
-    result, variables, region, support_size = compute_branching_result_with_region(cache, problem, var_id, measure, set_cover_solver)
-    isnothing(result) && return nothing, variables, region, support_size
-
-    # Get clauses and their size reductions
-    clauses = OptimalBranchingCore.get_clauses(result)
-    size_reductions = result.branching_vector
-
-    # Sort clauses by size_reduction in descending order (largest reduction first)
-    if length(clauses) > 1
-        perm = sortperm(size_reductions, rev=true)
-        clauses = clauses[perm]
-    end
-
-    return (clauses, variables, region, support_size)
-end
-
-
+# ============================================================================
+# MinGammaSelector: Scan all variables to find minimum γ
+# ============================================================================
 
 """
     MinGammaSelector
 
-A selector that scans ALL unfixed variables to find the one with the minimum
-branching factor (γ). This yields the optimal search tree size but is 
-computationally expensive (O(num_vars) branching table computations per node).
-
-Best suited for small-scale problems where minimizing search tree depth is 
-more important than per-node overhead.
+Scans ALL unfixed variables to find one with minimum branching factor (γ).
+Optimal search tree size but O(num_vars) branching table computations per node.
 """
 struct MinGammaSelector <: AbstractSelector
     k::Int
     max_tensors::Int
 end
 
-function findbest_with_region(cache::RegionCache, problem::TNProblem, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, selector::MinGammaSelector, depth::Int=0)
-    best_γ = Inf
-    best_result = nothing
-    best_variables = Int[]
-    best_region = nothing
-    best_support_size = 0
+function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, selector::MinGammaSelector, depth::Int=0)
+    best_γ, best_result, best_variables = Inf, nothing, Int[]
 
     unfixed_vars = get_unfixed_vars(problem)
-    isempty(unfixed_vars) && return nothing, Int[], Region(0, Int[], Int[]), 0
+    isempty(unfixed_vars) && return nothing, Int[]
 
     @inbounds for var_id in unfixed_vars
-        result, variables, region, support_size = compute_branching_result_with_region(cache, problem, var_id, measure, set_cover_solver)
+        result, variables = compute_branching_result(cache, problem, var_id, measure, set_cover_solver)
         isnothing(result) && continue
-
         if result.γ < best_γ
-            best_γ = result.γ
-            best_result = result
-            best_variables = variables
-            best_region = region
-            best_support_size = support_size
-            # Early exit: γ=1.0 means a single branch (forced assignment)
+            best_γ, best_result, best_variables = result.γ, result, variables
             best_γ == 1.0 && break
         end
     end
 
-    isnothing(best_result) && return nothing, Int[], Region(0, Int[], Int[]), 0
+    isnothing(best_result) && return nothing, Int[]
 
-    # Get clauses and sort by size_reduction descending
-    clauses = OptimalBranchingCore.get_clauses(best_result)
-    size_reductions = best_result.branching_vector
-    if length(clauses) > 1
-        perm = sortperm(size_reductions, rev=true)
-        clauses = clauses[perm]
-    end
-
-    return (clauses, best_variables, best_region, best_support_size)
+    return sort_clauses_by_branching_vector(best_result), best_variables
 end
 
-
-function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, selector::MinGammaSelector)
-    result, variables, _, _ = findbest_with_region(cache, problem, measure, set_cover_solver, selector)
-    return result, variables
-end
-
-
+# ============================================================================
+# DPLLSelector: Standard 0/1 branching (baseline)
+# ============================================================================
 
 """
     DPLLSelector
 
-Standard DPLL-style branching: selects the highest-connectivity variable (same as 
-MostOccurrenceSelector) but uses simple 0/1 branching instead of OptimalBranching.
-
-This serves as a baseline to isolate the contribution of OptimalBranching.
-- MostOccurrenceSelector: MostOcc variable selection + OB branching
-- DPLLSelector: MostOcc variable selection + Standard 0/1 branching
+Standard DPLL-style branching with 0/1 split. Serves as baseline.
 """
 struct DPLLSelector <: AbstractSelector end
 
-function findbest_with_region(cache::RegionCache, problem::TNProblem, ::AbstractMeasure, ::AbstractSetCoverSolver, ::DPLLSelector, depth::Int=0)
-    var_scores = compute_var_cover_scores_weighted(problem)
-    # Find maximum connectivity variable (SAME as MostOccurrenceSelector)
-    max_score = 0.0
+function findbest(::RegionCache, problem::TNProblem, ::AbstractMeasure, ::AbstractSetCoverSolver, ::DPLLSelector, depth::Int=0)
+    var_id = find_best_var_by_score(problem)
+    var_id == 0 && return nothing, Int[]
+    clauses = [Clause(UInt64(1), UInt64(0)), Clause(UInt64(1), UInt64(1))]
+    return clauses, [var_id]
+end
+
+# ============================================================================
+# LookaheadSelector: march_cu-style variable selection for cubing
+# ============================================================================
+
+"""
+    LookaheadSelector
+
+Lookahead-based variable selector inspired by march_cu's approach.
+For each candidate variable, simulates both TRUE and FALSE assignments,
+propagates constraints, and measures the reduction.
+
+Uses product heuristic: score = reduction_true × reduction_false
+This selects variables that cause maximum propagation on both branches,
+leading to smaller cubes in Cube-and-Conquer.
+
+# Fields
+- `k::Int`: k-neighborhood radius for region computation
+- `max_tensors::Int`: Maximum tensors in region
+- `n_candidates::Int`: Number of top candidates to evaluate with lookahead
+"""
+struct LookaheadSelector <: AbstractSelector
+    k::Int
+    max_tensors::Int
+    n_candidates::Int
+end
+
+# Default: evaluate top 50 candidates
+LookaheadSelector(k::Int, max_tensors::Int) = LookaheadSelector(k, max_tensors, 50)
+
+# ============================================================================
+# FixedOrderSelector: Use a pre-specified variable order (for testing/comparison)
+# ============================================================================
+
+"""
+    FixedOrderSelector
+
+Selector that uses a pre-specified variable order.
+Useful for testing with march_cu's variable selection to isolate
+the branching method from the variable selection strategy.
+
+# Fields
+- `k::Int`: k-neighborhood radius for region computation
+- `max_tensors::Int`: Maximum tensors in region
+- `var_order::Vector{Int}`: Pre-specified variable order (will select first unfixed)
+"""
+mutable struct FixedOrderSelector <: AbstractSelector
+    k::Int
+    max_tensors::Int
+    var_order::Vector{Int}
+    current_idx::Int
+end
+
+FixedOrderSelector(k::Int, max_tensors::Int, var_order::Vector{Int}) =
+    FixedOrderSelector(k, max_tensors, var_order, 1)
+
+function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, selector::FixedOrderSelector, depth::Int=0)
+    # Find the next unfixed variable in the order
     var_id = 0
-    @inbounds for i in eachindex(var_scores)
-        is_fixed(problem.doms[i]) && continue
-        if var_scores[i] > max_score
-            max_score = var_scores[i]
-            var_id = i
+    while selector.current_idx <= length(selector.var_order)
+        candidate = selector.var_order[selector.current_idx]
+        if candidate <= length(problem.doms) && !is_fixed(problem.doms[candidate])
+            var_id = candidate
+            selector.current_idx += 1
+            break
+        end
+        selector.current_idx += 1
+    end
+
+    # If no variable from order is available, fall back to MostOccurrence
+    if var_id == 0
+        var_id = find_best_var_by_score(problem)
+    end
+
+    var_id == 0 && return nothing, Int[]
+
+    # Compute branching result for selected variable
+    result, variables = compute_branching_result(cache, problem, var_id, measure, set_cover_solver)
+    isnothing(result) && return nothing, variables
+
+    return sort_clauses_by_branching_vector(result), variables
+end
+
+"""
+    reset!(selector::FixedOrderSelector)
+
+Reset the selector to start from the beginning of the order.
+"""
+function reset!(selector::FixedOrderSelector)
+    selector.current_idx = 1
+end
+
+"""
+    probe_reduction(problem::TNProblem, measure::AbstractMeasure, var_id::Int, value::Bool) -> Float64
+
+Probe the effect of assigning `var_id = value` and return the measure reduction
+after propagation.
+
+Returns -Inf if the assignment leads to a contradiction.
+"""
+function probe_reduction(problem::TNProblem, measure::AbstractMeasure, var_id::Int, value::Bool)
+    buffer = problem.buffer
+    doms = problem.doms
+
+    current_measure = measure_core(problem.static, doms, measure)
+
+    vars = [var_id]
+    mask = UInt64(1)
+    val = value ? UInt64(1) : UInt64(0)
+
+    scratch = probe_assignment_core!(problem, buffer, doms, vars, mask, val)
+
+    scratch[1] == DM_NONE && return -Inf
+
+    new_measure = measure_core(problem.static, scratch, measure)
+    return current_measure - new_measure
+end
+
+"""
+    lookahead_score(reduction_true, reduction_false) -> Float64
+
+March-style product heuristic for variable selection.
+Formula: score = left * right + left + right
+
+This maximizes the product of reductions in both branches,
+which tends to find variables that cause strong pruning regardless of assignment.
+"""
+@inline function lookahead_score(reduction_true::Real, reduction_false::Real)
+    # March-style product heuristic: left * right + left + right
+    left = Float64(reduction_true) + 0.1
+    right = Float64(reduction_false) + 0.1
+    return 1024.0 * left * right + left + right
+end
+
+"""
+Compute propagation potential for each variable.
+Based on march's diff concept: variables with more implications have higher potential.
+We use the number of active tensors connected to the variable as a proxy.
+"""
+function compute_propagation_potential(problem::TNProblem)
+    potential = problem.buffer.connection_scores
+    fill!(potential, 0.0)
+
+    @inbounds for var_id in eachindex(problem.doms)
+        is_fixed(problem.doms[var_id]) && continue
+
+        # Count active tensors connected to this variable
+        for tensor_id in problem.static.v2t[var_id]
+            # Weight by tensor degree (more constrained = more propagation)
+            vars = problem.static.tensors[tensor_id].var_axes
+            unfixed_count = count(v -> !is_fixed(problem.doms[v]), vars)
+            if unfixed_count > 0
+                potential[var_id] += 1.0 / unfixed_count
+            end
         end
     end
 
-    if var_id == 0
-        return nothing, Int[], Region(0, Int[], Int[]), 0
-    end
-
-    # STANDARD BRANCHING: just x=0 and x=1, no OB optimization
-    clause_false = Clause(UInt64(1), UInt64(0))  # var=false
-    clause_true = Clause(UInt64(1), UInt64(1))   # var=true
-    clauses = [clause_false, clause_true]
-    variables = [var_id]
-
-    dummy_region = Region(var_id, Int[], [var_id])
-    support_size = 2
-
-    return (clauses, variables, dummy_region, support_size)
+    return potential
 end
 
-function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, selector::DPLLSelector)
-    result, variables, _, _ = findbest_with_region(cache, problem, measure, set_cover_solver, selector)
-    return result, variables
+"""
+Select top candidates by propagation potential for look-ahead.
+Similar to march's preselection by diff rank.
+"""
+function select_lookahead_candidates(problem::TNProblem, n_candidates::Int)
+    unfixed_vars = get_unfixed_vars(problem)
+    n = length(unfixed_vars)
+
+    n_candidates <= 0 && return unfixed_vars
+    n_candidates >= n && return unfixed_vars
+
+    # Compute propagation potential
+    potential = compute_propagation_potential(problem)
+
+    # Sort by potential (descending) and take top candidates
+    sorted_vars = sort(unfixed_vars, by=v -> potential[v], rev=true)
+    return sorted_vars[1:min(n_candidates, n)]
+end
+
+function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, selector::LookaheadSelector, depth::Int=0)
+    unfixed_vars = get_unfixed_vars(problem)
+    isempty(unfixed_vars) && return nothing, Int[]
+
+    # Select candidates by propagation potential (march-style preselection)
+    candidates = select_lookahead_candidates(problem, selector.n_candidates)
+
+    best_score = -Inf
+    best_var = candidates[1]
+    forced_score = -Inf
+    forced_var = 0
+    forced_value = false
+
+    @inbounds for var_id in candidates
+        reduction_true = probe_reduction(problem, measure, var_id, true)
+        reduction_false = probe_reduction(problem, measure, var_id, false)
+
+        if reduction_true == -Inf && reduction_false == -Inf
+            return nothing, Int[]
+        elseif reduction_true == -Inf || reduction_false == -Inf
+            feasible_reduction = reduction_true == -Inf ? reduction_false : reduction_true
+            if feasible_reduction > forced_score
+                forced_score = feasible_reduction
+                forced_var = var_id
+                forced_value = reduction_true == -Inf ? false : true
+            end
+            continue
+        end
+
+        score = lookahead_score(reduction_true, reduction_false)
+        if score > best_score
+            best_score = score
+            best_var = var_id
+        end
+    end
+
+    if forced_var != 0
+        clause = forced_value ? Clause(UInt64(1), UInt64(1)) : Clause(UInt64(1), UInt64(0))
+        return [clause], [forced_var]
+    end
+
+    result, variables = compute_branching_result(cache, problem, best_var, measure, set_cover_solver)
+    isnothing(result) && return nothing, variables
+
+    return sort_clauses_by_branching_vector(result), variables
 end

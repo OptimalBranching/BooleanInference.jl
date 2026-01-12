@@ -3,18 +3,41 @@ function create_region(cn::ConstraintNetwork, doms::Vector{DomainMask}, variable
 end
 
 function contract_region(tn::ConstraintNetwork, region::Region, doms::Vector{DomainMask})
-    sliced_tensors = Vector{Array{Bool}}(undef, length(region.tensors))
-    tensor_indices = Vector{Vector{Int}}(undef, length(region.tensors))
+    # Collect sliced tensors, handling fully-fixed tensors specially
+    active_tensors = Array{Bool}[]
+    active_indices = Vector{Int}[]
 
-    @inbounds for (i, tensor_id) in enumerate(region.tensors)
+    @inbounds for tensor_id in region.tensors
         tensor = tn.tensors[tensor_id]
-        sliced_tensors[i] = slicing(tn, tensor, doms)
-        tensor_indices[i] = filter(v -> !is_fixed(doms[v]), tensor.var_axes)
+        sliced = slicing(tn, tensor, doms)
+        unfixed_vars = filter(v -> !is_fixed(doms[v]), tensor.var_axes)
+
+        if isempty(unfixed_vars)
+            # All variables are fixed - this is a scalar (0-dim array)
+            # If the scalar is false, the entire contraction is infeasible
+            if !only(sliced)
+                # Return empty result - no feasible configurations
+                output_vars = filter(v -> !is_fixed(doms[v]), region.vars)
+                dims = ntuple(_ -> 2, length(output_vars))
+                return fill(false, dims), output_vars
+            end
+            # If true, skip this tensor (it contributes factor of 1)
+        else
+            push!(active_tensors, sliced)
+            push!(active_indices, unfixed_vars)
+        end
     end
 
     # Collect unfixed variables from the region
     output_vars = filter(v -> !is_fixed(doms[v]), region.vars)
-    contracted = contract_tensors(sliced_tensors, tensor_indices, output_vars)
+
+    # If no active tensors remain, all were true scalars - result is all true
+    if isempty(active_tensors)
+        dims = ntuple(_ -> 2, length(output_vars))
+        return fill(true, dims), output_vars
+    end
+
+    contracted = contract_tensors(active_tensors, active_indices, output_vars)
 
     isempty(output_vars) && @assert length(contracted) == 1
     return contracted, output_vars

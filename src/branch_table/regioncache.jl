@@ -19,14 +19,14 @@ Cache for region contraction results, keyed by the tensor ID set.
 This allows sharing contraction results across different variables that
 happen to produce the same region (same set of tensors).
 """
-struct RegionCache{S}
+mutable struct RegionCache{S}
     selector::S
     initial_doms::Vector{DomainMask}
 
-    # Primary cache: keyed by sorted tensor IDs (as a tuple for hashing)
+    # Primary cache: keyed by sorted tensor IDs
     tensor_set_to_configs::Dict{Vector{Int},Vector{UInt64}}
 
-    # Secondary lookup: var_id -> Region (for quick region retrieval)
+    # Secondary lookup: var_id -> Region
     var_to_region::Dict{Int,Region}
 end
 
@@ -63,3 +63,4 @@ function get_region_data!(cache::RegionCache, problem::TNProblem, var_id::Int)
 
     return region, cache.tensor_set_to_configs[tensor_key]
 end
+
