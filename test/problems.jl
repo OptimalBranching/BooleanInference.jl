@@ -26,7 +26,7 @@ end
     tensor_data_1 = BitVector([false, false, false, true])  # AND: only (1,1) satisfies
     tensor_data_2 = BitVector([true, false])  # NOT: only 0 satisfies
 
-    static = setup_problem(2, [[1, 2], [2]], [tensor_data_1, tensor_data_2]; precontract=false)
+    static = setup_problem(2, [[1, 2], [2]], [tensor_data_1, tensor_data_2])
 
     @test length(static.vars) == 2
     @test all(v.deg > 0 for v in static.vars)

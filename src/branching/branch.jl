@@ -222,8 +222,7 @@ function bbsat!(
     cdcl_cutoff::Float64=1.0
 )
     empty!(problem.buffer.branching_cache)
-    cache = init_cache(problem, config.table_solver, config.measure,
-        config.set_cover_solver, config.selector)
+    cache = init_cache(problem, config.table_solver, config.measure, config.set_cover_solver, config.selector)
     initial_active = count_active_tensors(problem.static, problem.doms)
 
     ctx = SearchContext(

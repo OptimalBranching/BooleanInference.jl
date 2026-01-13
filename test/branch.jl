@@ -36,13 +36,12 @@ end
         out = g3 ∧ g4
     end
     push!(circuit.exprs, Assignment([:out], BooleanExpr(false)))
-    tnproblem = setup_from_circuit(circuit)
-    @show tnproblem.static.tensors[1]
-    @show tnproblem.static.tensors[2]
+    circuit_sat = CircuitSAT(circuit; use_constraints=true)
+    tn_problem = setup_from_sat(circuit_sat)
     
     # Test solving the circuit
     br_strategy = BranchingStrategy(table_solver = TNContractionSolver(), selector = MostOccurrenceSelector(1,2), measure = NumUnfixedVars(), set_cover_solver = GreedyMerge())
-    result = bbsat!(tnproblem, br_strategy, NoReducer())
+    result = bbsat!(tn_problem, br_strategy, NoReducer())
     # The circuit can be satisfied (out=false can be achieved), so just check result exists
     @test result isa Result
 end

@@ -9,7 +9,7 @@ using BooleanInference: DM_NONE, DM_0, DM_1, DM_BOTH, is_fixed, has0, has1
         # BitVector layout: [00, 10, 01, 11] = [false, false, false, true]
         tensor_data = BitVector([false, false, false, true])
 
-        static = setup_problem(2, [[1, 2]], [tensor_data]; precontract=false)
+        static = setup_problem(2, [[1, 2]], [tensor_data])
         buffer = SolverBuffer(static)
 
         # Initially both variables are unfixed
@@ -29,7 +29,7 @@ using BooleanInference: DM_NONE, DM_0, DM_1, DM_BOTH, is_fixed, has0, has1
         # BitVector layout: [00, 10, 01, 11] = [false, true, true, true]
         tensor_data = BitVector([false, true, true, true])
 
-        static = setup_problem(2, [[1, 2]], [tensor_data]; precontract=false)
+        static = setup_problem(2, [[1, 2]], [tensor_data])
         buffer = SolverBuffer(static)
 
         doms = init_doms(static)
@@ -47,7 +47,7 @@ using BooleanInference: DM_NONE, DM_0, DM_1, DM_BOTH, is_fixed, has0, has1
         # BitVector layout: [00, 10, 01, 11] = [true, false, true, true]
         tensor_data = BitVector([true, false, true, true])
 
-        static = setup_problem(2, [[1, 2]], [tensor_data]; precontract=false)
+        static = setup_problem(2, [[1, 2]], [tensor_data])
         buffer = SolverBuffer(static)
 
         # Fix x1 = 1
@@ -65,7 +65,7 @@ using BooleanInference: DM_NONE, DM_0, DM_1, DM_BOTH, is_fixed, has0, has1
         # AND gate with initial contradiction: x1 must be 0 but AND requires both 1
         tensor_data = BitVector([false, false, false, true])  # AND: only (1,1)
 
-        static = setup_problem(2, [[1, 2]], [tensor_data]; precontract=false)
+        static = setup_problem(2, [[1, 2]], [tensor_data])
         buffer = SolverBuffer(static)
 
         # Fix x1 = 0 (contradicts the AND constraint)
@@ -82,7 +82,7 @@ using BooleanInference: DM_NONE, DM_0, DM_1, DM_BOTH, is_fixed, has0, has1
         # Equality: (0,0)=true, (1,0)=false, (0,1)=false, (1,1)=true
         eq_tensor = BitVector([true, false, false, true])
 
-        static = setup_problem(3, [[1, 2], [2, 3]], [eq_tensor, eq_tensor]; precontract=false)
+        static = setup_problem(3, [[1, 2], [2, 3]], [eq_tensor, eq_tensor])
         buffer = SolverBuffer(static)
 
         # Fix x1 = 1
@@ -102,7 +102,7 @@ using BooleanInference: DM_NONE, DM_0, DM_1, DM_BOTH, is_fixed, has0, has1
         # Table: (0,0)=false, (1,0)=true, (0,1)=true, (1,1)=false
         xor_tensor = BitVector([false, true, true, false])
 
-        static = setup_problem(2, [[1, 2]], [xor_tensor]; precontract=false)
+        static = setup_problem(2, [[1, 2]], [xor_tensor])
         buffer = SolverBuffer(static)
 
         doms = init_doms(static)
@@ -117,7 +117,7 @@ using BooleanInference: DM_NONE, DM_0, DM_1, DM_BOTH, is_fixed, has0, has1
         # XOR with x1 fixed to 1 should propagate x2 = 0
         xor_tensor = BitVector([false, true, true, false])
 
-        static = setup_problem(2, [[1, 2]], [xor_tensor]; precontract=false)
+        static = setup_problem(2, [[1, 2]], [xor_tensor])
         buffer = SolverBuffer(static)
 
         doms = init_doms(static)
@@ -134,7 +134,7 @@ using BooleanInference: DM_NONE, DM_0, DM_1, DM_BOTH, is_fixed, has0, has1
         # BitVector layout: [0, 1] = [false, true]
         unit_tensor = BitVector([false, true])
 
-        static = setup_problem(1, [[1]], [unit_tensor]; precontract=false)
+        static = setup_problem(1, [[1]], [unit_tensor])
         buffer = SolverBuffer(static)
 
         doms = init_doms(static)
@@ -147,7 +147,7 @@ using BooleanInference: DM_NONE, DM_0, DM_1, DM_BOTH, is_fixed, has0, has1
     @testset "Empty initial touched - no propagation" begin
         tensor_data = BitVector([false, false, false, true])
 
-        static = setup_problem(2, [[1, 2]], [tensor_data]; precontract=false)
+        static = setup_problem(2, [[1, 2]], [tensor_data])
         buffer = SolverBuffer(static)
 
         doms = init_doms(static)
@@ -162,7 +162,7 @@ using BooleanInference: DM_NONE, DM_0, DM_1, DM_BOTH, is_fixed, has0, has1
         # x1 AND x2 = 1, x2 AND x3 = 1
         and_tensor = BitVector([false, false, false, true])
 
-        static = setup_problem(3, [[1, 2], [2, 3]], [and_tensor, and_tensor]; precontract=false)
+        static = setup_problem(3, [[1, 2], [2, 3]], [and_tensor, and_tensor])
         buffer = SolverBuffer(static)
 
         doms = init_doms(static)
@@ -180,7 +180,7 @@ using BooleanInference: DM_NONE, DM_0, DM_1, DM_BOTH, is_fixed, has0, has1
         must_be_1 = BitVector([false, true])
         must_be_0 = BitVector([true, false])
 
-        static = setup_problem(1, [[1], [1]], [must_be_1, must_be_0]; precontract=false)
+        static = setup_problem(1, [[1], [1]], [must_be_1, must_be_0])
         buffer = SolverBuffer(static)
 
         doms = init_doms(static)

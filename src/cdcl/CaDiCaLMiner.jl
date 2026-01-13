@@ -169,20 +169,22 @@ function mine_learned(cnf::Vector{<:AbstractVector{<:Integer}};
 end
 
 """
-    solve_and_mine(cnf; nvars=infer_nvars(cnf), conflict_limit=0, max_len=3, max_lbd=0)
-        -> (status::Symbol, model::Vector{Int32}, learned::Vector{Vector{Int32}})
+    cadical_solve_and_mine(cnf; nvars=infer_nvars(cnf), conflict_limit=0, max_len=3, max_lbd=0)
+        -> (status::Symbol, model::Vector{Int32}, learned::Vector{Vector{Int32}}, stats::CDCLStats)
 
-Solve CNF (or stop early if `conflict_limit > 0`) and return:
+Solve CNF using CaDiCaL (or stop early if `conflict_limit > 0`) and return:
 - `status`: `:sat`, `:unsat`, or `:unknown`
 - `model`: length `nvars`, encoding assignment as ±var_id, or 0 if unknown
 - `learned`: learned clauses collected during the run
+- `stats`: CDCLStats with decisions, conflicts, propagations
 
 Notes:
 - If `conflict_limit <= 0`, CaDiCaL may solve to completion.
 - If status is `:unknown`, `model` may be all zeros (by current C++ implementation).
 - `max_lbd` is accepted for API compatibility but currently ignored.
+- This is an alias that uses CaDiCaL backend (not Kissat)
 """
-function solve_and_mine(cnf::Vector{<:AbstractVector{<:Integer}};
+function cadical_solve_and_mine(cnf::Vector{<:AbstractVector{<:Integer}};
     nvars::Integer=infer_nvars(cnf),
     conflict_limit::Integer=0,
     max_len::Integer=3,
@@ -398,4 +400,207 @@ function solve_with_decisions(cnf::Vector{<:AbstractVector{<:Integer}};
     Libc.free(out_model_ptr[])
 
     return status, decision_vars, Int(out_conflicts[]), model
+end
+
+# -----------------------------
+# Rich Feedback for Dual-Process SAT (Phase 1 Implementation)
+# -----------------------------
+
+"""
+    CDCLFeedback
+
+Rich feedback from CDCL solver to guide System 2.
+
+This struct contains all information needed for S1 → S2 learning:
+- UNSAT core: which assumptions caused conflict
+- Learned clauses: high-quality clauses discovered
+- Metrics: conflicts, propagations, average LBD, etc.
+"""
+struct CDCLFeedback
+    status::Symbol                          # :sat, :unsat, :unknown
+    model::Vector{Int32}                    # If SAT (±var encoding)
+
+    # UNSAT core (which assumptions caused conflict)
+    unsat_core::Vector{Int}                 # Subset of assumptions
+
+    # High-quality learned clauses
+    learned_clauses::Vector{Vector{Int}}    # Short, low-LBD clauses
+    learned_lbds::Vector{Int}              # LBD for each learned clause
+
+    # CDCL solving metrics
+    decisions::Int
+    conflicts::Int
+    propagations::Int
+    restarts::Int
+    avg_lbd::Float64                        # Average LBD during solving
+    max_decision_level::Int                 # Deepest backjump
+end
+
+function Base.show(io::IO, fb::CDCLFeedback)
+    print(io, "CDCLFeedback(:$(fb.status), conflicts=$(fb.conflicts), avg_lbd=$(round(fb.avg_lbd, digits=2)))")
+end
+
+# C API wrapper
+function _ccall_solve_with_assumptions(
+    in_lits::Vector{Int32}, in_offsets::Vector{Int32},
+    nclauses::Int32, nvars::Int32,
+    assumptions::Vector{Int32},
+    conflict_limit::Int32,
+    max_learned_len::Int32, max_learned_lbd::Int32
+)
+    # Output references
+    out_model_ptr = Ref{Ptr{Int32}}(C_NULL)
+    out_failed_ptr = Ref{Ptr{Int32}}(C_NULL)
+    out_n_failed = Ref{Int32}(0)
+
+    out_learned_lits_ptr = Ref{Ptr{Int32}}(C_NULL)
+    out_learned_offs_ptr = Ref{Ptr{Int32}}(C_NULL)
+    out_n_learned = Ref{Int32}(0)
+    out_n_learned_lits = Ref{Int32}(0)
+    out_learned_lbds_ptr = Ref{Ptr{Int32}}(C_NULL)
+
+    out_decisions = Ref{Int64}(0)
+    out_conflicts = Ref{Int64}(0)
+    out_propagations = Ref{Int64}(0)
+    out_restarts = Ref{Int64}(0)
+    out_avg_lbd = Ref{Float64}(0.0)
+    out_max_level = Ref{Int32}(0)
+
+    res = ccall((:cadical_solve_with_assumptions, lib), Cint,
+        (Ptr{Int32}, Ptr{Int32}, Int32, Int32,
+         Ptr{Int32}, Int32, Int32, Int32, Int32,
+         Ref{Ptr{Int32}},
+         Ref{Ptr{Int32}}, Ref{Int32},
+         Ref{Ptr{Int32}}, Ref{Ptr{Int32}}, Ref{Int32}, Ref{Int32},
+         Ref{Ptr{Int32}},
+         Ref{Int64}, Ref{Int64}, Ref{Int64}, Ref{Int64},
+         Ref{Float64}, Ref{Int32}),
+        pointer(in_lits), pointer(in_offsets), nclauses, nvars,
+        pointer(assumptions), Int32(length(assumptions)), conflict_limit, max_learned_len, max_learned_lbd,
+        out_model_ptr,
+        out_failed_ptr, out_n_failed,
+        out_learned_lits_ptr, out_learned_offs_ptr, out_n_learned, out_n_learned_lits,
+        out_learned_lbds_ptr,
+        out_decisions, out_conflicts, out_propagations, out_restarts,
+        out_avg_lbd, out_max_level
+    )
+
+    return (res, out_model_ptr, out_failed_ptr, out_n_failed,
+            out_learned_lits_ptr, out_learned_offs_ptr, out_n_learned, out_n_learned_lits,
+            out_learned_lbds_ptr,
+            out_decisions, out_conflicts, out_propagations, out_restarts,
+            out_avg_lbd, out_max_level)
+end
+
+"""
+    solve_with_assumptions(cnf, assumptions; nvars, conflict_limit=0, max_learned_len=10, max_learned_lbd=10)
+        -> CDCLFeedback
+
+Solve CNF under assumptions and return rich feedback for System 2 learning.
+
+This is the core S1 → S2 communication interface. System 2 proposes a cube (assumptions),
+and System 1 (CDCL) returns detailed feedback about why it succeeded or failed.
+
+# Arguments
+- `cnf`: Vector of clauses
+- `assumptions`: Vector of literals to assume (e.g., cube from S2)
+- `nvars`: Number of variables (inferred if not provided)
+- `conflict_limit`: Conflict limit for probing (0 = unlimited, solve to completion)
+- `max_learned_len`: Maximum length of learned clauses to return
+- `max_learned_lbd`: Maximum LBD of learned clauses to return
+
+# Returns
+- `CDCLFeedback` with status, model, UNSAT core, learned clauses, and metrics
+- Status can be `:sat`, `:unsat`, or `:unknown` (reached conflict limit)
+
+# Example
+```julia
+# S2 proposes cube
+cube = [1, -5, 7]
+
+# Probing with conflict limit
+feedback = solve_with_assumptions(cnf, cube; conflict_limit=5000, max_learned_lbd=5)
+
+if feedback.status == :unsat
+    # S2 learns from failure
+    println("UNSAT core: ", feedback.unsat_core)  # e.g., [1, 7]
+    println("Avg LBD: ", feedback.avg_lbd)        # e.g., 8.3 (hard region)
+elseif feedback.status == :unknown
+    # Reached conflict limit, learned clauses still useful
+    println("Probing stopped at", feedback.conflicts, " conflicts")
+    println("Learned", length(feedback.learned_clauses), " clauses")
+end
+```
+"""
+function solve_with_assumptions(
+    cnf::Vector{<:AbstractVector{<:Integer}},
+    assumptions::Vector{<:Integer};
+    nvars::Integer=infer_nvars(cnf),
+    conflict_limit::Integer=0,
+    max_learned_len::Integer=10,
+    max_learned_lbd::Integer=10
+)
+    in_lits, in_offsets = flatten_cnf(cnf)
+    nclauses = Int32(length(cnf))
+    assumptions_i32 = Int32.(assumptions)
+
+    (res, out_model_ptr, out_failed_ptr, out_n_failed,
+     out_learned_lits_ptr, out_learned_offs_ptr, out_n_learned, out_n_learned_lits,
+     out_learned_lbds_ptr,
+     out_decisions, out_conflicts, out_propagations, out_restarts,
+     out_avg_lbd, out_max_level) = _ccall_solve_with_assumptions(
+        in_lits, in_offsets, nclauses, Int32(nvars),
+        assumptions_i32, Int32(conflict_limit),
+        Int32(max_learned_len), Int32(max_learned_lbd)
+    )
+
+    status = res == 10 ? :sat : res == 20 ? :unsat : :unknown
+
+    # Extract model
+    model_view = unsafe_wrap(Vector{Int32}, out_model_ptr[], Int(nvars); own=false)
+    model = copy(model_view)
+
+    # Extract UNSAT core (failed assumptions)
+    n_failed = Int(out_n_failed[])
+    if n_failed > 0
+        failed_view = unsafe_wrap(Vector{Int32}, out_failed_ptr[], n_failed; own=false)
+        unsat_core = Int.(copy(failed_view))
+    else
+        unsat_core = Int[]
+    end
+
+    # Extract learned clauses
+    n_learned = Int(out_n_learned[])
+    n_learned_lits = Int(out_n_learned_lits[])
+    if n_learned > 0
+        offs_view = unsafe_wrap(Vector{Int32}, out_learned_offs_ptr[], n_learned + 1; own=false)
+        lits_view = unsafe_wrap(Vector{Int32}, out_learned_lits_ptr[], n_learned_lits; own=false)
+        lbds_view = unsafe_wrap(Vector{Int32}, out_learned_lbds_ptr[], n_learned; own=false)
+
+        learned_clauses = unflatten_cnf(copy(lits_view), copy(offs_view))
+        learned_lbds = Int.(copy(lbds_view))
+    else
+        learned_clauses = Vector{Vector{Int}}()
+        learned_lbds = Int[]
+    end
+
+    feedback = CDCLFeedback(
+        status, model,
+        unsat_core,
+        learned_clauses, learned_lbds,
+        Int(out_decisions[]), Int(out_conflicts[]),
+        Int(out_propagations[]), Int(out_restarts[]),
+        Float64(out_avg_lbd[]), Int(out_max_level[])
+    )
+
+    # Free C buffers
+    Libc.free(out_model_ptr[])
+    n_failed > 0 && Libc.free(out_failed_ptr[])
+    if n_learned > 0
+        Libc.free(out_learned_lits_ptr[])
+        Libc.free(out_learned_offs_ptr[])
+        Libc.free(out_learned_lbds_ptr[])
+    end
+
+    return feedback
 end

@@ -8,7 +8,7 @@ using BooleanInference
 using OptimalBranchingCore
 # using Gurobi
 
-const env = Gurobi.Env()
+# const env = Gurobi.Env()
 
 result_dir = resolve_results_dir("factoring")
 
@@ -20,10 +20,10 @@ configs = [
     # FactoringConfig(8, 8),
     # FactoringConfig(10, 10),
     # FactoringConfig(12, 12),
-    # FactoringConfig(14, 14),
+    FactoringConfig(14, 14),
     # FactoringConfig(16, 16),
     # FactoringConfig(18, 18),
-    FactoringConfig(20, 20),
+    # FactoringConfig(20, 20),
     # FactoringConfig(22, 22),
 ]
 
@@ -57,30 +57,38 @@ for path in paths
     # times, branches, _ = benchmark_dataset(FactoringProblem, path; solver=XSATSolver(csat_path=joinpath(dirname(@__DIR__), "artifacts", "bin", "csat"), timeout=300.0), verify=true, save_result=result_dir)
 end
 
-inst = FactoringInstance(16, 16, 3363471157)  # p, q 是可选的正确答案
+inst = FactoringInstance(22,22,11290185688783)
 # ========================================
-# 方法1: BooleanInference Solver (TN-based)
+# method 1: BooleanInference Solver (TN-based)
 # ========================================
-solver = Solvers.BI(selector=MinGammaSelector(3, 3), show_stats=true)
+solver = Solvers.BI(selector=MostOccurrenceSelector(3, 4), set_cover_solver=GreedyMerge(), show_stats=true)
 result = solve_instance(FactoringProblem, inst, solver)
 println("BI Result: $result")
 
 # ========================================
-# 方法2: Kissat (CDCL SAT solver)
+# method 2: Kissat (CDCL SAT solver)
 # ========================================
 solver = Solvers.Kissat(timeout=60.0, quiet=false)
-result = solve_instance(FactoringProblem, inst, solver)
-println("Kissat Result: status=$(result.status), decisions=$(result.decisions)")
+result2 = solve_instance(FactoringProblem, inst, solver)
+println("Kissat Result: status=$(result2.status), decisions=$(result2.decisions)")
 
 # ========================================
-# 方法3: Minisat
+# method 3: Minisat
 # ========================================
 solver = Solvers.Minisat(timeout=60.0, quiet=false)
-result = solve_instance(FactoringProblem, inst, solver)
-println("Minisat Result: status=$(result.status), decisions=$(result.decisions)")
+result3 = solve_instance(FactoringProblem, inst, solver)
+println("Minisat Result: status=$(result3.status), decisions=$(result3.decisions)")
+
 # ========================================
-# 方法4: Cube and Conquer (march_cu + kissat)
+# method 4: CryptoMiniSat
 # ========================================
-solver = Solvers.MarchCu(timeout=60.0)
-result = solve_instance(FactoringProblem, inst, solver)
-println("MarchCu Result: status=$(result.status), cubes/decisions=$(result.decisions)")
+solver = Solvers.CryptoMiniSat(timeout=60.0, quiet=false)
+result4 = solve_instance(FactoringProblem, inst, solver)
+println("CryptoMiniSat Result: status=$(result4.status), decisions=$(result4.decisions)")
+
+# ========================================
+# method 5: Cube and Conquer (march_cu + kissat)
+# ========================================
+solver = Solvers.CnC()
+result4 = solve_instance(FactoringProblem, inst, solver)
+println("MarchCu Result: status=$(result4.status), cubes/decisions=$(result4.decisions)")

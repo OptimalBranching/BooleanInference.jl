@@ -45,6 +45,13 @@ include("branching/cubing.jl")
 include("core/knuth_estimator.jl")
 
 include("cdcl/KissatSolver.jl")
+include("cdcl/CaDiCaLMiner.jl")
+
+# CDCL-Guided Search
+include("branching/adaptive_state.jl")
+include("branching/guided.jl")
+include("branching/learned_analysis.jl")
+include("branching/learned_tensor_analysis.jl")
 
 include("interface.jl")
 include("interface_cnc.jl")
@@ -104,6 +111,22 @@ export solve_2sat, is_2sat_reducible
 export solve_and_mine, solve_cnf, CDCLStats  # Kissat backend
 export primal_graph
 export circuit_to_cnf, tn_to_cnf, tn_to_cnf_with_doms, num_tn_vars
+
+# CDCL with assumptions
+export CDCLFeedback, solve_with_assumptions
+
+# CDCL-Guided Search
+export CubeStrategy, RegionBasedCubes, ConnectivityCubes
+export AdaptiveState, update_from_cdcl_feedback!, print_adaptive_stats
+export CDCLGuidedResult, solve_with_cdcl_guidance, solve_factoring_with_cdcl_guidance
+
+# Learned Clause Analysis
+export LearnedClauseStats, analyze_learned_clauses, print_learned_stats
+export extract_implications, find_variable_clusters, print_variable_clusters
+
+# Learned Clause vs Tensor Network Analysis
+export TensorNetworkMapping, analyze_learned_in_tensor_network, print_tensor_network_analysis
+export analyze_tensor_connectivity, analyze_clause_novelty
 
 # Cube-and-Conquer
 export AbstractCutoffStrategy, DepthCutoff, VarsCutoff, RatioCutoff, DynamicCutoff, MarchCutoff, CubeLimitCutoff

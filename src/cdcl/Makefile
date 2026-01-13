@@ -16,8 +16,10 @@ endif
 
 all: $(OUTPUT)
 
-$(OUTPUT): my_cadical.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -o $@ $< $(LIBS)
+SRCS = my_cadical.cpp ../../deps/cadical/contrib/cadical_assumptions.cpp
+
+$(OUTPUT): $(SRCS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -o $@ $(SRCS) $(LIBS)
 
 clean:
 	rm -f $(OUTPUT)
