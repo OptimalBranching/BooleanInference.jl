@@ -19,6 +19,7 @@ struct SolverBuffer
     scratch_doms::Vector{DomainMask}  # Temporary domain storage for propagation
     branching_cache::Dict{Clause{UInt64},Float64}  # Cache measure values for branching configurations
     connection_scores::Vector{Float64}
+    scratch_vars::Vector{Int}     # Reusable buffer for variable lists
 end
 
 function SolverBuffer(cn::ConstraintNetwork)
@@ -29,7 +30,8 @@ function SolverBuffer(cn::ConstraintNetwork)
         falses(n_tensors),
         Vector{DomainMask}(undef, n_vars),
         Dict{Clause{UInt64},Float64}(),
-        zeros(Float64, n_vars)
+        zeros(Float64, n_vars),
+        sizehint!(Int[], n_vars)
     )
 end
 

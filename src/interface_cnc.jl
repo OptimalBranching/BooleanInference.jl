@@ -13,7 +13,7 @@ Generate cubes for a factoring problem using Cube-and-Conquer.
 - `N::Int`: Number to factor
 
 # Keyword Arguments
-- `cutoff::AbstractCutoffStrategy`: When to emit cubes (default: DepthCutoff(10))
+- `cutoff::AbstractCutoffStrategy`: When to emit cubes (default: RatioCutoff(0.3))
 - `bsconfig::BranchingStrategy`: Branching configuration
 - `reducer::AbstractReducer`: Reduction strategy (default: GammaOneReducer)
 - `output_file::String`: If provided, write cubes to this file in iCNF format
@@ -30,7 +30,7 @@ write_cubes_icnf(res, "cubes.icnf")
 """
 function generate_factoring_cubes(
     n::Int, m::Int, N::Int;
-    cutoff::AbstractCutoffStrategy=DepthCutoff(10),
+    cutoff::AbstractCutoffStrategy=RatioCutoff(0.3),
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
         selector=LookaheadSelector(3, 4),
@@ -45,12 +45,12 @@ function generate_factoring_cubes(
     circuit_sat = CircuitSAT(reduction.circuit.circuit; use_constraints=true)
     tn_problem = setup_from_sat(circuit_sat)
 
-    @info "Cube generation" n m N nvars=length(tn_problem.doms) cutoff
+    @info "Cube generation" n m N nvars = length(tn_problem.doms) cutoff
 
     # Generate cubes
     result = generate_cubes!(tn_problem, bsconfig, reducer, cutoff)
 
-    @info "Cube generation complete" n_cubes=result.n_cubes n_refuted=result.n_refuted
+    @info "Cube generation complete" n_cubes = result.n_cubes n_refuted = result.n_refuted
 
     # Write to file if requested
     if !isnothing(output_file)
@@ -77,7 +77,7 @@ Generate cubes for a CNF problem using Cube-and-Conquer.
 """
 function generate_cnf_cubes(
     cnf::ProblemReductions.CNF;
-    cutoff::AbstractCutoffStrategy=DepthCutoff(10),
+    cutoff::AbstractCutoffStrategy=RatioCutoff(0.3),
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
         selector=MostOccurrenceSelector(3, 4),
@@ -155,13 +155,13 @@ function solve_cubes_with_cdcl(cubes::Vector{Cube}, cnf::Vector{Vector{Int}}; nv
 
         if status == :sat
             stats = CubesSolveStats(cubes_solved, idx, total_decisions, total_conflicts,
-                                   total_time, per_cube_times, per_cube_decisions, per_cube_conflicts)
+                total_time, per_cube_times, per_cube_decisions, per_cube_conflicts)
             return (:sat, model, stats)
         end
     end
 
     stats = CubesSolveStats(cubes_solved, 0, total_decisions, total_conflicts,
-                           total_time, per_cube_times, per_cube_decisions, per_cube_conflicts)
+        total_time, per_cube_times, per_cube_decisions, per_cube_conflicts)
     return (:unsat, Int32[], stats)
 end
 
@@ -180,7 +180,7 @@ This is an end-to-end function that:
 - `N::Int`: Number to factor
 
 # Keyword Arguments
-- `cutoff::AbstractCutoffStrategy`: When to emit cubes (default: DynamicCutoff(0.65, 0.01))
+- `cutoff::AbstractCutoffStrategy`: When to emit cubes (default: RatioCutoff(0.3))
 - `bsconfig::BranchingStrategy`: Branching configuration
 - `reducer::AbstractReducer`: Reduction strategy
 
@@ -189,14 +189,15 @@ This is an end-to-end function that:
 """
 function solve_factoring_cnc(
     n::Int, m::Int, N::Int;
-    cutoff::AbstractCutoffStrategy=MarchCutoff(),
+    cutoff::AbstractCutoffStrategy=ProductCutoff(10000),
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=LookaheadSelector(3, 4, 100),
+        selector=MostOccurrenceSelector(3, 4),
         measure=NumUnfixedTensors(),
         set_cover_solver=GreedyMerge()
     ),
-    reducer::AbstractReducer=GammaOneReducer(1)
+    reducer::AbstractReducer=NoReducer()
+    # reducer::AbstractReducer=GammaOneReducer(100)
 )
     # Step 1: Setup problem
     reduction = reduceto(CircuitSAT, Factoring(n, m, N))
@@ -209,29 +210,29 @@ function solve_factoring_cnc(
     # Target variables: p and q factors
     target_vars = [q_vars; p_vars]
 
-    @info "Cube-and-Conquer setup" n m N nvars=length(tn_problem.doms) target_nvars=length(target_vars) cutoff
+    @info "Cube-and-Conquer setup" n m N nvars = length(tn_problem.doms) target_nvars = length(target_vars) cutoff
 
     # Step 2: Generate cubes
     t_cube = @elapsed cube_result = generate_cubes!(tn_problem, bsconfig, reducer, cutoff; target_vars)
 
-    avg_lits = isempty(cube_result.cubes) ? 0.0 :
-        sum(c -> length(c.literals), cube_result.cubes) / length(cube_result.cubes)
+    avg_lits = isempty(cube_result.cubes) ? 0.0 : sum(c -> length(c.literals), cube_result.cubes) / length(cube_result.cubes)
 
-    @info "Cubing complete" n_cubes=cube_result.n_cubes avg_literals=round(avg_lits, digits=0) time=round(t_cube, digits=2)
+    @info "Cubing complete" n_cubes = cube_result.n_cubes avg_literals = round(avg_lits, digits=0) time = round(t_cube, digits=2)
 
-    # Step 3: Convert to CNF for CDCL
-    cnf, nvars = tn_to_cnf_with_doms(tn_problem.static, tn_problem.doms)
+    # Step 3: Convert to CNF for CDCL (only structure, no fixed vars - cube provides decisions)
+    cnf = tn_to_cnf(tn_problem.static)
+    nvars = num_tn_vars(tn_problem.static)
 
     # Step 4: Solve cubes with CDCL
     status, model, solve_stats = solve_cubes_with_cdcl(cube_result.cubes, cnf; nvars=nvars)
 
     # Build CnCStats
     avg_decisions = solve_stats.cubes_solved > 0 ?
-        solve_stats.total_decisions / solve_stats.cubes_solved : 0.0
+                    solve_stats.total_decisions / solve_stats.cubes_solved : 0.0
     avg_conflicts = solve_stats.cubes_solved > 0 ?
-        solve_stats.total_conflicts / solve_stats.cubes_solved : 0.0
+                    solve_stats.total_conflicts / solve_stats.cubes_solved : 0.0
     avg_solve_time = solve_stats.cubes_solved > 0 ?
-        solve_stats.total_time / solve_stats.cubes_solved : 0.0
+                     solve_stats.total_time / solve_stats.cubes_solved : 0.0
 
     cnc_stats = CnCStats(
         cube_result.n_cubes,
@@ -247,7 +248,7 @@ function solve_factoring_cnc(
         solve_stats.total_time
     )
 
-    @info "CDCL complete" status cubes_solved=solve_stats.cubes_solved avg_decisions=round(avg_decisions, digits=1) avg_conflicts=round(avg_conflicts, digits=1) time=round(solve_stats.total_time, digits=2)
+    @info "CDCL complete" status cubes_solved = solve_stats.cubes_solved avg_decisions = round(avg_decisions, digits=1) avg_conflicts = round(avg_conflicts, digits=1) time = round(solve_stats.total_time, digits=2)
 
     if status != :sat
         cnc_result = CnCResult(status, Int32[], cube_result, cnc_stats)

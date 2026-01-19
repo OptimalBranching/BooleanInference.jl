@@ -22,12 +22,13 @@ end
 @testset "slice_tensor basic via ConstraintNetwork" begin
     # Create a simple problem to test slicing through ConstraintNetwork API
     # Test 1D tensor (single boolean variable)
-    T1 = one(Tropical{Float64})
-    T0 = zero(Tropical{Float64})
+    # T1 = one(Tropical{Float64})
+    # T0 = zero(Tropical{Float64})
+    T1 = true; T0 = false
 
     # Create a simple problem: 1 variable, 1 tensor
     tensor_data = BitVector([true, false])  # Allows x=0, forbids x=1
-    static = setup_problem(1, [[1]], [tensor_data]; precontract=false)
+    static = setup_problem(1, [[1]], [tensor_data])
     tensor = static.tensors[1]
 
     # Allow both values - 2D output with 1 dimension
@@ -51,13 +52,12 @@ end
 end
 
 @testset "slice_tensor 2D via ConstraintNetwork" begin
-    T1 = one(Tropical{Float64})
-    T0 = zero(Tropical{Float64})
+    T1 = true; T0 = false
 
     # Create a 2-variable problem
     # Tensor data: (0,0)=T1, (1,0)=T1, (0,1)=T1, (1,1)=T0
     tensor_data = BitVector([true, true, true, false])
-    static = setup_problem(2, [[1, 2]], [tensor_data]; precontract=false)
+    static = setup_problem(2, [[1, 2]], [tensor_data])
     tensor = static.tensors[1]
 
     # Allow both variables - 2×2 output
@@ -88,12 +88,11 @@ end
 end
 
 @testset "slice_tensor 3D via ConstraintNetwork" begin
-    T1 = one(Tropical{Float64})
-    T0 = zero(Tropical{Float64})
+    T1 = true; T0 = false
 
     # 3-variable tensor
     tensor_data = BitVector([true, true, false, true, true, false, true, false])
-    static = setup_problem(3, [[1, 2, 3]], [tensor_data]; precontract=false)
+    static = setup_problem(3, [[1, 2, 3]], [tensor_data])
     tensor = static.tensors[1]
 
     # Allow all - 2×2×2 output
@@ -126,12 +125,11 @@ end
 end
 
 @testset "contract_tensors" begin
-    T1 = one(Tropical{Float64})
-    T0 = zero(Tropical{Float64})
+    T1 = true; T0 = false
 
     # Create AND tensor: y = x1 & x2
     # Manually create the tensor array for contraction testing
-    T_and = Array{Tropical{Float64}}(undef, 2, 2, 2)
+    T_and = Array{typeof(T1)}(undef, 2, 2, 2)
     for x1 in 0:1, x2 in 0:1, y in 0:1
         if y == (x1 & x2)
             T_and[x1+1, x2+1, y+1] = T1
@@ -141,7 +139,7 @@ end
     end
 
     # Create NOT tensor: y = !x
-    T_not = Array{Tropical{Float64}}(undef, 2, 2)
+    T_not = Array{typeof(T1)}(undef, 2, 2)
     for x in 0:1, y in 0:1
         if y != x
             T_not[x+1, y+1] = T1
@@ -156,5 +154,5 @@ end
 
     # Contract tensors using the API
     result = contract_tensors([sliced_and, T_not], Vector{Int}[Int[1, 2], Int[4, 2]], Int[1, 2, 4])
-    @test result[2, 2, 1] == zero(Tropical{Float64})
+    @test result[2, 2, 1] == T0
 end

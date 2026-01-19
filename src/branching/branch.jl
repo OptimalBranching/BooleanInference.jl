@@ -121,40 +121,56 @@ end
 
 Exhaustively apply gamma=1 reductions until saturation.
 
+**Optimized Algorithm:**
+1. Modify `doms` in-place (no copying since γ=1 reductions are safe)
+2. Use single TNProblem throughout
+3. Sort once per outer iteration, continue scanning without re-sort
+4. Early termination when no forced vars possible
+
 Returns:
-- `new_doms`: The reduced domain state
-- `assignments`: Vector of (clause, variables, old_doms, new_doms) tuples for each reduction applied
-  - old_doms/new_doms allow extracting propagated literals
-- `has_contradiction`: Whether a contradiction was encountered
+- `new_doms`: The reduced domain state (same as input `doms`, modified in-place)
+- `assignments`: Empty vector (kept for API compatibility)
+- `has_contradiction`: Whether a contradiction was encountered (should be false for γ=1)
 """
 function reduce_with_gamma_one!(ctx::SearchContext, doms::Vector{DomainMask}, reducer::GammaOneReducer)
-    current_doms = doms
+    # Empty assignments vector for API compatibility
     assignments = Vector{Tuple{Clause, Vector{Int}, Vector{DomainMask}, Vector{DomainMask}}}()
+    
+    # Use a single problem view - doms will be modified in-place
+    problem = TNProblem(ctx.static, doms, ctx.stats, ctx.buffer)
 
-    while true
-        problem = TNProblem(ctx.static, current_doms, ctx.stats, ctx.buffer)
-
-        result = find_gamma_one_region(ctx.region_cache, problem, ctx.config.measure, reducer)
-        isnothing(result) && break
-
-        clauses, variables = result
-        new_doms = probe_branch!(problem, ctx.buffer, current_doms, clauses[1], variables)
-
-        has_contradiction(new_doms) && return (new_doms, assignments, true)
-
-        # Record γ=1 reduction in statistics
-        # direct_vars = variables directly forced by contraction (clause.mask bits)
-        # total_vars_fixed = direct + propagated
-        direct_vars = count_ones(clauses[1].mask)
-        total_vars_fixed = count_unfixed(current_doms) - count_unfixed(new_doms)
-        record_gamma_one!(ctx.stats, direct_vars, total_vars_fixed)
-
-        # Record the assignment with domain snapshots for cube generation
-        push!(assignments, (clauses[1], variables, copy(current_doms), copy(new_doms)))
-        current_doms = copy(new_doms)
+    # Check only the first limit variables (or fewer if not available)
+    sorted_vars = get_sorted_unfixed_vars(problem)
+    isempty(sorted_vars) && return (doms, assignments, false)
+    
+    n_vars = length(sorted_vars)
+    scan_limit = reducer.limit == 0 ? n_vars : min(n_vars, reducer.limit)
+    
+    for scan_pos in 1:scan_limit
+        var_id = sorted_vars[scan_pos]
+        # Skip if variable became fixed (from propagation of earlier reductions)
+        is_fixed(doms[var_id]) && continue
+        
+        result = find_forced_assignment(ctx.region_cache, problem, var_id, ctx.config.measure)
+        
+        if !isnothing(result)
+            clause, variables = result
+            
+            # Record statistics before modification
+            old_unfixed = count_unfixed(doms)
+            
+            # Apply assignment in-place (no copying!)
+            success = apply_assignment_inplace!(problem, ctx.buffer, doms, variables, clause.mask, clause.val)
+            @assert success "Contradiction found when applying assignment"
+            # Record statistics
+            direct_vars = count_ones(clause.mask)
+            total_vars_fixed = old_unfixed - count_unfixed(doms)
+            record_reduction!(ctx.stats, direct_vars, total_vars_fixed - direct_vars)
+            record_reduction_node!(ctx.stats)
+        end
     end
 
-    return (current_doms, assignments, false)
+    return (doms, assignments, false)
 end
 
 # ============================================================================
@@ -250,87 +266,107 @@ end
 """
     _bbsat!(ctx, doms, depth) -> Result
 
-Internal recursive branching function.
+Internal branching function with loop for single-branch cases.
 
 The algorithm proceeds as follows:
 1. Check termination conditions
 2. Apply gamma-1 reductions (if using GammaOneReducer)
 3. Check for CDCL cutoff or 2-SAT subproblem
 4. Select branching variable and compute branches
-5. Recursively solve each branch
+5. If single branch (γ=1): apply and loop (no recursion)
+6. If multi-branch: recursively solve each branch
 """
 function _bbsat!(ctx::SearchContext, doms::Vector{DomainMask}, depth::Int)
-    # Check termination
-    is_solved(ctx, doms) && return Result(true, copy(doms), copy(ctx.stats))
-
-    # Reduction phase
     current_doms = doms
-    if ctx.reducer isa GammaOneReducer
-        reduced_doms, assignments, has_contra = reduce_with_gamma_one!(ctx, doms, ctx.reducer)
-        if has_contra
+    
+    # Main loop - handles single-branch cases without recursion
+    while true
+        # Check termination
+        if is_solved(ctx, current_doms)
+            record_sat_leaf!(ctx.stats)
+            return Result(true, copy(current_doms), copy(ctx.stats))
+        end
+
+        # Reduction phase (modifies current_doms in-place)
+        if ctx.reducer isa GammaOneReducer
+            reduced_doms, _, has_contra = reduce_with_gamma_one!(ctx, current_doms, ctx.reducer)
+            if has_contra
+                record_unsat_leaf!(ctx.stats)
+                return Result(false, DomainMask[], copy(ctx.stats))
+            end
+            current_doms = reduced_doms
+            if is_solved(ctx, current_doms)
+                record_sat_leaf!(ctx.stats)
+                return Result(true, copy(current_doms), copy(ctx.stats))
+            end
+        end
+
+        problem = TNProblem(ctx.static, current_doms, ctx.stats, ctx.buffer)
+
+        # CDCL fallback
+        if should_use_cdcl(ctx, current_doms)
+            return solve_with_cdcl(ctx, current_doms)
+        end
+
+        # 2-SAT detection
+        if is_two_sat(current_doms, ctx.static)
+            solution = solve_2sat(problem)
+            if isnothing(solution)
+                return Result(false, DomainMask[], copy(ctx.stats))
+            end
+            return Result(true, solution, copy(ctx.stats))
+        end
+
+        # Variable selection and branching
+        empty!(ctx.buffer.branching_cache)
+        clauses, variables, gamma, table_info = findbest(ctx.region_cache, problem, ctx.config.measure, ctx.config.set_cover_solver, ctx.config.selector, depth)
+
+        # Record γ, measure, and table size for analysis
+        if !isnothing(gamma)
+            record_gamma!(ctx.stats, gamma)
+            record_measure!(ctx.stats, Float64(measure(problem, ctx.config.measure)))
+            record_table_size!(ctx.stats, table_info.n_configs, table_info.n_vars)
+        end
+
+        if isnothing(clauses)
+            record_unsat_leaf!(ctx.stats)
             return Result(false, DomainMask[], copy(ctx.stats))
         end
-        current_doms = reduced_doms
-        is_solved(ctx, current_doms) && return Result(true, copy(current_doms), copy(ctx.stats))
-    end
 
-    problem = TNProblem(ctx.static, current_doms, ctx.stats, ctx.buffer)
-
-    # CDCL fallback
-    # if should_use_cdcl(ctx, current_doms)
-    #     result = solve_with_cdcl(ctx, current_doms)
-    #     return result
-    # end
-
-    # 2-SAT detection
-    if is_two_sat(current_doms, ctx.static)
-        solution = solve_2sat(problem)
-        if isnothing(solution)
-            return Result(false, DomainMask[], copy(ctx.stats))
+        # Single branch (γ=1): apply and continue loop (no recursion!)
+        if length(clauses) == 1
+            subproblem_doms = probe_branch!(problem, ctx.buffer, current_doms, clauses[1], variables)
+            if has_contradiction(subproblem_doms)
+                record_unsat_leaf!(ctx.stats)
+                return Result(false, DomainMask[], copy(ctx.stats))
+            end
+            record_reduction_node!(ctx.stats)
+            current_doms = copy(subproblem_doms)
+            continue  # Loop instead of recurse
         end
-        return Result(true, solution, copy(ctx.stats))
-    end
 
-    # Variable selection and branching
-    empty!(ctx.buffer.branching_cache)
-    clauses, variables = findbest(ctx.region_cache, problem, ctx.config.measure, ctx.config.set_cover_solver, ctx.config.selector, depth)
+        # Multi-branch: must recurse for each branch
+        record_branching_node!(ctx.stats, length(clauses))
 
-    if isnothing(clauses)
+        @inbounds for i in 1:length(clauses)
+            clause = clauses[i]
+            subproblem_doms = probe_branch!(problem, ctx.buffer, current_doms, clause, variables)
+
+            if has_contradiction(subproblem_doms)
+                record_unsat_leaf!(ctx.stats)
+                continue
+            end
+
+            direct_vars = count_ones(clause.mask)
+            total_vars_fixed = count_unfixed(current_doms) - count_unfixed(subproblem_doms)
+            record_child_explored!(ctx.stats, direct_vars, total_vars_fixed - direct_vars)
+
+            result = _bbsat!(ctx, copy(subproblem_doms), depth + 1)
+            if result.found
+                return result
+            end
+        end
+
         return Result(false, DomainMask[], copy(ctx.stats))
     end
-
-    # Single branch = forced assignment (no branching overhead)
-    if length(clauses) == 1
-        subproblem_doms = probe_branch!(problem, ctx.buffer, current_doms, clauses[1], variables)
-        if has_contradiction(subproblem_doms)
-            return Result(false, DomainMask[], copy(ctx.stats))
-        end
-        return _bbsat!(ctx, copy(subproblem_doms), depth)
-    end
-
-    # Multi-branch: record branch point once, then try each branch
-    record_branch_point!(ctx.stats, length(clauses))
-
-    @inbounds for i in 1:length(clauses)
-        clause = clauses[i]
-        subproblem_doms = probe_branch!(problem, ctx.buffer, current_doms, clause, variables)
-
-        has_contradiction(subproblem_doms) && continue
-
-        # Record this branch exploration
-        # direct_vars = number of variables directly assigned by clause (popcount of mask)
-        # total_vars_fixed = direct + propagated
-        direct_vars = count_ones(clause.mask)
-        total_vars_fixed = count_unfixed(current_doms) - count_unfixed(subproblem_doms)
-        record_branch_explored!(ctx.stats, direct_vars, total_vars_fixed)
-
-        result = _bbsat!(ctx, copy(subproblem_doms), depth + 1)
-        if result.found
-            return result
-        else
-            record_dead_end!(ctx.stats)
-        end
-    end
-
-    return Result(false, DomainMask[], copy(ctx.stats))
 end

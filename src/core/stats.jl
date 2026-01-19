@@ -1,115 +1,244 @@
+"""
+BranchingStats: Statistics for branch-and-bound SAT solving
+
+Node classification (mutually exclusive & exhaustive):
+- Branching nodes: k≥2 children generated
+- Reduction nodes: γ=1, single successor with non-trivial reduction  
+- Terminal nodes: no children (SAT or UNSAT leaves)
+"""
 mutable struct BranchingStats
-    branch_points::Int           # Number of γ>1 branching points
-    gamma_one_count::Int         # Number of γ=1 reductions applied
-    branches_generated::Int      # Total branches generated (sum of branch counts at each point)
-    branches_explored::Int       # Total branches actually explored (THIS is "branches" for comparison)
-    dead_ends::Int               # Branches that led to UNSAT (conflicts/backtrack)
-    direct_vars_by_branches::Int # Direct variables assigned by branching clauses (for avg_vars_per_branch)
-    vars_by_branches::Int        # Variables fixed by γ>1 branches (direct + propagated, for Table 2)
-    vars_by_gamma_one::Int       # Variables fixed by γ=1 reductions (direct + propagated, for Table 2)
-    direct_vars_by_gamma_one::Int # Variables directly forced by γ=1 contraction (NOT by subsequent propagation)
+    # ---- node counts (mutually exclusive) ----
+    total_nodes::Int
+    branching_nodes::Int
+    reduction_nodes::Int
+    terminal_nodes::Int
+
+    # ---- leaf types ----
+    sat_leaves::Int
+    unsat_leaves::Int
+
+    # ---- edges / children ----
+    children_generated::Int
+    children_explored::Int
+
+    # ---- assignments by source ----
+    branch_decision_assignments::Int   # direct vars assigned by branching clause
+    branch_implied_assignments::Int    # vars propagated after branch decision
+
+    reduction_direct_assignments::Int  # direct vars from γ=1 contraction
+    reduction_implied_assignments::Int # vars propagated after γ=1 reduction
+
+    # ---- gamma trace (for γ-landscape analysis) ----
+    gamma_trace::Vector{Float64}       # γ value at each decision point
+
+    # ---- measure trace (for progress tracking) ----
+    measure_trace::Vector{Float64}     # measure value at each decision point
+
+    # ---- table size trace (for overhead analysis) ----
+    table_configs_trace::Vector{Int}   # number of configs in table at each branching
+    table_vars_trace::Vector{Int}      # number of unfixed vars at each branching
 end
 
-BranchingStats() = BranchingStats(0, 0, 0, 0, 0, 0, 0, 0, 0)
+BranchingStats() = BranchingStats(
+    0, 0, 0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    Float64[],
+    Float64[],
+    Int[],
+    Int[]
+)
 
 function reset!(stats::BranchingStats)
-    stats.branch_points = 0
-    stats.gamma_one_count = 0
-    stats.branches_generated = 0
-    stats.branches_explored = 0
-    stats.dead_ends = 0
-    stats.direct_vars_by_branches = 0
-    stats.vars_by_branches = 0
-    stats.vars_by_gamma_one = 0
-    stats.direct_vars_by_gamma_one = 0
+    stats.total_nodes = 0
+    stats.branching_nodes = 0
+    stats.reduction_nodes = 0
+    stats.terminal_nodes = 0
+
+    stats.sat_leaves = 0
+    stats.unsat_leaves = 0
+
+    stats.children_generated = 0
+    stats.children_explored = 0
+
+    stats.branch_decision_assignments = 0
+    stats.branch_implied_assignments = 0
+    stats.reduction_direct_assignments = 0
+    stats.reduction_implied_assignments = 0
+
+    empty!(stats.gamma_trace)
+    empty!(stats.measure_trace)
+    empty!(stats.table_configs_trace)
+    empty!(stats.table_vars_trace)
     return stats
 end
 
 function Base.copy(stats::BranchingStats)
     return BranchingStats(
-        stats.branch_points, stats.gamma_one_count,
-        stats.branches_generated, stats.branches_explored, stats.dead_ends,
-        stats.direct_vars_by_branches, stats.vars_by_branches, stats.vars_by_gamma_one,
-        stats.direct_vars_by_gamma_one
+        stats.total_nodes,
+        stats.branching_nodes,
+        stats.reduction_nodes,
+        stats.terminal_nodes,
+
+        stats.sat_leaves,
+        stats.unsat_leaves,
+
+        stats.children_generated,
+        stats.children_explored,
+
+        stats.branch_decision_assignments,
+        stats.branch_implied_assignments,
+        stats.reduction_direct_assignments,
+        stats.reduction_implied_assignments,
+
+        copy(stats.gamma_trace),
+        copy(stats.measure_trace),
+        copy(stats.table_configs_trace),
+        copy(stats.table_vars_trace)
     )
 end
 
+# ---- computed properties ----
 function Base.getproperty(stats::BranchingStats, name::Symbol)
-    if name === :avg_branching_factor
-        return stats.branch_points > 0 ?
-            stats.branches_generated / stats.branch_points : 0.0
-    elseif name === :avg_branches_per_point
-        return stats.branch_points > 0 ?
-            stats.branches_explored / stats.branch_points : 0.0
+    if name === :avg_gamma
+        return stats.branching_nodes > 0 ?
+            stats.children_generated / stats.branching_nodes : 0.0
     elseif name === :avg_vars_per_branch
-        # Use direct vars only (not propagated) for Table 1
-        return stats.branches_explored > 0 ?
-            stats.direct_vars_by_branches / stats.branches_explored : 0.0
+        return stats.children_explored > 0 ?
+            stats.branch_decision_assignments / stats.children_explored : 0.0
+    elseif name === :total_assignments
+        return stats.branch_decision_assignments + stats.branch_implied_assignments +
+               stats.reduction_direct_assignments + stats.reduction_implied_assignments
+    elseif name === :avg_table_configs
+        trace = getfield(stats, :table_configs_trace)
+        return isempty(trace) ? 0.0 : sum(trace) / length(trace)
+    elseif name === :avg_table_vars
+        trace = getfield(stats, :table_vars_trace)
+        return isempty(trace) ? 0.0 : sum(trace) / length(trace)
+    elseif name === :max_table_configs
+        trace = getfield(stats, :table_configs_trace)
+        return isempty(trace) ? 0 : maximum(trace)
     else
         return getfield(stats, name)
     end
 end
 
 function Base.propertynames(::BranchingStats; private::Bool=false)
-    return (fieldnames(BranchingStats)..., :avg_branching_factor, :avg_branches_per_point, :avg_vars_per_branch)
+    return (fieldnames(BranchingStats)..., :avg_gamma, :avg_vars_per_branch, :total_assignments,
+            :avg_table_configs, :avg_table_vars, :max_table_configs)
 end
 
-@inline function record_branch_point!(stats::BranchingStats, branch_count::Int)
-    stats.branch_points += 1
-    stats.branches_generated += branch_count
+# ============================================================================
+# Recording functions
+# ============================================================================
+
+"""Record a SAT leaf (terminal node, problem solved)"""
+@inline function record_sat_leaf!(stats::BranchingStats)
+    stats.total_nodes += 1
+    stats.terminal_nodes += 1
+    stats.sat_leaves += 1
     return nothing
 end
 
-@inline function record_branch_explored!(stats::BranchingStats, direct_vars::Int=0, total_vars_fixed::Int=0)
-    stats.branches_explored += 1
-    stats.direct_vars_by_branches += direct_vars
-    stats.vars_by_branches += total_vars_fixed
+"""Record an UNSAT leaf (terminal node, conflict/dead-end)"""
+@inline function record_unsat_leaf!(stats::BranchingStats)
+    stats.total_nodes += 1
+    stats.terminal_nodes += 1
+    stats.unsat_leaves += 1
     return nothing
 end
 
-@inline function record_gamma_one!(stats::BranchingStats, direct_vars::Int=0, total_vars_fixed::Int=0)
-    stats.gamma_one_count += 1
-    stats.direct_vars_by_gamma_one += direct_vars
-    stats.vars_by_gamma_one += total_vars_fixed
+"""Record a branching node (k≥2 children)"""
+@inline function record_branching_node!(stats::BranchingStats, k::Int)
+    stats.total_nodes += 1
+    stats.branching_nodes += 1
+    stats.children_generated += k
     return nothing
 end
 
-@inline function record_dead_end!(stats::BranchingStats)
-    stats.dead_ends += 1
+"""Record a reduction-only node (γ=1, single successor)"""
+@inline function record_reduction_node!(stats::BranchingStats)
+    stats.total_nodes += 1
+    stats.reduction_nodes += 1
     return nothing
 end
 
-# === Statistics output ===
+"""Record a child being explored (branch taken)"""
+@inline function record_child_explored!(stats::BranchingStats, direct_vars::Int, implied_vars::Int)
+    stats.children_explored += 1
+    stats.branch_decision_assignments += direct_vars
+    stats.branch_implied_assignments += implied_vars
+    return nothing
+end
+
+"""Record a γ=1 reduction applied"""
+@inline function record_reduction!(stats::BranchingStats, direct_vars::Int, implied_vars::Int)
+    stats.reduction_direct_assignments += direct_vars
+    stats.reduction_implied_assignments += implied_vars
+    return nothing
+end
+
+"""Record γ value at a decision point (for γ-landscape tracing)"""
+@inline function record_gamma!(stats::BranchingStats, gamma::Float64)
+    push!(stats.gamma_trace, gamma)
+    return nothing
+end
+
+"""Record measure value at a decision point (for progress tracking)"""
+@inline function record_measure!(stats::BranchingStats, measure_val::Float64)
+    push!(stats.measure_trace, measure_val)
+    return nothing
+end
+
+"""Record table size at a branching point (for overhead analysis)"""
+@inline function record_table_size!(stats::BranchingStats, n_configs::Int, n_vars::Int)
+    push!(stats.table_configs_trace, n_configs)
+    push!(stats.table_vars_trace, n_vars)
+    return nothing
+end
+
+# ============================================================================
+# Statistics output
+# ============================================================================
 function print_stats_summary(stats::BranchingStats; io::IO = stdout)
     println(io, "=== Branching Statistics ===")
-    println(io, "γ=1 reductions: ", stats.gamma_one_count)
-    println(io, "γ>1 branch points: ", stats.branch_points)
-    println(io, "Branches generated: ", stats.branches_generated)
-    println(io, "Branches explored: ", stats.branches_explored)
-    println(io, "Dead ends (conflicts): ", stats.dead_ends)
-    println(io, "Vars fixed by γ=1 (total): ", stats.vars_by_gamma_one)
-    println(io, "  - Direct by contraction: ", stats.direct_vars_by_gamma_one)
-    println(io, "  - By propagation after: ", stats.vars_by_gamma_one - stats.direct_vars_by_gamma_one)
-    println(io, "Vars fixed by branches: ", stats.vars_by_branches)
+    
+    # Node counts
+    println(io, "--- Nodes (mutually exclusive) ---")
+    println(io, "Total nodes: ", stats.total_nodes)
+    println(io, "  Branching nodes (k≥2): ", stats.branching_nodes)
+    println(io, "  Reduction nodes (γ=1): ", stats.reduction_nodes)
+    println(io, "  Terminal nodes: ", stats.terminal_nodes)
+    println(io, "    - SAT leaves: ", stats.sat_leaves)
+    println(io, "    - UNSAT leaves: ", stats.unsat_leaves)
 
-    if stats.branch_points > 0
-        println(io, "Avg branching factor: ", round(stats.avg_branching_factor, digits=2))
-        println(io, "Avg branches explored per point: ", round(stats.avg_branches_per_point, digits=2))
-    end
-    if stats.branches_explored > 0
-        println(io, "Avg vars per branch: ", round(stats.avg_vars_per_branch, digits=2))
-    end
-
-    # γ=1 ratio (by variable count)
-    total_vars = stats.vars_by_gamma_one + stats.vars_by_branches
-    if total_vars > 0
-        ratio = stats.vars_by_gamma_one / total_vars * 100
-        println(io, "γ=1 vars ratio: ", round(ratio, digits=1), "%")
+    # Edges
+    println(io, "--- Edges / Children ---")
+    println(io, "Children generated: ", stats.children_generated)
+    println(io, "Children explored: ", stats.children_explored)
+    if stats.branching_nodes > 0
+        println(io, "Avg γ (branching factor): ", round(stats.avg_gamma, digits=3))
     end
 
-    # Direct contraction contribution
-    if stats.direct_vars_by_gamma_one > 0
-        direct_ratio = stats.direct_vars_by_gamma_one / total_vars * 100
-        println(io, "Direct contraction ratio: ", round(direct_ratio, digits=1), "%")
+    # Assignments
+    println(io, "--- Assignments ---")
+    println(io, "By branching:")
+    println(io, "  Decision (direct): ", stats.branch_decision_assignments)
+    println(io, "  Implied (propagated): ", stats.branch_implied_assignments)
+    println(io, "By reduction:")
+    println(io, "  Direct: ", stats.reduction_direct_assignments)
+    println(io, "  Implied (propagated): ", stats.reduction_implied_assignments)
+    println(io, "Total assignments: ", stats.total_assignments)
+
+    # Ratios
+    total = stats.total_assignments
+    if total > 0
+        branch_total = stats.branch_decision_assignments + stats.branch_implied_assignments
+        reduction_total = stats.reduction_direct_assignments + stats.reduction_implied_assignments
+        println(io, "--- Ratios ---")
+        println(io, "Branch assignments: ", round(100 * branch_total / total, digits=1), "%")
+        println(io, "Reduction assignments: ", round(100 * reduction_total / total, digits=1), "%")
     end
 end

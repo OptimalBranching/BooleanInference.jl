@@ -130,6 +130,43 @@ function probe_assignment_core!(problem::TNProblem, buffer::SolverBuffer, base_d
     return scratch_doms
 end
 
+"""
+    apply_assignment_inplace!(problem, buffer, doms, vars, mask, value) -> Bool
+
+Apply assignment directly to `doms` in-place and propagate.
+Returns true if successful, false if contradiction found.
+
+Use this when you know the assignment won't cause contradictions
+(e.g., during γ=1 reduction phase) to avoid copying overhead.
+"""
+function apply_assignment_inplace!(problem::TNProblem, buffer::SolverBuffer, doms::Vector{DomainMask}, vars::Vector{Int}, mask::UInt64, value::UInt64)
+    # Initialize propagation queue
+    queue = buffer.touched_tensors
+    empty!(queue)
+    in_queue = buffer.in_queue
+    fill!(in_queue, false)
+
+    # Apply direct assignments
+    @inbounds for (i, var_id) in enumerate(vars)
+        if (mask >> (i - 1)) & 1 == 1
+            new_domain = ((value >> (i - 1)) & 1) == 1 ? DM_1 : DM_0
+            if doms[var_id] != new_domain
+                doms[var_id] = new_domain
+                @inbounds for t_idx in problem.static.v2t[var_id]
+                    if !in_queue[t_idx]
+                        in_queue[t_idx] = true
+                        push!(queue, t_idx)
+                    end
+                end
+            end
+        end
+    end
+
+    # Propagate in-place
+    propagate_core!(problem.static, doms, buffer)
+    return doms[1] != DM_NONE
+end
+
 function propagate_core!(cn::ConstraintNetwork, doms::Vector{DomainMask}, buffer::SolverBuffer)
     queue = buffer.touched_tensors
     in_queue = buffer.in_queue

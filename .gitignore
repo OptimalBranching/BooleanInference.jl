@@ -42,6 +42,9 @@ statprof/
 *.history
 /discs/
 /notes/
+/experiments/results/
+/experiments/plots/
+/docs/paper/
 
 /benchmarks/results/
 *.dylib

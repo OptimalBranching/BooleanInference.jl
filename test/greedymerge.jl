@@ -13,7 +13,7 @@ function create_test_problem()
         BitVector(ones(Bool, 4)),  # All configs satisfy
         BitVector(ones(Bool, 4))
     ]
-    static = BooleanInference.setup_problem(3, dummy_tensors_to_vars, dummy_tensor_data; precontract=false)
+    static = BooleanInference.setup_problem(3, dummy_tensors_to_vars, dummy_tensor_data)
     return TNProblem(static)
 end
 

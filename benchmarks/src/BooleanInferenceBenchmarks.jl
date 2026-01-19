@@ -21,7 +21,7 @@ using JuMP, HiGHS, Gurobi
 using JuMP: MOI
 using Statistics: mean, median
 using BooleanInference
-using BooleanInference: Circuit, Assignment, BooleanExpr
+using BooleanInference: Circuit, Assignment, BooleanExpr, circuit_to_cnf
 using ProblemReductions
 using ProblemReductions: Factoring, CircuitSAT, reduceto
 using ProblemReductions: BoolVar, CNFClause, CNF, Satisfiability
@@ -45,7 +45,7 @@ include("api.jl")        # High-level API
 export SolveStatus, SAT, UNSAT, TIMEOUT, UNKNOWN, ERROR
 export SolveResult, is_sat, is_unsat
 export Solvers
-export load, load_dir, solve, factor, benchmark
+export load, load_dir, solve, factor, factor_batch, benchmark
 
 # Types
 export AbstractBenchmarkProblem, AbstractProblemConfig, AbstractInstance, AbstractSolver
@@ -54,8 +54,8 @@ export CircuitSATProblem, CircuitSATConfig, CircuitSATInstance
 export CNFSATProblem, CNFSATConfig, CNFSATInstance
 
 # Solvers
-export BooleanInferenceSolver, IPSolver, XSATSolver
-export CNFSolver, KissatSolver, MinisatSolver, CNFSolverResult
+export BooleanInferenceSolver, FactoringBenchmarkSolver, IPSolver, XSATSolver
+export CNFSolver, KissatSolver, MinisatSolver, CNFSolverResult, CnCStats, CnCResult
 
 # Legacy (backward compatibility)
 export solve_instance, default_solver, solver_name
@@ -65,5 +65,8 @@ export parse_cnf_file, cnf_instantiation
 export generate_factoring_datasets
 export resolve_data_dir, resolve_results_dir
 export run_cnf_solver
+
+# CNF utilities
+export write_cnf_dimacs, circuit_to_cnf_dimacs
 
 end

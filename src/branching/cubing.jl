@@ -12,70 +12,93 @@
 
 abstract type AbstractCutoffStrategy end
 
-struct DepthCutoff <: AbstractCutoffStrategy
-    max_depth::Int
-end
+"""
+    VarsCutoff <: AbstractCutoffStrategy
 
+Cutoff when the number of unfixed variables drops to or below a threshold.
+This is the standard cutoff used in march_cu (`-n` flag).
+
+# Example
+```julia
+# Stop cubing when <= 50 variables remain unfixed
+cutoff = VarsCutoff(50)
+```
+"""
 struct VarsCutoff <: AbstractCutoffStrategy
     max_free_vars::Int
 end
 
+"""
+    RatioCutoff <: AbstractCutoffStrategy
+
+Cutoff when the ratio of unfixed variables to initial variables drops below threshold.
+More portable across different problem sizes than absolute variable count.
+
+# Example
+```julia
+# Stop cubing when 70% of variables are fixed (30% remain)
+cutoff = RatioCutoff(0.3)
+```
+"""
 struct RatioCutoff <: AbstractCutoffStrategy
     ratio::Float64
 end
 
-struct DynamicCutoff <: AbstractCutoffStrategy
-    base_ratio::Float64
-    depth_growth::Float64
+"""
+    ProductCutoff <: AbstractCutoffStrategy
+
+Simple product-based cutoff: `|σ_dec| × |σ_all| > θ`
+
+Where:
+- `|σ_dec|`: number of decision variables (cube literals)  
+- `|σ_all|`: total fixed variables (decisions + propagated)
+- `θ`: threshold
+
+This is simpler than march's formula and doesn't require normalizing by remaining vars.
+
+# Example
+```julia
+cutoff = ProductCutoff(500)   # Cutoff when dec * all > 500
+cutoff = ProductCutoff(300)   # Earlier cutoff (shallower cubes)
+cutoff = ProductCutoff(800)   # Later cutoff (deeper cubes)
+```
+"""
+struct ProductCutoff <: AbstractCutoffStrategy
+    threshold::Int
 end
 
-DynamicCutoff() = DynamicCutoff(0.3, 0.03)
+ProductCutoff() = ProductCutoff(500)
 
 """
-    MarchCutoff <: AbstractCutoffStrategy
+    DifficultyCutoff <: AbstractCutoffStrategy
 
-March-style adaptive cutoff that adjusts threshold based on search progress.
-- When a branch is refuted (UNSAT), increase threshold (go deeper)
-- When exploration succeeds, decrease threshold (emit cubes earlier)
+March-style difficulty-based cutoff: `d = |φ_dec|² · (|φ_dec| + |φ_imp|) / n > t_cc`
 
-This balances lookahead effort with CDCL solving efficiency.
-
-# Fields
-- `initial_threshold::Float64`: Starting cutoff ratio (default: 0.5)
-- `increase_rate::Float64`: Rate to increase threshold on refutation (default: 0.05)
-- `decrease_rate::Float64`: Rate to decrease threshold on success (default: 0.30)
-- `min_threshold::Float64`: Minimum threshold (default: 0.2)
-- `max_threshold::Float64`: Maximum threshold (default: 0.9)
+Dynamic threshold with growth on decision and decay on refutation.
 """
-mutable struct MarchCutoff <: AbstractCutoffStrategy
+mutable struct DifficultyCutoff <: AbstractCutoffStrategy
     initial_threshold::Float64
-    increase_rate::Float64
-    decrease_rate::Float64
-    min_threshold::Float64
-    max_threshold::Float64
-    # Runtime state
+    growth_rate::Float64
+    decay_rate::Float64
+    verbose::Bool
     current_threshold::Float64
-    refuted_count::Int
-    success_count::Int
+    max_difficulty_seen::Float64
 end
 
-function MarchCutoff(;
-    initial_threshold::Float64=0.5,
-    increase_rate::Float64=0.05,
-    decrease_rate::Float64=0.30,
-    min_threshold::Float64=0.2,
-    max_threshold::Float64=0.9
-)
-    MarchCutoff(initial_threshold, increase_rate, decrease_rate,
-                min_threshold, max_threshold, initial_threshold, 0, 0)
+function DifficultyCutoff(; initial::Float64=100.0, growth::Float64=1.03, decay::Float64=0.7, verbose::Bool=false)
+    DifficultyCutoff(initial, growth, decay, verbose, initial, 0.0)
 end
 
-struct CubeLimitCutoff <: AbstractCutoffStrategy
-    max_cubes::Int
-    fallback::AbstractCutoffStrategy
+function reset!(cutoff::DifficultyCutoff)
+    cutoff.current_threshold = cutoff.initial_threshold
+    cutoff.max_difficulty_seen = 0.0
 end
 
-CubeLimitCutoff(max_cubes::Int) = CubeLimitCutoff(max_cubes, DynamicCutoff())
+@inline function compute_difficulty(n_decisions::Int, n_implied::Int, n_free::Int)
+    n_free == 0 && return Inf
+    dec = Float64(n_decisions)
+    return dec * dec * (dec + n_implied) / n_free
+end
 
 # ============================================================================
 # Cube Representation
@@ -136,10 +159,6 @@ end
 # Cutoff Evaluation
 # ============================================================================
 
-function should_emit_cube(strategy::DepthCutoff, initial_nvars::Int, doms::Vector{DomainMask}, depth::Int, n_cubes::Int)
-    return depth >= strategy.max_depth
-end
-
 function should_emit_cube(strategy::VarsCutoff, initial_nvars::Int, doms::Vector{DomainMask}, depth::Int, n_cubes::Int)
     return count_unfixed(doms) <= strategy.max_free_vars
 end
@@ -148,59 +167,8 @@ function should_emit_cube(strategy::RatioCutoff, initial_nvars::Int, doms::Vecto
     return count_unfixed(doms) <= initial_nvars * strategy.ratio
 end
 
-function should_emit_cube(strategy::DynamicCutoff, initial_nvars::Int, doms::Vector{DomainMask}, depth::Int, n_cubes::Int)
-    cutoff_ratio = min(strategy.base_ratio + strategy.depth_growth * depth, 0.95)
-    return count_unfixed(doms) <= initial_nvars * cutoff_ratio
-end
-
-function should_emit_cube(strategy::MarchCutoff, initial_nvars::Int, doms::Vector{DomainMask}, depth::Int, n_cubes::Int)
-    # Use current adaptive threshold
-    return count_unfixed(doms) <= initial_nvars * strategy.current_threshold
-end
-
-"""
-    on_branch_refuted!(strategy::MarchCutoff)
-
-Called when a branch is refuted (leads to contradiction).
-Increases threshold to explore deeper before emitting cubes.
-"""
-function on_branch_refuted!(strategy::MarchCutoff)
-    strategy.refuted_count += 1
-    strategy.current_threshold = min(
-        strategy.current_threshold + strategy.increase_rate,
-        strategy.max_threshold
-    )
-end
-
-"""
-    on_branch_success!(strategy::MarchCutoff)
-
-Called when a branch completes successfully (cube emitted or solved).
-Decreases threshold to emit cubes earlier.
-"""
-function on_branch_success!(strategy::MarchCutoff)
-    strategy.success_count += 1
-    strategy.current_threshold = max(
-        strategy.current_threshold * (1 - strategy.decrease_rate),
-        strategy.min_threshold
-    )
-end
-
-"""
-    reset!(strategy::MarchCutoff)
-
-Reset the adaptive state for a new cubing session.
-"""
-function reset!(strategy::MarchCutoff)
-    strategy.current_threshold = strategy.initial_threshold
-    strategy.refuted_count = 0
-    strategy.success_count = 0
-end
-
-function should_emit_cube(strategy::CubeLimitCutoff, initial_nvars::Int, doms::Vector{DomainMask}, depth::Int, n_cubes::Int)
-    n_cubes >= strategy.max_cubes && return true
-    return should_emit_cube(strategy.fallback, initial_nvars, doms, depth, n_cubes)
-end
+# DifficultyCutoff needs more context - we use a forward declaration pattern
+# The actual implementation is below after CnCContext is defined
 
 # ============================================================================
 # CnC Context
@@ -233,6 +201,76 @@ end
 end
 
 # ============================================================================
+# Context-aware Cutoff Evaluation (needs CnCContext)
+# ============================================================================
+
+"""
+Evaluate ProductCutoff: |σ_dec| × |σ_all| > θ
+Simple and effective - no normalization needed.
+"""
+function should_emit_cube(ctx::CnCContext, strategy::ProductCutoff, doms::Vector{DomainMask})
+    n_free = count_unfixed(doms)
+    n_free == 0 && return true
+    
+    n_decisions = length(ctx.current_path)  # |σ_dec|
+    n_total_fixed = ctx.initial_nvars - n_free  # |σ_all|
+    
+    product = n_decisions * n_total_fixed
+    return product > strategy.threshold
+end
+
+"""
+Evaluate DifficultyCutoff using the difficulty metric from march_cu paper.
+d(cid) = |φ_dec|² · (|φ_dec| + |φ_imp|) / n
+"""
+function should_emit_cube(ctx::CnCContext, strategy::DifficultyCutoff, doms::Vector{DomainMask})
+    n_free = count_unfixed(doms)
+    n_free == 0 && return true
+    
+    n_decisions = length(ctx.current_path)  # |φ_dec|
+    n_total_fixed = ctx.initial_nvars - n_free
+    n_implied = n_total_fixed - n_decisions  # |φ_imp| = total fixed - decisions
+    n_implied = max(0, n_implied)  # Safety: can't be negative
+    
+    difficulty = compute_difficulty(n_decisions, n_implied, n_free)
+    
+    # Track max difficulty seen
+    if difficulty > strategy.max_difficulty_seen
+        strategy.max_difficulty_seen = difficulty
+        if strategy.verbose
+            @info "DifficultyCutoff" n_dec=n_decisions n_imp=n_implied n_free difficulty threshold=strategy.current_threshold
+        end
+    end
+    
+    should_cutoff = difficulty > strategy.current_threshold
+    if should_cutoff && strategy.verbose
+        @info "CUTOFF!" n_dec=n_decisions difficulty threshold=strategy.current_threshold
+    end
+    return should_cutoff
+end
+
+# Fallback: use generic signature for VarsCutoff/RatioCutoff
+function should_emit_cube(ctx::CnCContext, strategy::AbstractCutoffStrategy, doms::Vector{DomainMask})
+    return should_emit_cube(strategy, ctx.initial_nvars, doms, 0, length(ctx.cubes))
+end
+
+"""
+Called after each decision (branching). Increases threshold.
+"""
+function on_decision!(strategy::DifficultyCutoff)
+    strategy.current_threshold *= strategy.growth_rate
+end
+on_decision!(::AbstractCutoffStrategy) = nothing
+
+"""
+Called when a branch is quickly refuted. Decreases threshold to emit cubes earlier.
+"""
+function on_refutation!(strategy::DifficultyCutoff)
+    strategy.current_threshold *= strategy.decay_rate
+end
+on_refutation!(::AbstractCutoffStrategy) = nothing
+
+# ============================================================================
 # Main Entry Point
 # ============================================================================
 
@@ -254,7 +292,7 @@ function generate_cubes!(
         config.set_cover_solver, config.selector)
 
     # Reset adaptive cutoff state
-    cutoff isa MarchCutoff && reset!(cutoff)
+    cutoff isa DifficultyCutoff && reset!(cutoff)
 
     ctx = CnCContext(
         problem.static, problem.stats, problem.buffer,
@@ -295,9 +333,8 @@ function _bbsat_cnc!(ctx::CnCContext, doms::Vector{DomainMask}, depth::Int)
 
     # Check if solved (target_vars all fixed)
     if is_solved(ctx, doms)
+        record_sat_leaf!(ctx.stats)
         push!(ctx.cubes, Cube(copy(ctx.current_path), depth, false))
-        # Notify adaptive cutoff of success
-        ctx.cutoff isa MarchCutoff && on_branch_success!(ctx.cutoff)
         return Result(true, copy(doms), copy(ctx.stats))
     end
 
@@ -307,15 +344,15 @@ function _bbsat_cnc!(ctx::CnCContext, doms::Vector{DomainMask}, depth::Int)
         reduced_doms, has_contra = reduce_with_gamma_one_cnc!(ctx, doms)
 
         if has_contra
+            record_unsat_leaf!(ctx.stats)
             restore_path!(ctx, path_len_at_entry)
-            # Notify adaptive cutoff of refutation
-            ctx.cutoff isa MarchCutoff && on_branch_refuted!(ctx.cutoff)
             return Result(false, DomainMask[], copy(ctx.stats))
         end
 
         current_doms = reduced_doms
 
         if is_solved(ctx, current_doms)
+            record_sat_leaf!(ctx.stats)
             push!(ctx.cubes, Cube(copy(ctx.current_path), depth, false))
             restore_path!(ctx, path_len_at_entry)
             return Result(true, copy(current_doms), copy(ctx.stats))
@@ -323,11 +360,9 @@ function _bbsat_cnc!(ctx::CnCContext, doms::Vector{DomainMask}, depth::Int)
     end
 
     # Check cutoff - emit cube and backtrack
-    if should_emit_cube(ctx.cutoff, ctx.initial_nvars, current_doms, depth, length(ctx.cubes))
+    if should_emit_cube(ctx, ctx.cutoff, current_doms)
         push!(ctx.cubes, Cube(copy(ctx.current_path), depth, false))
         restore_path!(ctx, path_len_at_entry)
-        # Notify adaptive cutoff of success (cube emitted)
-        ctx.cutoff isa MarchCutoff && on_branch_success!(ctx.cutoff)
         return Result(false, DomainMask[], copy(ctx.stats))
     end
 
@@ -335,13 +370,12 @@ function _bbsat_cnc!(ctx::CnCContext, doms::Vector{DomainMask}, depth::Int)
 
     # Variable selection and branching (same as _bbsat!)
     empty!(ctx.buffer.branching_cache)
-    clauses, variables = findbest(ctx.region_cache, problem, ctx.config.measure,
+    clauses, variables, gamma = findbest(ctx.region_cache, problem, ctx.config.measure,
         ctx.config.set_cover_solver, ctx.config.selector, depth)
 
     if isnothing(clauses)
+        record_unsat_leaf!(ctx.stats)
         restore_path!(ctx, path_len_at_entry)
-        # Notify adaptive cutoff of refutation
-        ctx.cutoff isa MarchCutoff && on_branch_refuted!(ctx.cutoff)
         return Result(false, DomainMask[], copy(ctx.stats))
     end
 
@@ -350,11 +384,12 @@ function _bbsat_cnc!(ctx::CnCContext, doms::Vector{DomainMask}, depth::Int)
         subproblem_doms = probe_branch!(problem, ctx.buffer, current_doms, clauses[1], variables)
 
         if has_contradiction(subproblem_doms)
+            record_unsat_leaf!(ctx.stats)
             restore_path!(ctx, path_len_at_entry)
-            # Notify adaptive cutoff of refutation
-            ctx.cutoff isa MarchCutoff && on_branch_refuted!(ctx.cutoff)
             return Result(false, DomainMask[], copy(ctx.stats))
         end
+
+        record_reduction_node!(ctx.stats)
 
         # Record literals
         append_branch_literals!(ctx, clauses[1], variables, current_doms, subproblem_doms)
@@ -364,30 +399,33 @@ function _bbsat_cnc!(ctx::CnCContext, doms::Vector{DomainMask}, depth::Int)
         return result
     end
 
-    # Multi-branch
-    record_branch_point!(ctx.stats, length(clauses))
+    # Multi-branch: record branching node
+    record_branching_node!(ctx.stats, length(clauses))
 
     if !isempty(variables)
         push!(ctx.branching_vars, variables[1])
     end
 
+    # Notify cutoff of decision (increases threshold for DifficultyCutoff)
+    on_decision!(ctx.cutoff)
+
     path_len_before_branches = length(ctx.current_path)
 
     @inbounds for i in 1:length(clauses)
-        # Check cube limit
-        if ctx.cutoff isa CubeLimitCutoff && length(ctx.cubes) >= ctx.cutoff.max_cubes
-            break
-        end
-
         clause = clauses[i]
         subproblem_doms = probe_branch!(problem, ctx.buffer, current_doms, clause, variables)
 
-        has_contradiction(subproblem_doms) && continue
+        if has_contradiction(subproblem_doms)
+            record_unsat_leaf!(ctx.stats)
+            # Quick refutation - decrease threshold to emit cubes earlier
+            on_refutation!(ctx.cutoff)
+            continue
+        end
 
-        # Record stats
+        # Record child explored with assignment counts
         direct_vars = count_ones(clause.mask)
         total_vars_fixed = count_unfixed(current_doms) - count_unfixed(subproblem_doms)
-        record_branch_explored!(ctx.stats, direct_vars, total_vars_fixed)
+        record_child_explored!(ctx.stats, direct_vars, total_vars_fixed - direct_vars)
 
         # Record literals for this branch
         append_branch_literals!(ctx, clause, variables, current_doms, subproblem_doms)
@@ -410,32 +448,47 @@ end
 # ============================================================================
 
 function reduce_with_gamma_one_cnc!(ctx::CnCContext, doms::Vector{DomainMask})
-    current_doms = doms
+    # Use single problem view - doms will be modified in-place
+    problem = TNProblem(ctx.static, doms, ctx.stats, ctx.buffer)
 
-    while true
-        problem = TNProblem(ctx.static, current_doms, ctx.stats, ctx.buffer)
+    # Check only the first limit variables (or fewer if not available)
+    sorted_vars = get_sorted_unfixed_vars(problem)
+    isempty(sorted_vars) && return (doms, false)
+    
+    n_vars = length(sorted_vars)
+    # Safe to access limit because caller checks ctx.reducer isa GammaOneReducer
+    limit = (ctx.reducer::GammaOneReducer).limit
+    scan_limit = limit == 0 ? n_vars : min(n_vars, limit)
+    
+    for scan_pos in 1:scan_limit
+        var_id = sorted_vars[scan_pos]
+        
+        # Skip if variable became fixed
+        is_fixed(doms[var_id]) && continue
+        
+        result = find_forced_assignment(ctx.region_cache, problem, var_id, ctx.config.measure)
+        
+        if !isnothing(result)
+            clause, variables = result
+            
+            # Record statistics before modification
+            old_unfixed = count_unfixed(doms)
+            
+            # Apply assignment in-place
+            success = apply_assignment_inplace!(problem, ctx.buffer, doms, variables, clause.mask, clause.val)
 
-        result = find_gamma_one_region(ctx.region_cache, problem, ctx.config.measure, ctx.reducer)
-        isnothing(result) && break
+            if !success
+                return (doms, true)
+            end
 
-        clauses, variables = result
-        new_doms = probe_branch!(problem, ctx.buffer, current_doms, clauses[1], variables)
-
-        if has_contradiction(new_doms)
-            return (new_doms, true)
+            # Record reduction assignments
+            direct_vars = count_ones(clause.mask)
+            total_vars_fixed = old_unfixed - count_unfixed(doms)
+            record_reduction!(ctx.stats, direct_vars, total_vars_fixed - direct_vars)
         end
-
-        direct_vars = count_ones(clauses[1].mask)
-        total_vars_fixed = count_unfixed(current_doms) - count_unfixed(new_doms)
-        record_gamma_one!(ctx.stats, direct_vars, total_vars_fixed)
-
-        # Record literals to path
-        append_branch_literals!(ctx, clauses[1], variables, current_doms, new_doms)
-
-        current_doms = copy(new_doms)
     end
 
-    return (current_doms, false)
+    return (doms, false)
 end
 
 @inline function restore_path!(ctx::CnCContext, target_len::Int)
@@ -445,31 +498,14 @@ end
 end
 
 function append_branch_literals!(ctx::CnCContext, clause::Clause, variables::Vector{Int},
-                                  old_doms::Vector{DomainMask}, new_doms::Vector{DomainMask})
-    # Add clause literals
+    old_doms::Vector{DomainMask}, new_doms::Vector{DomainMask})
+    # Only add clause literals (decision variables directly fixed by branching)
+    # Propagated and reduced variables are intentionally excluded
     for (i, var_id) in enumerate(variables)
         bit = UInt64(1) << (i - 1)
         if (clause.mask & bit) != 0
             lit = (clause.val & bit) != 0 ? var_id : -var_id
             push!(ctx.current_path, lit)
-        end
-    end
-
-    # Add propagated literals
-    clause_var_set = Set(variables)
-    @inbounds for var_id in 1:length(old_doms)
-        var_id in clause_var_set && continue
-
-        old_dom = old_doms[var_id]
-        new_dom = new_doms[var_id]
-
-        is_fixed(old_dom) && continue
-        !is_fixed(new_dom) && continue
-
-        if new_dom == DM_1
-            push!(ctx.current_path, var_id)
-        elseif new_dom == DM_0
-            push!(ctx.current_path, -var_id)
         end
     end
 end
@@ -509,12 +545,12 @@ function cube_statistics(result::CubeResult)
     leaf_weights = weights[non_refuted_idx]
 
     return (
-        n_cubes = result.n_cubes,
-        n_refuted = result.n_refuted,
-        n_leaves = length(non_refuted_idx),
-        avg_weight = isempty(weights) ? NaN : sum(weights) / length(weights),
-        avg_leaf_weight = isempty(leaf_weights) ? NaN : sum(leaf_weights) / length(leaf_weights),
-        min_weight = isempty(weights) ? 0 : minimum(weights),
-        max_weight = isempty(weights) ? 0 : maximum(weights)
+        n_cubes=result.n_cubes,
+        n_refuted=result.n_refuted,
+        n_leaves=length(non_refuted_idx),
+        avg_weight=isempty(weights) ? NaN : sum(weights) / length(weights),
+        avg_leaf_weight=isempty(leaf_weights) ? NaN : sum(leaf_weights) / length(leaf_weights),
+        min_weight=isempty(weights) ? 0 : minimum(weights),
+        max_weight=isempty(weights) ? 0 : maximum(weights)
     )
 end

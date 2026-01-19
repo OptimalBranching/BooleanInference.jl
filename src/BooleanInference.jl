@@ -73,7 +73,7 @@ export FactoringBenchmark, solve_with_benchmark
 
 export NumUnfixedVars
 
-export MostOccurrenceSelector, DPLLSelector, MinGammaSelector, LookaheadSelector, FixedOrderSelector, PropagationAwareSelector
+export MostOccurrenceSelector, DPLLSelector, MinGammaSelector, LookaheadSelector, FixedOrderSelector, FixedOrderDPLLSelector, PropagationAwareSelector
 
 export TNContractionSolver
 
@@ -106,7 +106,7 @@ export primal_graph
 export circuit_to_cnf, tn_to_cnf, tn_to_cnf_with_doms, num_tn_vars
 
 # Cube-and-Conquer
-export AbstractCutoffStrategy, DepthCutoff, VarsCutoff, RatioCutoff, DynamicCutoff, MarchCutoff, CubeLimitCutoff
+export AbstractCutoffStrategy, VarsCutoff, RatioCutoff, ProductCutoff, DifficultyCutoff
 export Cube, CubeResult, CnCStats, CnCResult
 export generate_cubes!, write_cubes_icnf, cubes_to_dimacs
 export compute_cube_weights, cube_statistics

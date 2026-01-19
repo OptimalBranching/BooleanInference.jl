@@ -1,5 +1,7 @@
 function create_region(cn::ConstraintNetwork, doms::Vector{DomainMask}, variable::Int, selector::AbstractSelector)
-    return k_neighboring(cn, doms, variable; max_tensors=selector.max_tensors, k=selector.k)
+    max_tensors = hasfield(typeof(selector), :max_tensors) ? selector.max_tensors : 20
+    k = hasfield(typeof(selector), :k) ? selector.k : 3
+    return k_neighboring(cn, doms, variable; max_tensors=max_tensors, k=k)
 end
 
 function contract_region(tn::ConstraintNetwork, region::Region, doms::Vector{DomainMask})

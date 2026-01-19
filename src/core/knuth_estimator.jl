@@ -250,7 +250,7 @@ function single_knuth_dive(
             config.set_cover_solver, config.selector, depth
         )
 
-        clauses, variables, region, support_size, gamma = result
+        clauses, variables, gamma = result
 
         # If no branching possible (solved or contradiction), stop
         if isnothing(clauses) || isempty(clauses)
@@ -258,7 +258,8 @@ function single_knuth_dive(
         end
 
         num_branches = length(clauses)
-        push!(gammas, gamma)
+        gamma_val = gamma === nothing ? Float64(num_branches) : gamma
+        push!(gammas, gamma_val)
 
         # Skip single-branch "decisions" (forced propagation)
         if num_branches == 1
@@ -276,7 +277,7 @@ function single_knuth_dive(
             probs = fill(1.0 / num_branches, num_branches)
         else
             # Importance sampling: prob_i ∝ γ^(-Δρ_i / T)
-            probs = compute_importance_probs(temp_problem, config.measure, clauses, variables, gamma, temperature)
+            probs = compute_importance_probs(temp_problem, config.measure, clauses, variables, gamma_val, temperature)
         end
 
         # Randomly select a branch according to probabilities

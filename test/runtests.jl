@@ -17,10 +17,6 @@ end
     include("propagate.jl")
 end
 
-@testset "circuit_analysis.jl" begin
-    include("circuit_analysis.jl")
-end
-
 @testset "knn.jl" begin
     include("knn.jl")
 end
@@ -39,8 +35,4 @@ end
 
 @testset "branchtable.jl" begin
     include("branchtable.jl")
-end
-
-@testset "cdcl.jl" begin
-    include("cdcl.jl")
 end

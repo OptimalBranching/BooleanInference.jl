@@ -73,14 +73,16 @@ function solve_factoring(
     n::Int, m::Int, N::Int;
     bsconfig::BranchingStrategy=BranchingStrategy(
         table_solver=TNContractionSolver(),
-        selector=LookaheadSelector(3, 4, 50),
+        # selector=LookaheadSelector(3, 4, 50),
         # selector=MostOccurrenceSelector(3, 4),
+        selector=MinGammaSelector(3, 4, 0),
         measure=NumUnfixedTensors(),
         set_cover_solver=GreedyMerge()
     ),
-    reducer::AbstractReducer=GammaOneReducer(10),
+    reducer::AbstractReducer=NoReducer(),
+    # reducer::AbstractReducer=GammaOneReducer(10),
     show_stats::Bool=false,
-    cdcl_cutoff::Float64=1.0  # Cube and Conquer: switch to CDCL when unfixed_ratio <= this
+    cdcl_cutoff::Float64=1.0
 )
     # Step 1: Create factoring problem and get variable indices
     reduction = reduceto(CircuitSAT, Factoring(n, m, N))
