@@ -288,10 +288,9 @@ Compute optimal branching rule with fast-path gamma=1 detection.
 If any variable is forced, returns immediately without running GreedyMerge.
 """
 function OptimalBranchingCore.optimal_branching_rule(table::BranchingTable, variables::Vector, problem::TNProblem, m::AbstractMeasure, ::GreedyMerge)
-    candidates = OptimalBranchingCore.bit_clauses(table)
     n_vars = table.bit_length
 
-    # Fast-path: detect forced variables
+    # Fast-path: detect forced variables FIRST (before expensive bit_clauses)
     if n_vars > 0 && !isempty(table.table)
         configs = UInt64[first(entry) for entry in table.table]
         forced_clause = detect_forced_variable(configs, n_vars)
@@ -303,6 +302,9 @@ function OptimalBranchingCore.optimal_branching_rule(table::BranchingTable, vari
             )
         end
     end
+
+    # Only compute candidates if fast-path didn't apply
+    candidates = OptimalBranchingCore.bit_clauses(table)
 
     # Run GreedyMerge
     result = OptimalBranchingCore.greedymerge(candidates, problem, variables, m)
@@ -321,4 +323,37 @@ function OptimalBranchingCore.optimal_branching_rule(table::BranchingTable, vari
     end
 
     return result
+end
+
+# ============================================================================
+# IPSolver with Gamma-1 Fast Path
+# ============================================================================
+
+"""
+    OptimalBranchingCore.optimal_branching_rule(table, variables, problem, m, solver::IPSolver)
+
+Compute optimal branching rule with fast-path gamma=1 detection.
+If any variable is forced, returns immediately without running IP solver.
+"""
+function OptimalBranchingCore.optimal_branching_rule(table::BranchingTable, variables::Vector, problem::TNProblem, m::AbstractMeasure, solver::IPSolver)
+    n_vars = table.bit_length
+
+    # Fast-path: detect forced variables (same as GreedyMerge)
+    if n_vars > 0 && !isempty(table.table)
+        configs = UInt64[first(entry) for entry in table.table]
+        forced_clause = detect_forced_variable(configs, n_vars)
+
+        if !isnothing(forced_clause)
+            sr = OptimalBranchingCore.size_reduction(problem, m, forced_clause, variables)
+            return OptimalBranchingCore.OptimalBranchingResult(
+                DNF([forced_clause]), [Float64(sr)], 1.0
+            )
+        end
+    end
+
+    # Run IP solver (default implementation)
+    candidates = OptimalBranchingCore.candidate_clauses(table)
+    isempty(candidates) && return OptimalBranchingCore.OptimalBranchingResult(DNF(Clause{UInt64}[]), Float64[], Inf)
+    Δρ = [Float64(OptimalBranchingCore.size_reduction(problem, m, c, variables)) for c in candidates]
+    return OptimalBranchingCore.minimize_γ(table, candidates, Δρ, solver)
 end

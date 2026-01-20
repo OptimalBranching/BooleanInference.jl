@@ -1,7 +1,41 @@
 # KissatSolver.jl - Kissat SAT solver backend via command line
-# Uses homebrew-installed kissat at /opt/homebrew/bin/kissat
+# Automatically detects kissat path or uses KISSAT_PATH environment variable
 
-const KISSAT_PATH = "/opt/homebrew/bin/kissat"
+function find_kissat_path()
+    # 1. Check environment variable
+    env_path = get(ENV, "KISSAT_PATH", "")
+    if !isempty(env_path) && isfile(env_path)
+        return env_path
+    end
+
+    # 2. Try to find kissat in PATH
+    try
+        path = strip(read(`which kissat`, String))
+        if isfile(path)
+            return path
+        end
+    catch
+    end
+
+    # 3. Common installation paths
+    common_paths = [
+        "/opt/homebrew/bin/kissat",          # macOS Homebrew (ARM)
+        "/usr/local/bin/kissat",             # macOS Homebrew (Intel) / Linux
+        "/usr/bin/kissat",                   # Linux system
+        joinpath(homedir(), "kissat/build/kissat"),  # User build
+        joinpath(homedir(), ".local/bin/kissat"),    # User local
+    ]
+
+    for path in common_paths
+        if isfile(path)
+            return path
+        end
+    end
+
+    error("Kissat not found. Please install kissat or set KISSAT_PATH environment variable.")
+end
+
+const KISSAT_PATH = find_kissat_path()
 
 """
     write_cnf_file(path::String, cnf::Vector{Vector{Int}}, nvars::Int)
@@ -141,7 +175,9 @@ function solve_cnf(cnf::Vector{<:AbstractVector{<:Integer}};
         # Build command - kissat returns exit code 10 (SAT), 20 (UNSAT), 0 (unknown/interrupted)
         # Use ignorestatus to avoid exception on non-zero exit
         cmd = if timeout > 0
-            `/opt/homebrew/bin/gtimeout $(timeout)s $KISSAT_PATH $cnf_path`
+            # Use timeout command (gtimeout on macOS, timeout on Linux)
+            timeout_cmd = Sys.isapple() ? "gtimeout" : "timeout"
+            `$timeout_cmd $(timeout)s $KISSAT_PATH $cnf_path`
         else
             `$KISSAT_PATH $cnf_path`
         end

@@ -1,18 +1,23 @@
 """
-Main runner for Experiment 2: BI-Direct vs BI-CnC vs march_cu-CnC
+Main runner for Experiment 2: BI-CnC vs march_cu-CnC Comparison
 
 Compare:
-1. BI-Direct: Direct solving with BooleanInference
-2. BI-CnC: TN-based cubing + CDCL (kissat)
-3. march_cu-CnC: march_cu cubing + CDCL (kissat)
+1. BI-CnC: TN-based cubing + CDCL (kissat) for each cube
+2. march_cu-CnC: march_cu cubing + CDCL (kissat) for each cube
 
 Usage:
-    julia run_exp2.jl [options]
+    julia -t <threads> run_exp2.jl [options]
+
+Examples:
+    julia -t 24 run_exp2.jl --max-instances 10 --bit-sizes "10,12,14,16"
+    julia -t 1 run_exp2.jl --no-parallel  # Disable parallel execution
 
 Options:
     --max-instances N    Number of instances per bit size (default: 10)
     --results-dir DIR    Output directory for results (default: results)
     --bit-sizes SIZES    Comma-separated bit sizes (default: "10,12,14")
+    --parallel           Enable parallel cube solving (default: true)
+    --no-parallel        Disable parallel cube solving
 """
 
 include("exp2_cnc_comparison.jl")
@@ -35,6 +40,12 @@ function parse_commandline()
             help = "Comma-separated bit sizes (e.g., '10,12,14')"
             arg_type = String
             default = "10,12,14"
+        "--parallel"
+            help = "Enable parallel cube solving"
+            action = :store_true
+        "--no-parallel"
+            help = "Disable parallel cube solving"
+            action = :store_true
     end
 
     return parse_args(s)
@@ -46,6 +57,15 @@ function main()
     # Parse bit sizes
     bit_sizes = [parse(Int, strip(s)) for s in split(args["bit-sizes"], ",")]
 
+    # Determine parallel execution
+    parallel = if args["no-parallel"]
+        false
+    elseif args["parallel"]
+        true
+    else
+        true  # Default: enabled
+    end
+
     # Locate external tools
     march_cu_path = joinpath(dirname(@__DIR__), "benchmarks", "artifacts", "bin", "march_cu")
     kissat_path = try
@@ -55,12 +75,14 @@ function main()
     end
 
     println("\n" * "="^80)
-    println("Experiment 2: BI-Direct vs BI-CnC vs march_cu-CnC")
+    println("Experiment 2: BI-CnC vs march_cu-CnC Comparison")
     println("="^80)
     println("\nConfiguration:")
     println("  Max instances per bit size: $(args["max-instances"])")
     println("  Bit sizes: $(bit_sizes)")
     println("  Results directory: $(args["results-dir"])")
+    println("  Threads: $(Threads.nthreads())")
+    println("  Parallel execution: $(parallel && Threads.nthreads() > 1 ? "enabled" : "disabled")")
     println("  march_cu: $(isfile(march_cu_path) ? march_cu_path : "NOT FOUND")")
     println("  kissat: $(isempty(kissat_path) ? "NOT FOUND" : kissat_path)")
     println("="^80)
@@ -80,7 +102,8 @@ function main()
             output_dir = args["results-dir"],
             bit_sizes = bit_sizes,
             march_cu_path = march_cu_path,
-            kissat_path = kissat_path
+            kissat_path = kissat_path,
+            parallel = parallel
         )
     catch e
         @error "Experiment failed" exception=(e, catch_backtrace())
@@ -92,9 +115,9 @@ function main()
     println("="^80)
     println("\nResults saved to: $(args["results-dir"])/")
     println("\nOutput files:")
-    println("  - exp2_cnc_comparison_bi_direct.csv  (BI-Direct results)")
-    println("  - exp2_cnc_comparison_summary.csv    (CnC results: BI-CnC & march_cu-CnC)")
-    println("  - exp2_cnc_comparison_per_cube.csv   (per-cube statistics)")
+    println("  - exp2_cnc_comparison_*_summary.csv    (Summary results)")
+    println("  - exp2_cnc_comparison_*_per_cube.csv   (Per-cube statistics)")
+    println("  - exp2_cnc_comparison_*.json           (Complete results with metadata)")
     println("="^80 * "\n")
 
     return 0

@@ -89,6 +89,28 @@ function DifficultyCutoff(; initial::Float64=100.0, growth::Float64=1.03, decay:
     DifficultyCutoff(initial, growth, decay, verbose, initial, 0.0)
 end
 
+"""
+    GammaRatioCutoff <: AbstractCutoffStrategy
+
+Cutoff based on the ratio of current gamma to initial gamma.
+When gamma drops to a certain fraction of the initial gamma, emit cube.
+
+The idea: gamma approaching 1.0 indicates the problem is highly constrained,
+meaning CDCL's unit propagation will be very effective. So we should hand off
+to CDCL when gamma/gamma_0 falls below a threshold.
+
+# Example
+```julia
+# Stop cubing when gamma drops to 97% of initial gamma
+cutoff = GammaRatioCutoff(0.97)
+```
+"""
+struct GammaRatioCutoff <: AbstractCutoffStrategy
+    ratio_threshold::Float64
+end
+
+GammaRatioCutoff() = GammaRatioCutoff(0.97)
+
 function reset!(cutoff::DifficultyCutoff)
     cutoff.current_threshold = cutoff.initial_threshold
     cutoff.max_difficulty_seen = 0.0
@@ -190,6 +212,9 @@ mutable struct CnCContext
     cubes::Vector{Cube}
     current_path::Vector{Int}
     branching_vars::Vector{Int}
+
+    # Gamma tracking for GammaRatioCutoff
+    initial_gamma::Float64  # First gamma seen (0.0 = not yet set)
 end
 
 @inline function is_solved(ctx::CnCContext, doms::Vector{DomainMask})
@@ -255,6 +280,29 @@ function should_emit_cube(ctx::CnCContext, strategy::AbstractCutoffStrategy, dom
 end
 
 """
+Evaluate GammaRatioCutoff: gamma / initial_gamma < threshold
+When the ratio drops below threshold, the problem is highly constrained and CDCL will be effective.
+"""
+function should_emit_cube(ctx::CnCContext, strategy::GammaRatioCutoff, doms::Vector{DomainMask}, gamma::Float64)
+    n_free = count_unfixed(doms)
+    n_free == 0 && return true
+
+    # Record initial gamma on first call
+    if ctx.initial_gamma == 0.0
+        ctx.initial_gamma = gamma
+        return false  # Never cutoff on first branching
+    end
+
+    ratio = gamma / ctx.initial_gamma
+    return ratio < strategy.ratio_threshold
+end
+
+# Fallback for non-gamma cutoffs: ignore gamma parameter
+function should_emit_cube(ctx::CnCContext, strategy::AbstractCutoffStrategy, doms::Vector{DomainMask}, gamma::Float64)
+    return should_emit_cube(ctx, strategy, doms)
+end
+
+"""
 Called after each decision (branching). Increases threshold.
 """
 function on_decision!(strategy::DifficultyCutoff)
@@ -300,7 +348,8 @@ function generate_cubes!(
         cutoff,
         count_unfixed(problem.doms),
         target_vars,
-        Cube[], Int[], Int[]
+        Cube[], Int[], Int[],
+        0.0  # initial_gamma (set on first branching)
     )
 
     _bbsat_cnc!(ctx, problem.doms, 0)
@@ -359,22 +408,22 @@ function _bbsat_cnc!(ctx::CnCContext, doms::Vector{DomainMask}, depth::Int)
         end
     end
 
-    # Check cutoff - emit cube and backtrack
-    if should_emit_cube(ctx, ctx.cutoff, current_doms)
-        push!(ctx.cubes, Cube(copy(ctx.current_path), depth, false))
-        restore_path!(ctx, path_len_at_entry)
-        return Result(false, DomainMask[], copy(ctx.stats))
-    end
-
     problem = TNProblem(ctx.static, current_doms, ctx.stats, ctx.buffer)
 
-    # Variable selection and branching (same as _bbsat!)
+    # Variable selection and branching - compute gamma first for cutoff decision
     empty!(ctx.buffer.branching_cache)
     clauses, variables, gamma = findbest(ctx.region_cache, problem, ctx.config.measure,
         ctx.config.set_cover_solver, ctx.config.selector, depth)
 
     if isnothing(clauses)
         record_unsat_leaf!(ctx.stats)
+        restore_path!(ctx, path_len_at_entry)
+        return Result(false, DomainMask[], copy(ctx.stats))
+    end
+
+    # Check cutoff - emit cube and backtrack (gamma is now available for GammaRatioCutoff)
+    if should_emit_cube(ctx, ctx.cutoff, current_doms, gamma)
+        push!(ctx.cubes, Cube(copy(ctx.current_path), depth, false))
         restore_path!(ctx, path_len_at_entry)
         return Result(false, DomainMask[], copy(ctx.stats))
     end

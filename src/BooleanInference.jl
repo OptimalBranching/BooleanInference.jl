@@ -3,13 +3,14 @@ module BooleanInference
 using TropicalNumbers
 using SparseArrays
 using OptimalBranchingCore
-using OptimalBranchingCore: AbstractProblem, select_variables, reduce_problem, _vec2int, candidate_clauses, Clause, BranchingStrategy, AbstractReducer, NoReducer
+using OptimalBranchingCore: AbstractProblem, select_variables, reduce_problem, _vec2int, candidate_clauses, Clause, BranchingStrategy, AbstractReducer, NoReducer, IPSolver, GreedyMerge
 using OptimalBranchingCore.BitBasis
 using GenericTensorNetworks
 using GenericTensorNetworks.OMEinsum
 import ProblemReductions
 import ProblemReductions: CircuitSAT, Circuit, Factoring, reduceto, Satisfiability, Assignment, BooleanExpr, simple_form, extract_symbols!
 using Statistics: median, mean, std, var
+import Random
 using Graphs, GraphMakie, Colors
 using GraphMakie
 using CairoMakie: Figure, Axis, save, hidespines!, hidedecorations!, DataAspect
@@ -106,7 +107,7 @@ export primal_graph
 export circuit_to_cnf, tn_to_cnf, tn_to_cnf_with_doms, num_tn_vars
 
 # Cube-and-Conquer
-export AbstractCutoffStrategy, VarsCutoff, RatioCutoff, ProductCutoff, DifficultyCutoff
+export AbstractCutoffStrategy, VarsCutoff, RatioCutoff, ProductCutoff, DifficultyCutoff, GammaRatioCutoff
 export Cube, CubeResult, CnCStats, CnCResult
 export generate_cubes!, write_cubes_icnf, cubes_to_dimacs
 export compute_cube_weights, cube_statistics

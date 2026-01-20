@@ -2,6 +2,21 @@
 # solvers.jl - All solve_instance implementations
 # ============================================================================
 
+# Helper function to get timeout command for current platform
+function get_timeout_cmd(timeout_seconds::Float64)
+    if Sys.isapple()
+        # macOS: use gtimeout from coreutils
+        gtimeout = "/opt/homebrew/bin/gtimeout"
+        if !isfile(gtimeout)
+            gtimeout = strip(read(`which gtimeout`, String))
+        end
+        return `$gtimeout $(timeout_seconds)s`
+    else
+        # Linux: use timeout
+        return `timeout $(timeout_seconds)s`
+    end
+end
+
 # ============================================================================
 # BooleanInference Solver
 # ============================================================================
@@ -129,13 +144,15 @@ function _write_cnf_dimacs(path::String, cnf::Vector{<:AbstractVector{<:Integer}
 end
 
 function run_cnf_solver(solver::KissatSolver, cnf_path::String)
-    base_cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $(solver.kissat_path)`
+    timeout_cmd = get_timeout_cmd(solver.timeout)
+    base_cmd = `$timeout_cmd $(solver.kissat_path)`
     cmd = solver.quiet ? `$base_cmd -q $cnf_path` : `$base_cmd $cnf_path`
     _run_cnf_solver(cmd, r"(?m)^s\s+SATISFIABLE", r"(?m)^c\s+decisions:\s+(\d+)")
 end
 
 function run_cnf_solver(solver::MinisatSolver, cnf_path::String)
-    base_cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s $(solver.minisat_path)`
+    timeout_cmd = get_timeout_cmd(solver.timeout)
+    base_cmd = `$timeout_cmd $(solver.minisat_path)`
     cmd = solver.quiet ? `$base_cmd -verb=0 $cnf_path` : `$base_cmd $cnf_path`
     _run_cnf_solver(cmd, r"(?m)^decisions\s+:\s+(\d+)", r"(?m)^decisions\s+:\s+(\d+)")
 end
@@ -421,8 +438,8 @@ function run_cnf_solver(solver::CryptoMiniSatSolver, cnf_path::String)
     solver.quiet && push!(cmd_parts, "--verb=0")
     push!(cmd_parts, cnf_path)
 
-    base_cmd = `/opt/homebrew/bin/gtimeout $(solver.timeout)s`
-    cmd = `$base_cmd $(Cmd(cmd_parts))`
+    timeout_cmd = get_timeout_cmd(solver.timeout)
+    cmd = `$timeout_cmd $(Cmd(cmd_parts))`
 
     stdout_pipe, stderr_pipe = Pipe(), Pipe()
     proc = run(pipeline(cmd, stdout=stdout_pipe, stderr=stderr_pipe), wait=false)

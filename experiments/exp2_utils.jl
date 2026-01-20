@@ -464,20 +464,16 @@ function run_march_cnc_experiment(
                     end
                 end
 
-                # Run kissat
-                kissat_cmd = `$kissat_path $cube_cnf_path`
+                # Run kissat (use ignorestatus because kissat returns 10 for SAT, 20 for UNSAT)
+                # Use simple read() instead of pipeline for thread safety
+                kissat_output = ""
                 cube_time = @elapsed begin
-                    stdout_pipe, stderr_pipe = Pipe(), Pipe()
-                    proc = run(pipeline(kissat_cmd, stdout=stdout_pipe, stderr=stderr_pipe), wait=false)
-                    close(stdout_pipe.in)
-                    close(stderr_pipe.in)
-                    kissat_output = read(stdout_pipe, String)
-                    wait(proc)
+                    kissat_output = read(ignorestatus(`$kissat_path $cube_cnf_path`), String)
                 end
 
                 rm(cube_cnf_path, force=true)
 
-                # Parse result
+                # Parse result from output (exit codes: 10=SAT, 20=UNSAT)
                 status = if occursin(r"(?m)^s\s+SATISFIABLE", kissat_output)
                     :sat
                 elseif occursin(r"(?m)^s\s+UNSATISFIABLE", kissat_output)
@@ -494,7 +490,7 @@ function run_march_cnc_experiment(
 
                 per_cube_stats[i] = CubeStats(i, length(cube_lits), status, cube_time, decisions, conflicts)
             end
-            per_cube_stats = collect(skipmissing(per_cube_stats))
+            per_cube_stats = Vector{CubeStats}(filter(!isnothing, per_cube_stats))
         else
             # Serial solving
             per_cube_stats = CubeStats[]
@@ -517,20 +513,15 @@ function run_march_cnc_experiment(
                     end
                 end
 
-                # Run kissat
-                kissat_cmd = `$kissat_path $cube_cnf_path`
+                # Run kissat (use ignorestatus because kissat returns 10 for SAT, 20 for UNSAT)
+                kissat_output = ""
                 cube_time = @elapsed begin
-                    stdout_pipe, stderr_pipe = Pipe(), Pipe()
-                    proc = run(pipeline(kissat_cmd, stdout=stdout_pipe, stderr=stderr_pipe), wait=false)
-                    close(stdout_pipe.in)
-                    close(stderr_pipe.in)
-                    kissat_output = read(stdout_pipe, String)
-                    wait(proc)
+                    kissat_output = read(ignorestatus(`$kissat_path $cube_cnf_path`), String)
                 end
 
                 rm(cube_cnf_path, force=true)
 
-                # Parse result
+                # Parse result from output (exit codes: 10=SAT, 20=UNSAT)
                 status = if occursin(r"(?m)^s\s+SATISFIABLE", kissat_output)
                     :sat
                 elseif occursin(r"(?m)^s\s+UNSATISFIABLE", kissat_output)
