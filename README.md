@@ -1,9 +1,9 @@
 # BooleanInference.jl
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://nzy1997.github.io/BooleanInference.jl/stable/)
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://nzy1997.github.io/BooleanInference.jl/dev/)
-[![Build Status](https://github.com/nzy1997/BooleanInference.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/nzy1997/BooleanInference.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![Coverage](https://codecov.io/gh/nzy1997/BooleanInference.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/nzy1997/BooleanInference.jl)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://anonymous.github.io/BooleanInference.jl/stable/)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://anonymous.github.io/BooleanInference.jl/dev/)
+[![Build Status](https://github.com/anonymous/BooleanInference.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/anonymous/BooleanInference.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Coverage](https://codecov.io/gh/anonymous/BooleanInference.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/anonymous/BooleanInference.jl)
 
 A high-performance Julia package for solving Boolean satisfiability problems using tensor network contraction and optimal branching strategies.
 

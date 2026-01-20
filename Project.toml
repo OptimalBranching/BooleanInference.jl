@@ -1,7 +1,7 @@
 name = "BooleanInference"
 uuid = "d12a6243-8379-43cb-9459-098119da1519"
 version = "1.0.0-DEV"
-authors = ["nzy1997"]
+authors = ["Anonymous"]
 
 [deps]
 BitBasis = "50ba71b6-fa0f-514d-ae9a-0916efc90dcf"

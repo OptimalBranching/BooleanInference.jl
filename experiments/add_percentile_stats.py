@@ -105,11 +105,14 @@ def update_csv_with_stats(csv_file: str, stats: Dict[Tuple[str, str], Dict[str, 
 
 def main():
     """Main function to process both cnc26 and cnc28 files."""
+    import os
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    results_dir = os.path.join(script_dir, 'results')
 
     # Process cnc26
     print("Processing cnc26...")
-    txt_file_26 = '/Users/xiweipan/Codes/BooleanInference/experiments/results/cnc26.txt'
-    csv_file_26 = '/Users/xiweipan/Codes/BooleanInference/experiments/results/cnc26.csv'
+    txt_file_26 = os.path.join(results_dir, 'cnc26.txt')
+    csv_file_26 = os.path.join(results_dir, 'cnc26.csv')
 
     stats_26 = extract_percentile_stats(txt_file_26)
     print(f"Extracted {len(stats_26)} entries from {txt_file_26}")
@@ -117,8 +120,8 @@ def main():
 
     # Process cnc28
     print("\nProcessing cnc28...")
-    txt_file_28 = '/Users/xiweipan/Codes/BooleanInference/experiments/results/cnc28.txt'
-    csv_file_28 = '/Users/xiweipan/Codes/BooleanInference/experiments/results/cnc28.csv'
+    txt_file_28 = os.path.join(results_dir, 'cnc28.txt')
+    csv_file_28 = os.path.join(results_dir, 'cnc28.csv')
 
     stats_28 = extract_percentile_stats(txt_file_28)
     print(f"Extracted {len(stats_28)} entries from {txt_file_28}")

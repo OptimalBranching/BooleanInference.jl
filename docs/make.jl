@@ -5,10 +5,10 @@ DocMeta.setdocmeta!(BooleanInference, :DocTestSetup, :(using BooleanInference); 
 
 makedocs(;
     modules=[BooleanInference],
-    authors="nzy1997",
+    authors="Anonymous",
     sitename="BooleanInference.jl",
     format=Documenter.HTML(;
-        canonical="https://nzy1997.github.io/BooleanInference.jl",
+        canonical="https://anonymous.github.io/BooleanInference.jl",
         edit_link="main",
         assets=String[],
     ),
@@ -18,6 +18,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/nzy1997/BooleanInference.jl",
+    repo="github.com/anonymous/BooleanInference.jl",
     devbranch="main",
 )

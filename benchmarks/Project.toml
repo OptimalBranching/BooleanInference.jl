@@ -1,7 +1,7 @@
 name = "BooleanInferenceBenchmarks"
 uuid = "3611a03f-6421-4259-a011-a603192356a0"
 version = "0.1.0"
-authors = ["Xiwei Pan <xiwei.pan@connect.hkust-gz.edu.cn>"]
+authors = ["Anonymous"]
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"

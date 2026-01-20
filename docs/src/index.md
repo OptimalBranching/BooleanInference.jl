@@ -4,7 +4,7 @@ CurrentModule = BooleanInference
 
 # BooleanInference
 
-Documentation for [BooleanInference](https://github.com/nzy1997/BooleanInference.jl).
+Documentation for [BooleanInference](https://github.com/anonymous/BooleanInference.jl).
 
 ```@index
 ```
