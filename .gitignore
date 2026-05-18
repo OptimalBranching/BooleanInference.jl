@@ -44,6 +44,8 @@ statprof/
 /notes/
 
 /benchmarks/results/
+/experiments/results/
+/experiments/plots/
 *.dylib
 *.o
 *.so
