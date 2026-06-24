@@ -5,6 +5,10 @@ using Test
     include("2sat.jl")
 end
 
+@testset "canonicalize.jl" begin
+    include("canonicalize.jl")
+end
+
 @testset "problems.jl" begin
     include("problems.jl")
 end

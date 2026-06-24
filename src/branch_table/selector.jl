@@ -61,6 +61,63 @@ function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasu
     return (OptimalBranchingCore.get_clauses(result), variables)
 end
 
+# Difficulty-guided lookahead selector (selector-design S1/S2).
+# Among the top-`pool` candidate vars (by connection score), probe both polarities
+# with GAC and pick the var whose HARDER child has the lowest connectivity-weighted
+# difficulty (sum of active tensor degrees). Failed literals are taken immediately.
+# Cheap (O(pool) propagations/node) and beats MostOccurrence on hard instances.
+struct DiffLookaheadSelector <: AbstractSelector
+    k::Int
+    max_tensors::Int
+    pool::Int
+end
+DiffLookaheadSelector(k::Int, max_tensors::Int) = DiffLookaheadSelector(k, max_tensors, 16)
+
+@inline function _sum_active_degree(static::ConstraintNetwork, doms::Vector{DomainMask})
+    s = 0
+    @inbounds for t in static.tensors
+        for v in t.var_axes
+            !is_fixed(doms[v]) && (s += 1)
+        end
+    end
+    return s
+end
+
+function findbest(cache::RegionCache, problem::TNProblem, measure::AbstractMeasure, set_cover_solver::AbstractSetCoverSolver, sel::DiffLookaheadSelector)
+    scores = compute_var_cover_scores_weighted(problem)
+    doms = problem.doms
+    cands = Int[]
+    @inbounds for i in eachindex(scores)
+        (is_fixed(doms[i]) || scores[i] <= 0.0) && continue
+        push!(cands, i)
+    end
+    isempty(cands) && return nothing, Int[]
+    sort!(cands, by = i -> -scores[i])
+    length(cands) > sel.pool && (cands = cands[1:sel.pool])
+
+    buffer = problem.buffer
+    best = typemax(Int); var_id = 0
+    @inbounds for u in cands
+        c0 = probe_assignment_core!(problem, buffer, doms, [u], UInt64(1), UInt64(0))
+        f0 = has_contradiction(c0); d0 = f0 ? 0 : _sum_active_degree(problem.static, c0)
+        c1 = probe_assignment_core!(problem, buffer, doms, [u], UInt64(1), UInt64(1))
+        f1 = has_contradiction(c1); d1 = f1 ? 0 : _sum_active_degree(problem.static, c1)
+        if f0 || f1
+            var_id = u; break          # failed literal ⇒ forced, take immediately
+        end
+        s = max(d0, d1)
+        s < best && (best = s; var_id = u)
+    end
+    var_id == 0 && (var_id = cands[1])
+
+    # probing above scribbled in the branching cache via no path that matters, but
+    # clear it so compute_branching_result starts clean for the chosen var
+    empty!(buffer.branching_cache)
+    result, variables = compute_branching_result(cache, problem, var_id, measure, set_cover_solver)
+    isnothing(result) && return nothing, variables
+    return (OptimalBranchingCore.get_clauses(result), variables)
+end
+
 # struct MinGammaSelector <: AbstractSelector
 #     k::Int
 #     max_tensors::Int

@@ -39,9 +39,9 @@ end
 # Shared tensor data (flyweight pattern for deduplication)
 struct TensorData
     dense_tensor::BitVector     # For contraction operations: satisfied_configs[config+1] = true
-    support::Vector{UInt16}     # For propagation: list of satisfied configs (0-indexed)
-    support_or::UInt16          # OR over support (for fast m==0 scan)
-    support_and::UInt16         # AND over support (for fast m==0 scan)
+    support::Vector{UInt32}     # For propagation: list of satisfied configs (0-indexed)
+    support_or::UInt32          # OR over support (for fast m==0 scan)
+    support_and::UInt32         # AND over support (for fast m==0 scan)
 end
 
 function Base.show(io::IO, td::TensorData)
@@ -51,9 +51,9 @@ end
 # Extract sparse support from dense BitVector
 function extract_supports(dense_tensor::BitVector)
     indices = findall(dense_tensor)
-    supports = Vector{UInt16}(undef, length(indices))
+    supports = Vector{UInt32}(undef, length(indices))
     @inbounds for i in eachindex(indices)
-        supports[i] = UInt16(indices[i] - 1)  # 0-indexed
+        supports[i] = UInt32(indices[i] - 1)  # 0-indexed
     end
     return supports
 end
@@ -61,8 +61,8 @@ end
 # Constructor that automatically extracts support
 function TensorData(dense_tensor::BitVector)
     support = extract_supports(dense_tensor)
-    support_or = UInt16(0)
-    support_and = UInt16(0xFFFF)
+    support_or = UInt32(0)
+    support_and = UInt32(0xFFFFFFFF)
     @inbounds for i in eachindex(support)
         config = support[i]
         support_or |= config

@@ -24,6 +24,8 @@ include("core/domain.jl")
 include("core/stats.jl")
 include("core/problem.jl")
 
+include("preprocessing/canonicalize.jl")
+
 include("utils/utils.jl")
 include("utils/twosat.jl")
 include("utils/circuit2cnf.jl")
@@ -53,6 +55,7 @@ export Region
 export is_fixed, has0, has1, init_doms, get_var_value, bits
 
 export setup_problem, setup_from_cnf, setup_from_circuit, setup_from_sat
+export bounded_ve_canonicalize
 export factoring_problem, factoring_circuit, factoring_csp
 
 export is_solved
@@ -62,7 +65,7 @@ export solve_circuit_sat
 
 export NumUnfixedVars
 
-export MostOccurrenceSelector
+export MostOccurrenceSelector, DiffLookaheadSelector
 
 export TNContractionSolver
 
