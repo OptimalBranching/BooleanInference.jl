@@ -37,7 +37,7 @@ function slicing(static::ConstraintNetwork, tensor::BoolTensor, doms::Vector{Dom
         dm = doms[var_id]
         is_fixed(dm) || push!(free_axes, i)
     end
-    fixed_mask, fixed_val = mask_value(doms, tensor.var_axes, UInt16)
+    fixed_mask, fixed_val = mask_value(doms, tensor.var_axes, UInt32)
 
     dims = ntuple(_ -> 2, length(free_axes))
     out = fill(ZERO_TROP, dims) # Allocate dense array

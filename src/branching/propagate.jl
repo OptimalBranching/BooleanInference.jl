@@ -1,11 +1,11 @@
-function scan_supports(support::Vector{UInt16}, support_or::UInt16, support_and::UInt16, query_mask0::UInt16, query_mask1::UInt16)
-    m = query_mask0 | query_mask1  
+function scan_supports(support::Vector{UInt32}, support_or::UInt32, support_and::UInt32, query_mask0::UInt32, query_mask1::UInt32)
+    m = query_mask0 | query_mask1
     # General case: filter by compatibility
-    if m == UInt16(0)
+    if m == UInt32(0)
         return support_or, support_and, !isempty(support)
     end
-    valid_or_agg = UInt16(0)
-    valid_and_agg = UInt16(0xFFFF)
+    valid_or_agg = UInt32(0)
+    valid_and_agg = UInt32(0xFFFFFFFF)
     found_any = false
     @inbounds for i in eachindex(support)
         config = support[i]
@@ -14,7 +14,7 @@ function scan_supports(support::Vector{UInt16}, support_or::UInt16, support_and:
             valid_and_agg &= config
             found_any = true
             # Early exit once both aggregates are saturated.
-            if valid_or_agg == UInt16(0xFFFF) && valid_and_agg == UInt16(0x0000)
+            if valid_or_agg == UInt32(0xFFFFFFFF) && valid_and_agg == UInt32(0x00000000)
                 break
             end
         end
@@ -24,13 +24,13 @@ end
 
 # return (query_mask0, query_mask1)
 function compute_query_masks(doms::Vector{DomainMask}, var_axes::Vector{Int})
-    @assert length(var_axes) <= 16
-    mask0 = UInt16(0); mask1 = UInt16(0);
+    @assert length(var_axes) <= 32
+    mask0 = UInt32(0); mask1 = UInt32(0);
 
     @inbounds for i in eachindex(var_axes)
         var_id = var_axes[i]
         domain = doms[var_id]
-        bit = UInt16(1) << (i - 1)
+        bit = UInt32(1) << (i - 1)
         if domain == DM_0
             mask0 |= bit
         elseif domain == DM_1
@@ -52,15 +52,15 @@ struct PropagationContext
     v2c::Vector{Vector{Int}}
 end
 
-@inline function apply_updates!(doms::Vector{DomainMask}, var_axes::Vector{Int}, valid_or::UInt16, valid_and::UInt16, ctx::PropagationContext)
+@inline function apply_updates!(doms::Vector{DomainMask}, var_axes::Vector{Int}, valid_or::UInt32, valid_and::UInt32, ctx::PropagationContext)
     @inbounds for i in 1:length(var_axes)
         var_id = var_axes[i]
         old_domain = doms[var_id]
         (old_domain == DM_0 || old_domain == DM_1) && continue
 
-        bit = UInt16(1) << (i - 1)
-        can_be_1  = (valid_or & bit) != UInt16(0)
-        must_be_1 = (valid_and & bit) != UInt16(0)
+        bit = UInt32(1) << (i - 1)
+        can_be_1  = (valid_or & bit) != UInt32(0)
+        must_be_1 = (valid_and & bit) != UInt32(0)
 
         new_dom = must_be_1 ? DM_1 : (can_be_1 ? DM_BOTH : DM_0)
 
